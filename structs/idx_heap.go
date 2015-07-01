@@ -1,4 +1,4 @@
-package idx_heap
+package structs
 
 import (
 	"container/heap"

@@ -1,4 +1,4 @@
-package pqueue
+package priority_first
 
 import (
 	"math/rand"

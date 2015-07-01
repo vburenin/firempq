@@ -1,4 +1,4 @@
-package pqueue
+package structs
 
 import (
 	"strconv"

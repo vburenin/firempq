@@ -1,26 +1,26 @@
-package pqueue
+package priority_first
 
-import "firempq/idx_heap"
+import "firempq/structs"
 import "firempq/qerrors"
 
-type ActiveQueues struct {
+type PriorityFirstQueue struct {
 	// The slice of all available sub queues.
-	queues []*ListQueue
+	queues []*structs.IndexList
 
 	// Heap of indexes of not empty ListQueues.
-	withItems   *idx_heap.IntHeap
+	withItems   *structs.IntHeap
 	maxPriority int64
 }
 
-func NewActiveQueues(size int64) *ActiveQueues {
-	queues := make([]*ListQueue, size, size)
+func NewActiveQueues(size int64) *PriorityFirstQueue {
+	queues := make([]*structs.IndexList, size, size)
 	maxPriority := size
 	for size > 0 {
 		size--
-		queues[size] = NewListQueue()
+		queues[size] = structs.NewListQueue()
 	}
-	return &ActiveQueues{queues: queues,
-		withItems:   idx_heap.NewIntHeap(),
+	return &PriorityFirstQueue{queues: queues,
+		withItems:   structs.NewIntHeap(),
 		maxPriority: maxPriority}
 }
 
@@ -28,7 +28,7 @@ func NewActiveQueues(size int64) *ActiveQueues {
 // contain any items. It can happen if item was removed because of it has been expired.
 // To reduce unnecessary CPU load to walk through of all priority lists. It is just
 // better to keep in the heap and clean it when we walk through all queue items.
-func (aq *ActiveQueues) getFirstAvailable() int64 {
+func (aq *PriorityFirstQueue) getFirstAvailable() int64 {
 	for !aq.withItems.Empty() {
 		minIdx := aq.withItems.MinItem()
 		if aq.queues[minIdx].Empty() {
@@ -40,19 +40,19 @@ func (aq *ActiveQueues) getFirstAvailable() int64 {
 	return -1
 }
 
-func (aq *ActiveQueues) RemoveItem(itemId string, priority int64) bool {
+func (aq *PriorityFirstQueue) RemoveItem(itemId string, priority int64) bool {
 	return aq.queues[priority].RemoveById(itemId)
 }
 
-func (aq *ActiveQueues) PrioritiesCount() int64 {
+func (aq *PriorityFirstQueue) PrioritiesCount() int64 {
 	return aq.maxPriority
 }
 
-func (aq *ActiveQueues) Empty() bool {
+func (aq *PriorityFirstQueue) Empty() bool {
 	return aq.getFirstAvailable() == -1
 }
 
-func (aq *ActiveQueues) Pop() string {
+func (aq *PriorityFirstQueue) Pop() string {
 	minIdx := aq.getFirstAvailable()
 	if minIdx >= 0 {
 		return aq.queues[minIdx].PopFront()
@@ -60,7 +60,7 @@ func (aq *ActiveQueues) Pop() string {
 	return ""
 }
 
-func (aq *ActiveQueues) Push(id string, priority int64) error {
+func (aq *PriorityFirstQueue) Push(id string, priority int64) error {
 	if priority >= aq.PrioritiesCount() || priority < 0 {
 		return qerrors.ERR_UNEXPECTED_PRIORITY
 	}
@@ -71,6 +71,6 @@ func (aq *ActiveQueues) Push(id string, priority int64) error {
 	return nil
 }
 
-func (aq *ActiveQueues) PushFront(id string) {
+func (aq *PriorityFirstQueue) PushFront(id string) {
 	aq.queues[0].PushFront(id)
 }

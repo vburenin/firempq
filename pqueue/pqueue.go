@@ -1,8 +1,9 @@
 package pqueue
 
 import (
-    "firempq/idx_heap"
     "firempq/qerrors"
+    "firempq/structs"
+    "firempq/queues/priority_first"
 	"log"
 	"sync"
 	"time"
@@ -18,12 +19,12 @@ const (
 
 type PQueue struct {
 	// Messages which are waiting to be picked up
-	availableMsgs *ActiveQueues
+	availableMsgs *priority_first.PriorityFirstQueue
 
 	// All messages with the ticking counters except those which are inFlight.
-	expireHeap *idx_heap.IndexHeap
+	expireHeap *structs.IndexHeap
 	// All locked messages
-	inFlightHeap *idx_heap.IndexHeap
+	inFlightHeap *structs.IndexHeap
 	// Just a message map message id to the full message data.
 	allMessagesMap map[string]*PQMessage
 
@@ -55,8 +56,8 @@ func NewPQueue(maxPriority int64, maxSize int64) *PQueue {
 		CreateTs:     uts,
 		LastPushTs:    0,
 		LastPopTs:    0,
-		inFlightHeap: idx_heap.NewIndexHeap(),
-		expireHeap:   idx_heap.NewIndexHeap(),
+		inFlightHeap: structs.NewIndexHeap(),
+		expireHeap:   structs.NewIndexHeap(),
 		workDone:     false,
 	}
 	pq.MsgTTL = DEFAULT_TTL
@@ -64,7 +65,7 @@ func NewPQueue(maxPriority int64, maxSize int64) *PQueue {
 	pq.PopLockTimeout = DEFAULT_LOCK_TIMEOUT
     pq.PopCountLimit = DEFAULT_POP_COUNT_LIMIT
 
-	pq.availableMsgs = NewActiveQueues(maxPriority)
+	pq.availableMsgs = priority_first.NewActiveQueues(maxPriority)
 	pq.allMessagesMap = make(map[string]*PQMessage)
 	go pq.periodicCleanUp()
 	return &pq
@@ -116,7 +117,7 @@ func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, error) {
     }
 
     hi := pq.inFlightHeap.PopById(msgId)
-    if hi == idx_heap.EMPTY_HEAP_ITEM {
+    if hi == structs.EMPTY_HEAP_ITEM {
         return nil, qerrors.ERR_MSG_NOT_LOCKED
     }
 

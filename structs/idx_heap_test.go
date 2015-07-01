@@ -1,4 +1,4 @@
-package idx_heap
+package structs
 
 import (
 	"strconv"
@@ -12,7 +12,7 @@ func TestHeap1(t *testing.T) {
 
     var i int
     for i = 0; i < 100; i++ {
-        mh.PushItem(&HeapItem{strconv.Itoa(i), int64(i)})
+        mh.PushItem(strconv.Itoa(i), int64(i))
     }
 
     e_time := time.Now().UnixNano()
