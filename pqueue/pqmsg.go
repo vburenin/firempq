@@ -1,6 +1,15 @@
 package pqueue
 
-import "github.com/satori/go.uuid"
+import (
+	"firempq/defs"
+	"firempq/qerrors"
+	"firempq/util"
+	"strconv"
+)
+
+const (
+	MAX_MESSAGE_ID_LENGTH = 64
+)
 
 type Replica struct {
 	ServerId  string
@@ -29,8 +38,41 @@ func NewPQMessageWithId(id string, payload string, priority int64) *PQMessage {
 	return &pqm
 }
 
+func MessageFromMap(params map[string]string) (*PQMessage, error) {
+	// Get and check message id.
+	var msgId string
+	var ok bool
+	var strValue string
+	var priority int64
+	var err error
+	var payload string
+
+	msgId, ok = params[defs.PARAM_MSG_ID]
+	if !ok {
+		msgId = util.GenRandMsgId()
+	} else if len(msgId) > MAX_MESSAGE_ID_LENGTH {
+		return nil, qerrors.ERR_MSG_ID_TOO_LARGE
+	}
+
+	strValue, ok = params[defs.PARAM_MSG_PRIORITY]
+	if !ok {
+		return nil, qerrors.ERR_MSG_NO_PRIORITY
+	}
+	priority, err = strconv.ParseInt(strValue, 10, 0)
+	if err != nil {
+		return nil, qerrors.ERR_MSG_WRONG_PRIORITY
+	}
+
+	payload, ok = params[defs.PARAM_MSG_PAYLOAD]
+	if !ok {
+		payload = ""
+	}
+
+	return NewPQMessageWithId(msgId, payload, priority), nil
+}
+
 func NewPQMessage(payload string, priority int64) *PQMessage {
-	id := uuid.NewV4().String()
+	id := util.GenRandMsgId()
 	return NewPQMessageWithId(id, payload, priority)
 }
 
