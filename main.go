@@ -3,9 +3,11 @@ package main
 import "net"
 import "log"
 import (
+	"firempq/defs"
 	"firempq/pqueue"
 	"firempq/proto"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -31,16 +33,20 @@ func main1() {
 func addMessages(pq *pqueue.PQueue) {
 	ts := time.Now().UnixNano()
 	for i := 0; i < 5000000; i++ {
-		msg := pqueue.NewPQMessage("test", 4)
-		pq.Push(msg)
+		v := map[string]string{
+			defs.PARAM_MSG_ID:       strconv.Itoa(i),
+			defs.PARAM_MSG_PRIORITY: "1",
+			defs.PARAM_MSG_PAYLOAD:  "asdasdasdasd asfasdfas dfadsf adsf dsaf asdf ads",
+		}
+		pq.PushMessage(v)
 	}
 	end_t := time.Now().UnixNano()
+
 	fmt.Println((end_t - ts) / 1000000)
 }
 
 func addSpeedTest() {
 	pq := pqueue.NewPQueue(100, 10000)
-	pq.PopLockTimeout = 6000
 	addMessages(pq)
 }
 
