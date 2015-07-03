@@ -4,7 +4,6 @@ import (
 	"container/heap"
 )
 
-
 // Heap items are very light, so you them directly with no pointers
 // it should save tons of time on GC.
 type HeapItem struct {
@@ -14,18 +13,17 @@ type HeapItem struct {
 
 var EMPTY_HEAP_ITEM = HeapItem{"", -1}
 
-
 type IndexHeap struct {
-    // Used as a heap container.
+	// Used as a heap container.
 	iHeap []HeapItem
-    // Used as a heap item to remove elements by id.
+	// Used as a heap item to remove elements by id.
 	iMap map[string]int
 }
 
 func NewIndexHeap() *IndexHeap {
 	return &IndexHeap{
 		iHeap: []HeapItem{},
-		iMap: make(map[string]int),
+		iMap:  make(map[string]int),
 	}
 }
 
@@ -34,7 +32,7 @@ func (h *IndexHeap) Len() int {
 }
 
 func (h *IndexHeap) Empty() bool {
-    return len(h.iHeap) == 0
+	return len(h.iHeap) == 0
 }
 
 func (h *IndexHeap) Less(i, j int) bool {
@@ -42,16 +40,16 @@ func (h *IndexHeap) Less(i, j int) bool {
 }
 
 func (h *IndexHeap) Swap(i, j int) {
-    hp := h.iHeap;
+	hp := h.iHeap
 
-    iItem := hp[i]
-    jItem := hp[j]
+	iItem := hp[i]
+	jItem := hp[j]
 
 	h.iMap[iItem.Id] = j
 	h.iMap[jItem.Id] = i
 
-    hp[i] = jItem
-    hp[j] = iItem
+	hp[i] = jItem
+	hp[j] = iItem
 }
 
 func (h *IndexHeap) Push(x interface{}) {
@@ -63,13 +61,13 @@ func (h *IndexHeap) Push(x interface{}) {
 func (h *IndexHeap) Pop() interface{} {
 	last := h.Len() - 1
 	retVal := h.iHeap[last]
-	h.iHeap = h.iHeap[0 : last]
+	h.iHeap = h.iHeap[0:last]
 	delete(h.iMap, retVal.Id)
 	return retVal
 }
 
 func (h *IndexHeap) MinElement() int64 {
-    return h.iHeap[0].Priority
+	return h.iHeap[0].Priority
 }
 
 func (h *IndexHeap) PushHeapItem(item *HeapItem) bool {
@@ -82,7 +80,7 @@ func (h *IndexHeap) PushHeapItem(item *HeapItem) bool {
 }
 
 func (h *IndexHeap) PushItem(itemId string, priority int64) bool {
-    return h.PushHeapItem(&HeapItem{itemId, priority})
+	return h.PushHeapItem(&HeapItem{itemId, priority})
 }
 
 func (h *IndexHeap) PopItem() HeapItem {
@@ -105,6 +103,6 @@ func (h *IndexHeap) PopById(id string) HeapItem {
 }
 
 func (h *IndexHeap) ContainsId(id string) bool {
-    _, ok := h.iMap[id]
-    return ok
+	_, ok := h.iMap[id]
+	return ok
 }

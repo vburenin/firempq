@@ -1,9 +1,13 @@
 package priority_first
 
+// Items with higher priority always go first.
+
 import "firempq/structs"
 import "firempq/qerrors"
 
 type PriorityFirstQueue struct {
+	// The highest priority queue used for the returned items.
+	frontQueue *structs.IndexList
 	// The slice of all available sub queues.
 	queues []*structs.IndexList
 
@@ -19,9 +23,11 @@ func NewActiveQueues(size int64) *PriorityFirstQueue {
 		size--
 		queues[size] = structs.NewListQueue()
 	}
+	frontQueue := structs.NewListQueue()
 	return &PriorityFirstQueue{queues: queues,
 		withItems:   structs.NewIntHeap(),
-		maxPriority: maxPriority}
+		maxPriority: maxPriority,
+		frontQueue:  frontQueue}
 }
 
 // Sometimes queue can be available in the item heaps event though it doesn't
@@ -41,18 +47,22 @@ func (aq *PriorityFirstQueue) getFirstAvailable() int64 {
 }
 
 func (aq *PriorityFirstQueue) RemoveItem(itemId string, priority int64) bool {
-	return aq.queues[priority].RemoveById(itemId)
-}
-
-func (aq *PriorityFirstQueue) PrioritiesCount() int64 {
-	return aq.maxPriority
+	if !aq.frontQueue.RemoveById(itemId) {
+		return aq.queues[priority].RemoveById(itemId)
+	}
+	return false
 }
 
 func (aq *PriorityFirstQueue) Empty() bool {
-	return aq.getFirstAvailable() == -1
+	return aq.getFirstAvailable() == -1 && aq.frontQueue.Empty()
 }
 
 func (aq *PriorityFirstQueue) Pop() string {
+	// Pop from the highest priority queue if there are any items.
+	if !aq.frontQueue.Empty() {
+		return aq.frontQueue.PopFront()
+	}
+	// Check if there are any queues with the items.
 	minIdx := aq.getFirstAvailable()
 	if minIdx >= 0 {
 		return aq.queues[minIdx].PopFront()
@@ -61,7 +71,7 @@ func (aq *PriorityFirstQueue) Pop() string {
 }
 
 func (aq *PriorityFirstQueue) Push(id string, priority int64) error {
-	if priority >= aq.PrioritiesCount() || priority < 0 {
+	if priority >= aq.maxPriority || priority < 0 {
 		return qerrors.ERR_UNEXPECTED_PRIORITY
 	}
 	if aq.queues[priority].Empty() {
@@ -72,5 +82,13 @@ func (aq *PriorityFirstQueue) Push(id string, priority int64) error {
 }
 
 func (aq *PriorityFirstQueue) PushFront(id string) {
-	aq.queues[0].PushFront(id)
+	aq.frontQueue.PushBack(id)
+}
+
+func (aq *PriorityFirstQueue) Len() int {
+	size := 0
+	for _, v := range aq.queues {
+		size += v.Len()
+	}
+	return size + aq.frontQueue.Len()
 }
