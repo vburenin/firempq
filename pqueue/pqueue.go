@@ -116,9 +116,17 @@ func (pq *PQueue) Push(msg *PQMessage) error {
 	return nil
 }
 
+func (pq *PQueue) PushMessage(msgData map[string]string) error {
+	msg, err := MessageFromMap(msgData)
+	if err != nil {
+		return err
+	}
+	return pq.Push(msg)
+}
+
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (pq *PQueue) PopMessage() *PQMessage {
+func (pq *PQueue) Pop() *PQMessage {
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 	pq.LastPopTs = Uts()

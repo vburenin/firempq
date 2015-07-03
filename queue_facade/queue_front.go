@@ -13,7 +13,7 @@ type IMessage interface {
 }
 
 type IQueue interface {
-	PushMessage(msgData *map[string]string) error
+	PushMessage(msgData map[string]string) error
 	PopMessage() *IMessage
 	DeleteById(msgId string) error
 	GetStatus() map[string]interface{}
