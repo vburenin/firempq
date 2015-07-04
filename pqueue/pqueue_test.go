@@ -7,21 +7,25 @@ import (
 )
 
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
-	q := NewPQueue(100, 10000)
-	msg1 := NewPQMessage("data1", 12)
-	msg2 := NewPQMessage("data2", 12)
+	q := NewPQueue("name", 100, 10000)
+	defer q.Close()
 
-	q.Push(msg1)
-	q.Push(msg2)
+	q.DeleteAll()
+
+	msg1 := NewPQMessageWithId("data1", 12)
+	msg2 := NewPQMessageWithId("data2", 12)
+
+	q.Push(msg1, "data1")
+	q.Push(msg2, "data2")
 
 	pop_msg1 := q.Pop()
 	pop_msg2 := q.Pop()
 
-	if pop_msg1.GetPayload() != "data1" {
-		t.Error("Unexpected payload. Expected 'data1' got: " + pop_msg1.GetPayload())
+	if pop_msg1.GetId() != "data1" {
+		t.Error("Unexpected id. Expected 'data1' got: " + pop_msg1.GetId())
 	}
-	if pop_msg2.GetPayload() != "data2" {
-		t.Error("Unexpected payload. Expected 'data2' got: " + pop_msg2.GetPayload())
+	if pop_msg2.GetId() != "data2" {
+		t.Error("Unexpected id. Expected 'data2' got: " + pop_msg2.GetId())
 	}
 
 	params := map[string]string{
@@ -34,19 +38,23 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	time.Sleep(110000000)
 
 	pop_msg3 := q.Pop()
-	if pop_msg3.GetPayload() != "data1" {
-		t.Error("Unexpected payload. Expected 'data1' got: " + pop_msg3.GetPayload())
+	if pop_msg3.GetId() != "data1" {
+		t.Error("Unexpected id. Expected 'data1' got: " + pop_msg3.GetId())
 	}
 }
 
 func TestAutoExpiration(t *testing.T) {
-	q := NewPQueue(100, 10000)
-	q.MsgTTL = 10
-	msg1 := NewPQMessage("data1", 12)
-	msg2 := NewPQMessage("data2", 12)
+	q := NewPQueue("name", 100, 10000)
+	defer q.Close()
 
-	q.Push(msg1)
-	q.Push(msg2)
+	q.DeleteAll()
+
+	q.MsgTTL = 10
+	msg1 := NewPQMessageWithId("data1", 12)
+	msg2 := NewPQMessageWithId("data2", 12)
+
+	q.Push(msg1, "data1")
+	q.Push(msg2, "data2")
 
 	// Wait for auto expiration.
 	time.Sleep(110000000)
@@ -60,12 +68,16 @@ func TestAutoExpiration(t *testing.T) {
 }
 
 func TestUnlockById(t *testing.T) {
-	q := NewPQueue(100, 10000)
-	msg1 := NewPQMessageWithId("id1", "data1", 12)
-	msg2 := NewPQMessageWithId("id2", "data2", 12)
+	q := NewPQueue("name", 100, 10000)
+	defer q.Close()
 
-	q.Push(msg1)
-	q.Push(msg2)
+	q.DeleteAll()
+
+	msg1 := NewPQMessageWithId("id1", 12)
+	msg2 := NewPQMessageWithId("id2", 12)
+
+	q.Push(msg1, "data1")
+	q.Push(msg2, "data2")
 
 	q.Pop()
 	q.Pop()
@@ -80,9 +92,13 @@ func TestUnlockById(t *testing.T) {
 }
 
 func TestDeleteById(t *testing.T) {
-	q := NewPQueue(100, 10000)
-	msg1 := NewPQMessageWithId("id1", "data1", 12)
-	q.Push(msg1)
+	q := NewPQueue("name", 100, 10000)
+	defer q.Close()
+
+	q.DeleteAll()
+
+	msg1 := NewPQMessageWithId("id1", 12)
+	q.Push(msg1, "data1")
 
 	q.DeleteById("id1")
 
@@ -96,9 +112,13 @@ func TestDeleteById(t *testing.T) {
 }
 
 func TestDeleteLockedById(t *testing.T) {
-	q := NewPQueue(100, 10000)
-	msg1 := NewPQMessageWithId("id1", "data1", 12)
-	q.Push(msg1)
+	q := NewPQueue("name", 100, 10000)
+	defer q.Close()
+
+	q.DeleteAll()
+
+	msg1 := NewPQMessageWithId("id1", 12)
+	q.Push(msg1, "data1")
 
 	params := map[string]string{defs.PARAM_MSG_ID: msg1.Id}
 	res := q.CustomHandler(ACTION_DELETE_LOCKED_BY_ID, params)

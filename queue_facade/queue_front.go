@@ -7,13 +7,11 @@ import (
 
 type IMessage interface {
 	GetId() string
-	GetPayload() string
 	GetStatus() map[string]interface{}
-	GetSize() int
 }
 
 type IQueue interface {
-	PushMessage(msgData map[string]string) error
+	PushMessage(msgData map[string]string, payload []byte) error
 	PopMessage() *IMessage
 	DeleteById(msgId string) error
 	GetStatus() map[string]interface{}

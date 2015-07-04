@@ -7,7 +7,8 @@ import (
 	"firempq/pqueue"
 	"firempq/proto"
 	"fmt"
-	"strconv"
+	//	"strconv"
+	"runtime"
 	"time"
 )
 
@@ -32,13 +33,13 @@ func main1() {
 
 func addMessages(pq *pqueue.PQueue) {
 	ts := time.Now().UnixNano()
-	for i := 0; i < 5000000; i++ {
+	for i := 0; i < 1000000; i++ {
 		v := map[string]string{
-			defs.PARAM_MSG_ID:       strconv.Itoa(i),
+			//defs.PARAM_MSG_ID:       strconv.Itoa(i),
 			defs.PARAM_MSG_PRIORITY: "1",
 			defs.PARAM_MSG_PAYLOAD:  "asdasdasdasd asfasdfas dfadsf adsf dsaf asdf ads",
 		}
-		pq.PushMessage(v)
+		pq.PushMessage(v, "payload1")
 	}
 	end_t := time.Now().UnixNano()
 
@@ -46,12 +47,20 @@ func addMessages(pq *pqueue.PQueue) {
 }
 
 func addSpeedTest() {
-	pq := pqueue.NewPQueue(100, 10000)
+	pq := pqueue.NewPQueue("name", 100, 10000)
+	defer pq.Close()
 	addMessages(pq)
+	msg := pq.Pop()
+	fmt.Println(msg)
+	fmt.Println(pq.GetPayload(msg.GetId()))
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	addSpeedTest()
+	// println(util.GenRandMsgId())
+	//testldb()
+	// addSpeedTest()
 	//    pq := pqueue.NewPQueue(100, 10000)
 	//    pq.MsgTTL = 5000
 	//    pq.PopLockTimeout = 2000
