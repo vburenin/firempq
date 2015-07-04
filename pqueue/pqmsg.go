@@ -1,11 +1,15 @@
 package pqueue
 
 import (
+	"encoding/binary"
 	"firempq/defs"
 	"firempq/qerrors"
+	"firempq/queue_facade"
 	"firempq/util"
 	"strconv"
 )
+
+var _ queue_facade.IMessage = &PQMessage{}
 
 const (
 	MAX_MESSAGE_ID_LENGTH = 64
@@ -17,23 +21,21 @@ type Replica struct {
 }
 
 type PQMessage struct {
-	Id           string
-	Payload      string
-	Priority     int64
-	CreatedTs    int64
-	PopCount     int64
-	ReplicatedTo []Replica
+	Id        string
+	Priority  int64
+	CreatedTs int64
+	PopCount  int64
+	UnlockTs  int64
 }
 
-func NewPQMessageWithId(id string, payload string, priority int64) *PQMessage {
+func NewPQMessageWithId(id string, priority int64) *PQMessage {
 
 	pqm := PQMessage{
-		Id:           id,
-		Payload:      payload,
-		Priority:     priority,
-		CreatedTs:    Uts(),
-		PopCount:     0,
-		ReplicatedTo: []Replica{},
+		Id:        id,
+		Priority:  priority,
+		CreatedTs: Uts(),
+		PopCount:  0,
+		UnlockTs:  0,
 	}
 	return &pqm
 }
@@ -45,7 +47,6 @@ func MessageFromMap(params map[string]string) (*PQMessage, error) {
 	var strValue string
 	var priority int64
 	var err error
-	var payload string
 
 	msgId, ok = params[defs.PARAM_MSG_ID]
 	if !ok {
@@ -63,30 +64,60 @@ func MessageFromMap(params map[string]string) (*PQMessage, error) {
 		return nil, qerrors.ERR_MSG_WRONG_PRIORITY
 	}
 
-	payload, ok = params[defs.PARAM_MSG_PAYLOAD]
-	if !ok {
-		payload = ""
-	}
-
-	return NewPQMessageWithId(msgId, payload, priority), nil
+	return NewPQMessageWithId(msgId, priority), nil
 }
 
 func NewPQMessage(payload string, priority int64) *PQMessage {
 	id := util.GenRandMsgId()
-	return NewPQMessageWithId(id, payload, priority)
+	return NewPQMessageWithId(id, priority)
 }
 
-func (pqm *PQMessage) AddReplica(serverId string, replicaTs uint64) {
-	r := Replica{ServerId: serverId, ReplicaTs: replicaTs}
-	pqm.ReplicatedTo = append(pqm.ReplicatedTo, r)
+func PQMessageFromBinary(msgId string, buf []byte) *PQMessage {
+	bufOffset := 0
+
+	priority := binary.BigEndian.Uint64(buf[bufOffset:])
+	bufOffset += 8
+
+	createdTs := binary.BigEndian.Uint64(buf[bufOffset:])
+	bufOffset += 8
+
+	popCount := binary.BigEndian.Uint64(buf[bufOffset:])
+	bufOffset += 8
+
+	unlockTs := binary.BigEndian.Uint64(buf[bufOffset:])
+	bufOffset += 8
+
+	return &PQMessage{
+		Id:        msgId,
+		Priority:  int64(priority),
+		CreatedTs: int64(createdTs),
+		PopCount:  int64(popCount),
+		UnlockTs:  int64(unlockTs),
+	}
+}
+
+func (pqm *PQMessage) ToBinary() []byte {
+	// length of 4 64 bits integers.
+
+	buf := make([]byte, 8*4)
+	bufOffset := 0
+
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.Priority))
+	bufOffset += 8
+
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.CreatedTs))
+	bufOffset += 8
+
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.PopCount))
+	bufOffset += 8
+
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.UnlockTs))
+
+	return buf
 }
 
 func (pqm *PQMessage) GetId() string {
 	return pqm.Id
-}
-
-func (pqm *PQMessage) GetPayload() string {
-	return pqm.Payload
 }
 
 func (pqm *PQMessage) GetStatus() map[string]interface{} {
@@ -94,9 +125,6 @@ func (pqm *PQMessage) GetStatus() map[string]interface{} {
 	res["CreatedTs"] = pqm.CreatedTs
 	res["Priority"] = pqm.Priority
 	res["PopCount"] = pqm.PopCount
+	res["UnlockTs"] = pqm.UnlockTs
 	return res
-}
-
-func (pqm *PQMessage) GetSize() int {
-	return len(pqm.Payload)
 }
