@@ -2,10 +2,12 @@ package util
 
 import (
 	"math/rand"
+	"sync"
 	"time"
 )
 
 var rndgen = rand.NewSource(time.Now().UnixNano())
+var rndMutex = sync.Mutex{}
 
 const (
 	MSG_ID_CHARACTERS   = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -15,15 +17,20 @@ const (
 
 func GenRandMsgId() string {
 	randData := make([]byte, MSG_ID_LENGTH)
-	for i := 0; i < 16; i++ {
+	rndMutex.Lock()
+	defer rndMutex.Unlock()
+	for i := 0; i < MSG_ID_LENGTH; i++ {
 		randData[i] = MSG_ID_CHARACTERS[rndgen.Int63()%MSG_ID_CHARS_LENGTH]
 	}
 	return string(randData)
 }
 
 func GenRandMsgIdBytes() []byte {
+	rndMutex.Lock()
+	defer rndMutex.Unlock()
+
 	randData := make([]byte, MSG_ID_LENGTH)
-	for i := 0; i < 16; i++ {
+	for i := 0; i < MSG_ID_LENGTH; i++ {
 		randData[i] = MSG_ID_CHARACTERS[rndgen.Int63()%MSG_ID_CHARS_LENGTH]
 	}
 	return randData

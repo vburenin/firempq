@@ -11,11 +11,13 @@ type IMessage interface {
 }
 
 type IQueue interface {
-	PushMessage(msgData map[string]string, payload []byte) error
-	PopMessage() *IMessage
+	PushMessage(msgData map[string]string, payload string) error
+	PopMessage() (IMessage, error)
+	GetMessagePayload(msgId string) string
 	DeleteById(msgId string) error
 	GetStatus() map[string]interface{}
-	ActionHandler(action string, params map[string]string) error
+	DeleteAll()
+	CustomHandler(action string, params map[string]string) error
 }
 
 type PQFront struct {

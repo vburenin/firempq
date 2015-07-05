@@ -3,9 +3,10 @@ package pqueue
 import (
 	"firempq/defs"
 	"firempq/qerrors"
+	"firempq/queue_facade"
 	"firempq/queues/priority_first"
 	"firempq/structs"
-	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/jmhodges/levigo"
 	"log"
 	"sort"
 	"strconv"
@@ -14,9 +15,9 @@ import (
 )
 
 const (
-	DEFAULT_TTL             = 120000
+	DEFAULT_TTL             = 12000000
 	DEFAULT_DELIVERY_DELAY  = 0
-	DEFAULT_LOCK_TIMEOUT    = 300000
+	DEFAULT_LOCK_TIMEOUT    = 30000000
 	DEFAULT_POP_COUNT_LIMIT = 0 // 0 means Unlimited.
 )
 
@@ -25,6 +26,11 @@ const (
 	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
 	ACTION_SET_LOCK_TIMEOUT    = "SETLOCKTIMEOUT"
 )
+
+type InMemCache struct {
+	Msg     []byte
+	Payload []byte
+}
 
 type PQueue struct {
 	queueName string
@@ -51,8 +57,10 @@ type PQueue struct {
 	lock           sync.Mutex
 	workDone       bool
 	actionHandlers map[string](func(map[string]string) error)
-	msgdb          *leveldb.DB
-	payloaddb      *leveldb.DB
+	msgDb          *levigo.DB
+	payloadDb      *levigo.DB
+
+	inMemMsgs map[string]InMemCache
 }
 
 func Uts() int64 {
@@ -74,6 +82,7 @@ func NewPQueue(queueName string, maxPriority int64, maxSize int64) *PQueue {
 		workDone:     false,
 		queueName:    queueName,
 	}
+	pq.inMemMsgs = make(map[string]InMemCache)
 
 	pq.actionHandlers = make(map[string](func(map[string]string) error))
 	pq.actionHandlers[ACTION_UNLOCK_BY_ID] = pq.UnlockMessageById
@@ -90,16 +99,22 @@ func NewPQueue(queueName string, maxPriority int64, maxSize int64) *PQueue {
 
 	var err error
 	msgDbName := "pqueue_msgs_" + queueName + ".db"
-	payloadDbName := "pqueue_payload_" + queueName + ".db"
-	pq.msgdb, err = leveldb.OpenFile(msgDbName, nil)
+	dbOpts := levigo.NewOptions()
+	dbOpts.SetCreateIfMissing(true)
+	dbOpts.SetWriteBufferSize(25 * 1024 * 1024)
+	pq.msgDb, err = levigo.Open(msgDbName, dbOpts)
 	if err != nil {
-		log.Fatal("Can not open database: ", msgDbName)
+		log.Fatal("Can not open database: ", msgDbName, err)
 	}
 
-	pq.payloaddb, err = leveldb.OpenFile(payloadDbName, nil)
+	payloadDbName := "pqueue_payload_" + queueName + ".db"
+	pdbOpts := levigo.NewOptions()
+	pdbOpts.SetWriteBufferSize(25 * 1024 * 1024)
+	pdbOpts.SetCreateIfMissing(true)
+	pq.payloadDb, err = levigo.Open(payloadDbName, pdbOpts)
 	if err != nil {
-		pq.msgdb.Close()
-		log.Fatal("Can not open database: ", payloadDbName)
+		pq.msgDb.Close()
+		log.Fatal("Can not open database: ", payloadDbName, err)
 	}
 
 	pq.loadAllMessages()
@@ -126,20 +141,11 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
 func (pq *PQueue) Push(msg *PQMessage, payload string) error {
-	pq.lock.Lock()
-	defer pq.lock.Unlock()
 	pq.LastPushTs = Uts()
 
-	if _, ok := pq.allMessagesMap[msg.Id]; ok {
-		return qerrors.ERR_ITEM_ALREADY_EXISTS
-	}
-	pq.trackExpiration(msg)
-	pq.allMessagesMap[msg.Id] = msg
-	pq.availableMsgs.Push(msg.Id, msg.Priority)
-
-	pq.updateMessage(msg)
-	pq.savePayload(msg.Id, payload)
-	return nil
+	pq.lock.Lock()
+	defer pq.lock.Unlock()
+	return pq.storeMessage(msg, payload)
 }
 
 func (pq *PQueue) PushMessage(msgData map[string]string, payload string) error {
@@ -150,14 +156,26 @@ func (pq *PQueue) PushMessage(msgData map[string]string, payload string) error {
 	return pq.Push(msg, payload)
 }
 
+func (pq *PQueue) storeMessage(msg *PQMessage, payload string) error {
+	if _, ok := pq.allMessagesMap[msg.Id]; ok {
+		return qerrors.ERR_ITEM_ALREADY_EXISTS
+	}
+
+	pq.trackExpiration(msg)
+	pq.allMessagesMap[msg.Id] = msg
+	pq.availableMsgs.Push(msg.Id, msg.Priority)
+
+	pq.updateMessage(msg)
+	pq.savePayload(msg.Id, payload)
+	return nil
+}
+
 // Pop first available message.
 // Will return nil if there are no messages available.
 func (pq *PQueue) Pop() *PQMessage {
+
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
-
-	nowTs := Uts()
-	pq.LastPopTs = nowTs
 
 	if pq.availableMsgs.Empty() {
 		return nil
@@ -168,16 +186,34 @@ func (pq *PQueue) Pop() *PQMessage {
 	if !ok {
 		return nil
 	}
-
-	// Increase number of pop attempts.
 	msg.PopCount += 1
-	msg.UnlockTs = nowTs + pq.PopLockTimeout
-
-	pq.expireHeap.PopById(msgId)
-	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
+	pq.lockMessage(msg)
 	pq.updateMessage(msg)
-
 	return msg
+}
+
+func (pq *PQueue) PopMessage() (queue_facade.IMessage, error) {
+	msg := pq.Pop()
+	if msg == nil {
+		return nil, qerrors.ERR_QUEUE_EMPTY
+	}
+	return msg, nil
+}
+
+func (pq *PQueue) GetMessagePayload(msgId string) string {
+	pq.lock.Lock()
+	defer pq.lock.Unlock()
+	return pq.loadPayload(msgId)
+}
+
+func (pq *PQueue) lockMessage(msg *PQMessage) {
+	nowTs := Uts()
+	pq.LastPopTs = nowTs
+	// Increase number of pop attempts.
+
+	msg.UnlockTs = nowTs + pq.PopLockTimeout
+	pq.expireHeap.PopById(msg.Id)
+	pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 }
 
 // Remove message id from In Flight message heap.
@@ -240,13 +276,13 @@ func (pq *PQueue) SetLockTimeout(params map[string]string) error {
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 
-	_, err := pq.unflightMessage(msgId)
+	msg, err := pq.unflightMessage(msgId)
 	if err != nil {
 		return err
 	}
 
-	msg := pq.allMessagesMap[msgId]
 	msg.UnlockTs = Uts() + int64(timeout)
+
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
 	pq.updateMessage(msg)
 
@@ -264,6 +300,7 @@ func (pq *PQueue) DeleteLockedById(params map[string]string) error {
 	defer pq.lock.Unlock()
 
 	_, err := pq.unflightMessage(msgId)
+
 	if err != nil {
 		return err
 	}
@@ -293,7 +330,6 @@ func (pq *PQueue) UnlockMessageById(params map[string]string) error {
 func (pq *PQueue) deleteMessage(msgId string) bool {
 	if _, ok := pq.allMessagesMap[msgId]; ok {
 		delete(pq.allMessagesMap, msgId)
-		pq.deleteDBPayload(msgId)
 		pq.deleteDBMessage(msgId)
 		return true
 	}
@@ -329,9 +365,6 @@ func (pq *PQueue) releaseInFlight() int {
 	cur_ts := Uts()
 	ifHeap := pq.inFlightHeap
 
-	pq.lock.Lock()
-	defer pq.lock.Unlock()
-
 	i := 0
 	for !(ifHeap.Empty()) && ifHeap.MinElement() < cur_ts {
 		i++
@@ -350,8 +383,6 @@ func (pq *PQueue) cleanExpiredItems() int {
 	cur_ts := Uts()
 	eh := pq.expireHeap
 
-	pq.lock.Lock()
-	defer pq.lock.Unlock()
 	i := 0
 	for !(eh.Empty()) && eh.MinElement() < cur_ts {
 		i++
@@ -376,11 +407,12 @@ const SLEEP_INTERVAL_IF_ITEMS = 1000000
 const MAX_CLEANS_PER_ATTEMPT = 1000
 
 // How frequently loop should run.
-const DEFAULT_UNLOCK_INTERVAL = 100 * 1000000 // 1 second
+const DEFAULT_UNLOCK_INTERVAL = 1000 * 1000000 // 1 second
 
 // Remove expired items. Should be running as a thread.
 func (pq *PQueue) periodicCleanUp() {
 	for !(pq.workDone) {
+		pq.lock.Lock()
 		var sleepTime time.Duration = DEFAULT_UNLOCK_INTERVAL
 		if cleaned := pq.releaseInFlight(); cleaned > 0 {
 			log.Println(cleaned, "messages returned to the front of the queue.")
@@ -390,6 +422,8 @@ func (pq *PQueue) periodicCleanUp() {
 			log.Println(cleaned, "items expired.")
 			sleepTime = SLEEP_INTERVAL_IF_ITEMS
 		}
+		pq.flushCache()
+		pq.lock.Unlock()
 		time.Sleep(sleepTime)
 	}
 }
@@ -403,10 +437,14 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (pq *PQueue) loadAllMessages() {
 	nowTs := Uts()
-	iter := pq.msgdb.NewIterator(nil, nil)
+	ropts := levigo.NewReadOptions()
+	iter := pq.msgDb.NewIterator(ropts)
+	iter.SeekToFirst()
+
 	msgs := MessageSlice{}
 	delIds := []string{}
-	for iter.Next() {
+
+	for iter.Valid() {
 		pqmsg := PQMessageFromBinary(string(iter.Key()), iter.Value())
 
 		// Store list if message IDs that should be removed.
@@ -415,12 +453,13 @@ func (pq *PQueue) loadAllMessages() {
 		} else {
 			msgs = append(msgs, pqmsg)
 		}
+		iter.Next()
 	}
+	defer iter.Close()
 	log.Printf("Loaded %d messages for %s queue", len(msgs), pq.queueName)
 	if len(delIds) > 0 {
 		log.Printf("%d messages will be removed because of expiration", len(delIds))
 		for _, msgId := range delIds {
-			pq.deleteDBPayload(msgId)
 			pq.deleteDBMessage(msgId)
 		}
 
@@ -431,52 +470,114 @@ func (pq *PQueue) loadAllMessages() {
 	for _, msg := range msgs {
 		pq.allMessagesMap[msg.Id] = msg
 		if msg.UnlockTs > nowTs {
-			pq.inFlightHeap.PushItem(msg.Id, msg.Priority)
+			pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
 			pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+pq.MsgTTL)
 			pq.availableMsgs.Push(msg.Id, msg.Priority)
 		}
 	}
 
-	log.Printf("Message available: %d", pq.expireHeap.Len())
-	log.Printf("Message in flight: %d", pq.inFlightHeap.Len())
+	log.Printf("Messages available: %d", pq.expireHeap.Len())
+	log.Printf("Messages in flight: %d", pq.inFlightHeap.Len())
 }
 
 func (pq *PQueue) DeleteAll() {
-	iter := pq.msgdb.NewIterator(nil, nil)
-	for iter.Next() {
+	ropts := levigo.NewReadOptions()
+	iter := pq.msgDb.NewIterator(ropts)
+	defer iter.Close()
+	for iter.Valid() {
 		id := string(iter.Key())
 		pq.DeleteLockedById(map[string]string{defs.PARAM_MSG_ID: id})
 		pq.DeleteById(id)
+		iter.Next()
 	}
 }
 
-func (pq *PQueue) updateMessage(msg *PQMessage) {
-	pq.msgdb.Put([]byte(msg.Id), msg.ToBinary(), nil)
+func (pq *PQueue) flushCache() {
+
+	if len(pq.inMemMsgs) == 0 {
+		return
+	}
+
+	currCache := pq.inMemMsgs
+	pq.inMemMsgs = make(map[string]InMemCache)
+
+	msgWb := levigo.NewWriteBatch()
+	payloadWb := levigo.NewWriteBatch()
+
+	for k, v := range currCache {
+		_, exists := pq.allMessagesMap[k]
+		if exists {
+			id := []byte(k)
+			if len(v.Msg) > 0 {
+				msgWb.Put(id, v.Msg)
+			}
+			if len(v.Payload) > 0 {
+				payloadWb.Put(id, v.Payload)
+			}
+		}
+	}
+
+	wopts := levigo.NewWriteOptions()
+	pq.msgDb.Write(wopts, msgWb)
+	pq.payloadDb.Write(wopts, payloadWb)
+
 }
 
-func (pq *PQueue) deleteDBPayload(msgId string) {
-	pq.payloaddb.Delete([]byte(msgId), nil)
+func (pq *PQueue) updateMessage(msg *PQMessage) {
+	data, ok := pq.inMemMsgs[msg.Id]
+	if !ok {
+		cacheMsg := InMemCache{msg.ToBinary(), []byte{}}
+		pq.inMemMsgs[msg.Id] = cacheMsg
+	} else {
+		data.Msg = msg.ToBinary()
+	}
+}
+
+func (pq *PQueue) savePayload(msgId, payload string) {
+	data, ok := pq.inMemMsgs[msgId]
+	if !ok {
+		cacheMsg := InMemCache{[]byte{}, []byte(payload)}
+		pq.inMemMsgs[msgId] = cacheMsg
+	} else {
+		data.Payload = []byte(payload)
+	}
 }
 
 func (pq *PQueue) deleteDBMessage(msgId string) {
-	pq.msgdb.Delete([]byte(msgId), nil)
+	id := []byte(msgId)
+	wopts := levigo.NewWriteOptions()
+	pq.msgDb.Delete(wopts, id)
+	pq.payloadDb.Delete(wopts, id)
 }
 
-func (pq *PQueue) GetPayload(msgId string) string {
-	value, err := pq.payloaddb.Get([]byte(msgId), nil)
+func (pq *PQueue) loadPayload(msgId string) string {
+	cacheData, ok := pq.inMemMsgs[msgId]
+	if ok && len(cacheData.Payload) > 0 {
+		return string(cacheData.Payload)
+	}
+
+	ropts := levigo.NewReadOptions()
+	value, err := pq.payloadDb.Get(ropts, []byte(msgId))
 	if err != nil {
 		return ""
 	}
 	return string(value)
 }
 
-func (pq *PQueue) savePayload(msgId, payload string) {
-	pq.payloaddb.Put([]byte(msgId), []byte(payload), nil)
+func (pq *PQueue) Close() {
+	pq.lock.Lock()
+	if pq.workDone {
+		return
+	}
+	pq.workDone = true
+
+	pq.flushCache()
+
+	pq.msgDb.Close()
+	pq.payloadDb.Close()
+	pq.lock.Unlock()
+
 }
 
-func (pq *PQueue) Close() {
-	defer pq.msgdb.Close()
-	defer pq.payloaddb.Close()
-	pq.workDone = true
-}
+var _ queue_facade.IQueue = &PQueue{}
