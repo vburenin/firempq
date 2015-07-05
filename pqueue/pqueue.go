@@ -28,8 +28,9 @@ const (
 )
 
 type InMemCache struct {
-	Msg     []byte
-	Payload []byte
+	Msg      []byte
+	Payload  string
+	ToDelete bool
 }
 
 type PQueue struct {
@@ -55,6 +56,7 @@ type PQueue struct {
 	LastPopTs      int64 // Last pop time.
 	MaxPriority    int64
 	lock           sync.Mutex
+	cacheLock      sync.Mutex
 	workDone       bool
 	actionHandlers map[string](func(map[string]string) error)
 	msgDb          *levigo.DB
@@ -101,7 +103,7 @@ func NewPQueue(queueName string, maxPriority int64, maxSize int64) *PQueue {
 	msgDbName := "pqueue_msgs_" + queueName + ".db"
 	dbOpts := levigo.NewOptions()
 	dbOpts.SetCreateIfMissing(true)
-	dbOpts.SetWriteBufferSize(25 * 1024 * 1024)
+	dbOpts.SetWriteBufferSize(10 * 1024 * 1024)
 	pq.msgDb, err = levigo.Open(msgDbName, dbOpts)
 	if err != nil {
 		log.Fatal("Can not open database: ", msgDbName, err)
@@ -109,7 +111,7 @@ func NewPQueue(queueName string, maxPriority int64, maxSize int64) *PQueue {
 
 	payloadDbName := "pqueue_payload_" + queueName + ".db"
 	pdbOpts := levigo.NewOptions()
-	pdbOpts.SetWriteBufferSize(25 * 1024 * 1024)
+	pdbOpts.SetWriteBufferSize(10 * 1024 * 1024)
 	pdbOpts.SetCreateIfMissing(true)
 	pq.payloadDb, err = levigo.Open(payloadDbName, pdbOpts)
 	if err != nil {
@@ -407,23 +409,27 @@ const SLEEP_INTERVAL_IF_ITEMS = 1000000
 const MAX_CLEANS_PER_ATTEMPT = 1000
 
 // How frequently loop should run.
-const DEFAULT_UNLOCK_INTERVAL = 1000 * 1000000 // 1 second
+const DEFAULT_UNLOCK_INTERVAL = 100 * 1000000 // 0.1 second
 
 // Remove expired items. Should be running as a thread.
 func (pq *PQueue) periodicCleanUp() {
 	for !(pq.workDone) {
-		pq.lock.Lock()
 		var sleepTime time.Duration = DEFAULT_UNLOCK_INTERVAL
-		if cleaned := pq.releaseInFlight(); cleaned > 0 {
+		pq.lock.Lock()
+		cleaned := pq.releaseInFlight()
+		pq.lock.Unlock()
+		if cleaned > 0 {
 			log.Println(cleaned, "messages returned to the front of the queue.")
 			sleepTime = SLEEP_INTERVAL_IF_ITEMS
 		}
-		if cleaned := pq.cleanExpiredItems(); cleaned > 0 {
+		pq.lock.Lock()
+		cleaned = pq.cleanExpiredItems()
+		pq.lock.Unlock()
+		if cleaned > 0 {
 			log.Println(cleaned, "items expired.")
 			sleepTime = SLEEP_INTERVAL_IF_ITEMS
 		}
 		pq.flushCache()
-		pq.lock.Unlock()
 		time.Sleep(sleepTime)
 	}
 }
@@ -494,11 +500,11 @@ func (pq *PQueue) DeleteAll() {
 }
 
 func (pq *PQueue) flushCache() {
-
 	if len(pq.inMemMsgs) == 0 {
 		return
 	}
 
+	pq.lock.Lock()
 	currCache := pq.inMemMsgs
 	pq.inMemMsgs = make(map[string]InMemCache)
 
@@ -506,6 +512,13 @@ func (pq *PQueue) flushCache() {
 	payloadWb := levigo.NewWriteBatch()
 
 	for k, v := range currCache {
+		if v.ToDelete {
+			id := []byte(k)
+			msgWb.Delete(id)
+			payloadWb.Delete(id)
+			continue
+
+		}
 		_, exists := pq.allMessagesMap[k]
 		if exists {
 			id := []byte(k)
@@ -513,10 +526,13 @@ func (pq *PQueue) flushCache() {
 				msgWb.Put(id, v.Msg)
 			}
 			if len(v.Payload) > 0 {
-				payloadWb.Put(id, v.Payload)
+				payloadWb.Put(id, []byte(v.Payload))
 			}
 		}
 	}
+	pq.lock.Unlock()
+	pq.cacheLock.Lock()
+	defer pq.cacheLock.Unlock()
 
 	wopts := levigo.NewWriteOptions()
 	pq.msgDb.Write(wopts, msgWb)
@@ -527,7 +543,7 @@ func (pq *PQueue) flushCache() {
 func (pq *PQueue) updateMessage(msg *PQMessage) {
 	data, ok := pq.inMemMsgs[msg.Id]
 	if !ok {
-		cacheMsg := InMemCache{msg.ToBinary(), []byte{}}
+		cacheMsg := InMemCache{msg.ToBinary(), "", false}
 		pq.inMemMsgs[msg.Id] = cacheMsg
 	} else {
 		data.Msg = msg.ToBinary()
@@ -536,25 +552,22 @@ func (pq *PQueue) updateMessage(msg *PQMessage) {
 
 func (pq *PQueue) savePayload(msgId, payload string) {
 	data, ok := pq.inMemMsgs[msgId]
-	if !ok {
-		cacheMsg := InMemCache{[]byte{}, []byte(payload)}
-		pq.inMemMsgs[msgId] = cacheMsg
+	if ok {
+		pq.inMemMsgs[msgId] = InMemCache{data.Msg, payload, false}
 	} else {
-		data.Payload = []byte(payload)
+		pq.inMemMsgs[msgId] = InMemCache{nil, payload, false}
 	}
 }
 
 func (pq *PQueue) deleteDBMessage(msgId string) {
-	id := []byte(msgId)
-	wopts := levigo.NewWriteOptions()
-	pq.msgDb.Delete(wopts, id)
-	pq.payloadDb.Delete(wopts, id)
+	pq.inMemMsgs[msgId] = InMemCache{nil, "", true}
 }
 
 func (pq *PQueue) loadPayload(msgId string) string {
+
 	cacheData, ok := pq.inMemMsgs[msgId]
 	if ok && len(cacheData.Payload) > 0 {
-		return string(cacheData.Payload)
+		return cacheData.Payload
 	}
 
 	ropts := levigo.NewReadOptions()
@@ -571,12 +584,12 @@ func (pq *PQueue) Close() {
 		return
 	}
 	pq.workDone = true
+	pq.lock.Unlock()
 
 	pq.flushCache()
 
 	pq.msgDb.Close()
 	pq.payloadDb.Close()
-	pq.lock.Unlock()
 
 }
 
