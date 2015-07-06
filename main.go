@@ -7,8 +7,9 @@ import (
 	"firempq/pqueue"
 	"firempq/proto"
 	"fmt"
-	//	"strconv"
+	"os"
 	"runtime"
+	"runtime/pprof"
 	"time"
 )
 
@@ -27,37 +28,87 @@ func main1() {
 		} else {
 			go proto.ServeRequests(conn)
 		}
-
 	}
 }
 
 func addMessages(pq *pqueue.PQueue) {
 	ts := time.Now().UnixNano()
-	for i := 0; i < 1000000; i++ {
+	payload := "0000"
+	//payload += payload
+	//	payload += payload
+	//	payload += payload
+	//	payload += payload
+	//	payload += payload
+	//time.Sleep(60 * 1000000000)
+	//pq.DeleteAll()
+	for i := 0; i < 200; i++ {
 		v := map[string]string{
-			//defs.PARAM_MSG_ID:       strconv.Itoa(i),
 			defs.PARAM_MSG_PRIORITY: "1",
-			defs.PARAM_MSG_PAYLOAD:  "asdasdasdasd asfasdfas dfadsf adsf dsaf asdf ads",
 		}
-		pq.PushMessage(v, "payload1")
+		pq.PushMessage(v, payload)
 	}
 	end_t := time.Now().UnixNano()
 
 	fmt.Println((end_t - ts) / 1000000)
 }
 
-func addSpeedTest() {
-	pq := pqueue.NewPQueue("name", 100, 10000)
-	defer pq.Close()
+func popAll(pq *pqueue.PQueue) {
+	ts := time.Now().UnixNano()
+	for {
+		msg, err := pq.PopMessage()
+		if err != nil {
+			break
+		}
+		pq.GetMessagePayload(msg.GetId())
+		pq.DeleteLockedById(map[string]string{defs.PARAM_MSG_ID: msg.GetId()})
+	}
+	end_t := time.Now().UnixNano()
+	fmt.Println((end_t - ts) / 1000000)
+}
+
+func addSpeedTest(name string) {
+	var pq *pqueue.PQueue
+
+	pq = pqueue.NewPQueue(name, 100, 10000)
 	addMessages(pq)
-	msg := pq.Pop()
-	fmt.Println(msg)
-	fmt.Println(pq.GetPayload(msg.GetId()))
+	pq.Close()
+
+	//	pq = pqueue.NewPQueue(name, 100, 10000)
+	//	popAll(pq)
+	//	pq.Close()
+	//
+	//	//time.Sleep(50000000000)
+	//
+	//	pq = pqueue.NewPQueue(name, 100, 10000)
+	//	popAll(pq)
+	//	pq.Close()
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	go addMessages(pq)
+	//	time.Sleep(200000000000)
+	// msg := pq.Pop()
+	// fmt.Println(msg)
+	//fmt.Println(pq.GetMessagePayload(msg.GetId()))
 }
 
 func main() {
+
+	f, _ := os.Create("pp.dat")
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	addSpeedTest()
+	ts := time.Now().UnixNano()
+	addSpeedTest("n1")
+	end_t := time.Now().UnixNano()
+	fmt.Println((end_t - ts) / 1000000)
 	// println(util.GenRandMsgId())
 	//testldb()
 	// addSpeedTest()

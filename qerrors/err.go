@@ -22,6 +22,7 @@ var DISCONNECT = &ServerError{"Disconnect requested", 200}
 
 var ERR_NO_QUEUE = &ServerError{"Queue does't exist!", 400}
 var ERR_QUEUE_ALREADY_EXISTS = &ServerError{"Queue exists already", 400}
+var ERR_QUEUE_EMPTY = &ServerError{"Queue is empty", 400}
 var ERR_ITEM_ALREADY_EXISTS = &ServerError{"Message exists already", 400}
 var ERR_UNEXPECTED_PRIORITY = &ServerError{"Incrorrect priority", 400}
 var ERR_MSG_NOT_LOCKED = &ServerError{"Message is not locked", 400}

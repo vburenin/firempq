@@ -33,7 +33,7 @@ func NewPQMessageWithId(id string, priority int64) *PQMessage {
 	pqm := PQMessage{
 		Id:        id,
 		Priority:  priority,
-		CreatedTs: Uts(),
+		CreatedTs: util.Uts(),
 		PopCount:  0,
 		UnlockTs:  0,
 	}
@@ -74,18 +74,16 @@ func NewPQMessage(payload string, priority int64) *PQMessage {
 
 func PQMessageFromBinary(msgId string, buf []byte) *PQMessage {
 	bufOffset := 0
-
 	priority := binary.BigEndian.Uint64(buf[bufOffset:])
-	bufOffset += 8
 
+	bufOffset += 8
 	createdTs := binary.BigEndian.Uint64(buf[bufOffset:])
-	bufOffset += 8
 
+	bufOffset += 8
 	popCount := binary.BigEndian.Uint64(buf[bufOffset:])
-	bufOffset += 8
 
-	unlockTs := binary.BigEndian.Uint64(buf[bufOffset:])
 	bufOffset += 8
+	unlockTs := binary.BigEndian.Uint64(buf[bufOffset:])
 
 	return &PQMessage{
 		Id:        msgId,
@@ -100,17 +98,17 @@ func (pqm *PQMessage) ToBinary() []byte {
 	// length of 4 64 bits integers.
 
 	buf := make([]byte, 8*4)
+
 	bufOffset := 0
-
 	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.Priority))
-	bufOffset += 8
 
+	bufOffset += 8
 	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.CreatedTs))
-	bufOffset += 8
 
+	bufOffset += 8
 	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.PopCount))
-	bufOffset += 8
 
+	bufOffset += 8
 	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.UnlockTs))
 
 	return buf
