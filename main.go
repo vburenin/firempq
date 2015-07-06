@@ -7,8 +7,9 @@ import (
 	"firempq/pqueue"
 	"firempq/proto"
 	"fmt"
-	//	"strconv"
+	"os"
 	"runtime"
+	"runtime/pprof"
 	"time"
 )
 
@@ -27,17 +28,21 @@ func main1() {
 		} else {
 			go proto.ServeRequests(conn)
 		}
-
 	}
 }
 
 func addMessages(pq *pqueue.PQueue) {
 	ts := time.Now().UnixNano()
-	payload := "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
-
-	for i := 0; i < 100000; i++ {
+	payload := "0000"
+	//payload += payload
+	//	payload += payload
+	//	payload += payload
+	//	payload += payload
+	//	payload += payload
+	//time.Sleep(60 * 1000000000)
+	//pq.DeleteAll()
+	for i := 0; i < 200; i++ {
 		v := map[string]string{
-			//defs.PARAM_MSG_ID:       strconv.Itoa(i),
 			defs.PARAM_MSG_PRIORITY: "1",
 		}
 		pq.PushMessage(v, payload)
@@ -68,15 +73,15 @@ func addSpeedTest(name string) {
 	addMessages(pq)
 	pq.Close()
 
-	//time.Sleep(1000000000)
-
-	pq = pqueue.NewPQueue(name, 100, 10000)
-	popAll(pq)
-	pq.Close()
-
-	pq = pqueue.NewPQueue(name, 100, 10000)
-	popAll(pq)
-	pq.Close()
+	//	pq = pqueue.NewPQueue(name, 100, 10000)
+	//	popAll(pq)
+	//	pq.Close()
+	//
+	//	//time.Sleep(50000000000)
+	//
+	//	pq = pqueue.NewPQueue(name, 100, 10000)
+	//	popAll(pq)
+	//	pq.Close()
 	//	go addMessages(pq)
 	//	go addMessages(pq)
 	//	go addMessages(pq)
@@ -94,8 +99,16 @@ func addSpeedTest(name string) {
 }
 
 func main() {
+
+	f, _ := os.Create("pp.dat")
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	ts := time.Now().UnixNano()
 	addSpeedTest("n1")
+	end_t := time.Now().UnixNano()
+	fmt.Println((end_t - ts) / 1000000)
 	// println(util.GenRandMsgId())
 	//testldb()
 	// addSpeedTest()

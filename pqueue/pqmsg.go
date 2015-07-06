@@ -33,7 +33,7 @@ func NewPQMessageWithId(id string, priority int64) *PQMessage {
 	pqm := PQMessage{
 		Id:        id,
 		Priority:  priority,
-		CreatedTs: Uts(),
+		CreatedTs: util.Uts(),
 		PopCount:  0,
 		UnlockTs:  0,
 	}

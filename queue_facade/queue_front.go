@@ -8,6 +8,7 @@ import (
 type IMessage interface {
 	GetId() string
 	GetStatus() map[string]interface{}
+	ToBinary() []byte
 }
 
 type IQueue interface {
