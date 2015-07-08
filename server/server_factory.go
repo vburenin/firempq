@@ -1,18 +1,17 @@
 package server
 
 import (
-    "errors"
+	"errors"
 )
 
 type IQueueServer interface {
-    Run()
+	Run()
 }
 
+func ServerFactory(serverClass string, serverAddress string) (IQueueServer, error) {
+	if serverClass == "simple" {
+		return NewSimpleServer(serverAddress), nil
+	}
 
-func ServerFactory (serverClass string, serverAddress string) (IQueueServer, error) {
-    if serverClass == "simple" {
-        return NewSimpleServer(serverAddress), nil
-    }
-
-    return nil, errors.New("Invalid server class!")
+	return nil, errors.New("Invalid server class!")
 }
