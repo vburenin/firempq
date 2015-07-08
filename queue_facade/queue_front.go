@@ -18,6 +18,7 @@ type IQueue interface {
 	DeleteById(msgId string) error
 	GetStatus() map[string]interface{}
 	DeleteAll()
+	GetQueueType() string
 	CustomHandler(action string, params map[string]string) error
 }
 

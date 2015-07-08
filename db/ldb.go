@@ -9,7 +9,10 @@ package db
 
 import (
 	"bytes"
+	"firempq/common"
+	"firempq/qerrors"
 	"firempq/queue_facade"
+	"firempq/util"
 	"github.com/jmhodges/levigo"
 	"log"
 	"sync"
@@ -94,12 +97,12 @@ func NewDataStorage(dbName string) *DataStorage {
 
 // Message payload Id.
 func makePayloadId(queueName, msgId string) string {
-	return queueName + ":p:" + msgId
+	return "p:" + queueName + ":" + msgId
 }
 
 // Message Id.
 func makeMsgId(queueName, msgId string) string {
-	return queueName + ":m:" + msgId
+	return "m:" + queueName + ":" + msgId
 }
 
 // Message will be stored into cache including payload.
@@ -202,6 +205,58 @@ func (ds *DataStorage) IterQueue(queueName string) *MsgIterator {
 	iter := ds.db.NewIterator(ropts)
 	prefix := []byte(makeMsgId(queueName, ""))
 	return NewIter(iter, prefix)
+}
+
+const QUEUE_META_PREFIX = "qmeta:"
+const QUEUE_SETTINGS_PREFIX = "qsettings:"
+
+// Read all available queues.
+func (ds *DataStorage) GetAllQueueMeta() []*common.QueueMetaInfo {
+	qmiList := make([]*common.QueueMetaInfo, 1)
+	qtPrefix := []byte(QUEUE_META_PREFIX)
+	ropts := levigo.NewReadOptions()
+	iter := ds.db.NewIterator(ropts)
+	iter.Seek(qtPrefix)
+	for iter.Valid() {
+		queueKey := iter.Key()
+		queueName := bytes.TrimPrefix(queueKey, qtPrefix)
+
+		if len(queueKey) == len(queueName) {
+			break
+		}
+		qmi, err := common.QueueInfoFromBinary(iter.Value())
+		if err != nil {
+			log.Println("Coudn't read queue meta data because of:", err.Error())
+			iter.Next()
+			continue
+		}
+		if qmi.Disabled {
+			log.Println("Qeueue is disabled. Skipping:", qmi.Name)
+			iter.Next()
+			continue
+		}
+		qmiList = append(qmiList, qmi)
+		iter.Next()
+	}
+	return qmiList
+}
+
+func (ds *DataStorage) SaveQueueMeta(qmi *common.QueueMetaInfo) {
+	key := QUEUE_META_PREFIX + qmi.Name
+	wopts := levigo.NewWriteOptions()
+	ds.db.Put(wopts, []byte(key), qmi.ToBinary())
+}
+
+// Read queue settings bases on queue name. Caller should profide correct settings structure to read binary data.
+func (ds *DataStorage) GetQueueSettings(settings interface{}, queueName string) error {
+	key := []byte(QUEUE_SETTINGS_PREFIX + queueName)
+	ropts := levigo.NewReadOptions()
+	data, _ := ds.db.Get(ropts, key)
+	if data == nil {
+		return qerrors.InvalidRequest("No queue settings found: " + queueName)
+	}
+	err := util.StructFromBinary(settings, data)
+	return err
 }
 
 // Flush and close database.
