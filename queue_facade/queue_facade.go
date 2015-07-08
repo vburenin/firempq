@@ -27,7 +27,7 @@ type QFacade struct {
 	lock      sync.Mutex
 }
 
-func NewPQFacade() *QFacade {
+func NewQFacade() *QFacade {
 	return &QFacade{allQueues: make(map[string]IQueue)}
 }
 

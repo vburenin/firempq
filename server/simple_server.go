@@ -29,7 +29,7 @@ type SimpleServer struct {
 
 func NewSimpleServer(address string) IQueueServer {
 	return &SimpleServer{address: address,
-		queueFacade: queue_facade.NewPQFacade()}
+		queueFacade: queue_facade.NewQFacade()}
 }
 
 func (this *SimpleServer) Run() {
