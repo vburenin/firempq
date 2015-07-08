@@ -28,11 +28,8 @@ type QFacade struct {
 }
 
 func NewPQFacade() *QFacade {
-	return &QFacade{}
+	return &QFacade{allQueues: make(map[string]IQueue)}
 }
-
-// All queues globally. Global things are terrible. Will move it out of here when design gets clear.
-var ALL_QUEUES = NewPQFacade()
 
 func (p *QFacade) AddQueue(queueName string, pq IQueue) error {
 	p.lock.Lock()

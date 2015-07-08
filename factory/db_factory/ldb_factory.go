@@ -1,4 +1,4 @@
-package factory
+package db_factory
 
 import (
 	"firempq/db"

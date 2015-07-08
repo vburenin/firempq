@@ -16,9 +16,6 @@ var RESP_ERROR = "ERR"
 var RESP_PONG = "PONG"
 var RESP_OK = "OK"
 var RESP_BYE = "BYE"
-var RESP_CONTINUE = "CONT"
 
 // 384 kb
 const MAX_REQ_LENGTH = 393216
-
-var ENDL = []byte{'\n'}
