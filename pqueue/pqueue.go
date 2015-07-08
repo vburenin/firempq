@@ -50,19 +50,20 @@ type PQueue struct {
 	// Queue settings.
 	settings *PQueueSettings
 
-	newMsg chan bool
+	newMsgNotification chan bool
 }
 
 func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
 	pq := PQueue{
-		allMessagesMap: make(map[string]*PQMessage),
-		availableMsgs:  priority_first.NewActiveQueues(settings.MaxPriority),
-		database:       database,
-		expireHeap:     structs.NewIndexHeap(),
-		inFlightHeap:   structs.NewIndexHeap(),
-		queueName:      queueName,
-		settings:       settings,
-		workDone:       false,
+		allMessagesMap: 	make(map[string]*PQMessage),
+		availableMsgs:  	priority_first.NewActiveQueues(settings.MaxPriority),
+		database:       	database,
+		expireHeap:     	structs.NewIndexHeap(),
+		inFlightHeap:   	structs.NewIndexHeap(),
+		queueName:      	queueName,
+		settings:       	settings,
+		workDone:       	false,
+		newMsgNotification: make(chan bool),
 	}
 
 	pq.actionHandlers = map[string](func(map[string]string) error){
@@ -70,7 +71,6 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 		ACTION_SET_LOCK_TIMEOUT:    pq.SetLockTimeout,
 		ACTION_UNLOCK_BY_ID:        pq.UnlockMessageById,
 	}
-	pq.newMsg = make(chan bool)
 
 	pq.loadAllMessages()
 	go pq.periodicCleanUp()
@@ -133,13 +133,15 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) error {
 	if _, ok := pq.allMessagesMap[msg.Id]; ok {
 		return qerrors.ERR_ITEM_ALREADY_EXISTS
 	}
-
+	queueLen := pq.availableMsgs.Len()
 	pq.allMessagesMap[msg.Id] = msg
 	pq.trackExpiration(msg)
 	pq.availableMsgs.Push(msg.Id, msg.Priority)
-	select {
-		case pq.newMsg <- true:
-		default: // allows non blocking channel usage if there are no users awaiting wor the message
+	if 0 == queueLen {
+		select {
+			case pq.newMsgNotification <- true:
+			default: // allows non blocking channel usage if there are no users awaiting wor the message
+		}
 	}
 
 	pq.database.StoreMessage(pq.queueName, msg, payload)
@@ -178,7 +180,7 @@ func (pq *PQueue) PopMessage() (queue_facade.IMessage, error) {
 
 // Will pop 'limit' messages within 'timeoutMsec' time interval. Function will exit on timeout
 // even if queue has enough messages.
-func (pq *PQueue) PopWait(timeoutMsec, limit int64) ([]queue_facade.IMessage, error) {
+func (pq *PQueue) PopWait(timeoutMsec, limit int) ([]queue_facade.IMessage, error) {
 	msg := make([]queue_facade.IMessage, 0, limit)
 	// Run timeout control routine
 	timeout := make(chan bool, 1)
@@ -188,7 +190,7 @@ func (pq *PQueue) PopWait(timeoutMsec, limit int64) ([]queue_facade.IMessage, er
 	} ()
 	// Pop messages from the queue
 	needExit := false
-	for int64(len(msg)) < limit && !needExit{
+	for len(msg) < limit && !needExit{
 		select {
 		case <-timeout:
 			needExit = true // Will return by time out, even there is enough messages in a queue
@@ -202,7 +204,7 @@ func (pq *PQueue) PopWait(timeoutMsec, limit int64) ([]queue_facade.IMessage, er
 				case <-timeout:
 					needExit = true
 					break
-				case <-pq.newMsg: // Just wait for new messages in a queue
+				case <-pq.newMsgNotification: // Just wait for new messages in a queue
 				}
 			}
 		}
