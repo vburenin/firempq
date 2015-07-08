@@ -20,6 +20,8 @@ const (
 	SIMPLE_SERVER = "simple"
 )
 
+type QueueOpFunc func(req []string) error
+
 type SimpleServer struct {
 	address     string
 	queueFacade *queue_facade.QFacade
@@ -130,9 +132,7 @@ func (this *SimpleServer) writeResponse(rw *bufio.ReadWriter, line string) error
 	return nil
 }
 
-type QueueFunc func(req []string) error
-
-func (this *SimpleServer) queueOp(rw *bufio.ReadWriter, args []string, queueFunc QueueFunc) error {
+func (this *SimpleServer) queueOp(rw *bufio.ReadWriter, args []string, queueFunc QueueOpFunc) error {
 	if len(args) < 1 {
 		return this.writeResponse(rw, text_proto.RESP_ERROR+" Not enough parameters")
 	}
