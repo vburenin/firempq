@@ -49,6 +49,8 @@ type PQueue struct {
 	database *db.DataStorage
 	// Queue settings.
 	settings *PQueueSettings
+
+	newMsg chan bool
 }
 
 func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
@@ -68,6 +70,7 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 		ACTION_SET_LOCK_TIMEOUT:    pq.SetLockTimeout,
 		ACTION_UNLOCK_BY_ID:        pq.UnlockMessageById,
 	}
+	pq.newMsg = make(chan bool)
 
 	pq.loadAllMessages()
 	go pq.periodicCleanUp()
@@ -134,6 +137,10 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) error {
 	pq.allMessagesMap[msg.Id] = msg
 	pq.trackExpiration(msg)
 	pq.availableMsgs.Push(msg.Id, msg.Priority)
+	select {
+		case pq.newMsg <- true:
+		default: // allows non blocking channel usage if there are no users awaiting wor the message
+	}
 
 	pq.database.StoreMessage(pq.queueName, msg, payload)
 	return nil
@@ -164,6 +171,43 @@ func (pq *PQueue) Pop() *PQMessage {
 func (pq *PQueue) PopMessage() (queue_facade.IMessage, error) {
 	msg := pq.Pop()
 	if msg == nil {
+		return nil, qerrors.ERR_QUEUE_EMPTY
+	}
+	return msg, nil
+}
+
+// Will pop 'limit' messages within 'timeoutMsec' time interval. Function will exit on timeout
+// even if queue has enough messages.
+func (pq *PQueue) PopWait(timeoutMsec, limit int64) ([]queue_facade.IMessage, error) {
+	msg := make([]queue_facade.IMessage, 0, limit)
+	// Run timeout control routine
+	timeout := make(chan bool, 1)
+	go func() {
+		time.Sleep(time.Duration(timeoutMsec) * time.Millisecond)
+		timeout <- true
+	} ()
+	// Pop messages from the queue
+	needExit := false
+	for int64(len(msg)) < limit && !needExit{
+		select {
+		case <-timeout:
+			needExit = true // Will return by time out, even there is enough messages in a queue
+			break
+		default:
+			popMsg := pq.Pop()
+			if nil != popMsg {
+				msg = append(msg, popMsg)
+			} else {
+				select {
+				case <-timeout:
+					needExit = true
+					break
+				case <-pq.newMsg: // Just wait for new messages in a queue
+				}
+			}
+		}
+	}
+	if 0 == len(msg) {
 		return nil, qerrors.ERR_QUEUE_EMPTY
 	}
 	return msg, nil

@@ -20,6 +20,7 @@ type IQueue interface {
 	DeleteAll()
 	GetQueueType() string
 	CustomHandler(action string, params map[string]string) error
+	PopWait(timeout, limit int64) ([]IMessage, error)
 }
 
 type QFacade struct {
