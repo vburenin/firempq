@@ -4,6 +4,7 @@ import "net"
 import "log"
 import (
 	"firempq/defs"
+	"firempq/factory"
 	"firempq/pqueue"
 	"firempq/proto"
 	"fmt"
@@ -69,7 +70,7 @@ func popAll(pq *pqueue.PQueue) {
 func addSpeedTest(name string) {
 	var pq *pqueue.PQueue
 
-	pq = pqueue.NewPQueue(name, 100, 10000)
+	pq = factory.GetPQueue("somequeue")
 	addMessages(pq)
 	pq.Close()
 
@@ -105,10 +106,25 @@ func main() {
 	defer pprof.StopCPUProfile()
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	ts := time.Now().UnixNano()
-	addSpeedTest("n1")
-	end_t := time.Now().UnixNano()
-	fmt.Println((end_t - ts) / 1000000)
+	addSpeedTest("tstq")
+	//db := factory.GetDatabase()
+	//	qmi1 := common.NewQueueMetaInfo(common.QTYPE_PRIORITY_QUEUE, 1, "test1")
+	//	qmi2 := common.NewQueueMetaInfo(common.QTYPE_PRIORITY_QUEUE, 2, "test2")
+	//	qmi3 := common.NewQueueMetaInfo(common.QTYPE_PRIORITY_QUEUE, 3, "test3")
+	//	qmi4 := common.NewQueueMetaInfo(common.QTYPE_PRIORITY_QUEUE, 4, "test4")
+	//	db.SaveQueueMeta(qmi1)
+	//	db.SaveQueueMeta(qmi2)
+	//	db.SaveQueueMeta(qmi3)
+	//	db.SaveQueueMeta(qmi4)
+
+	//	for _, v := range db.GetAllQueueMeta() {
+	//		fmt.Println(v)
+	//	}
+	//db.Close()
+	//	ts := time.Now().UnixNano()
+	//	addSpeedTest("n1")
+	//	end_t := time.Now().UnixNano()
+	//	fmt.Println((end_t - ts) / 1000000)
 	// println(util.GenRandMsgId())
 	//testldb()
 	// addSpeedTest()
