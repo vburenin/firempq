@@ -110,7 +110,7 @@ func createQueue(rw *bufio.ReadWriter, req []string) error {
 
 type SimpleServer struct {
     address string
-    queueFacade *queue_facade.PQFacade
+    queueFacade *queue_facade.QFacade
 }
 
 
