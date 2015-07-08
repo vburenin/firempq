@@ -247,9 +247,13 @@ func (ds *DataStorage) SaveQueueMeta(qmi *common.QueueMetaInfo) {
 	ds.db.Put(wopts, []byte(key), qmi.ToBinary())
 }
 
+func makeSettingsKey(queueName string) []byte {
+	return []byte(QUEUE_SETTINGS_PREFIX + queueName)
+}
+
 // Read queue settings bases on queue name. Caller should profide correct settings structure to read binary data.
 func (ds *DataStorage) GetQueueSettings(settings interface{}, queueName string) error {
-	key := []byte(QUEUE_SETTINGS_PREFIX + queueName)
+	key := makeSettingsKey(queueName)
 	ropts := levigo.NewReadOptions()
 	data, _ := ds.db.Get(ropts, key)
 	if data == nil {
@@ -257,6 +261,16 @@ func (ds *DataStorage) GetQueueSettings(settings interface{}, queueName string) 
 	}
 	err := util.StructFromBinary(settings, data)
 	return err
+}
+
+func (ds *DataStorage) SaveQueueSettings(settings interface{}, queueName string) {
+	key := makeSettingsKey(queueName)
+	wopts := levigo.NewWriteOptions()
+	data := util.StructToBinary(settings)
+	err := ds.db.Put(wopts, key, data)
+	if err != nil {
+		log.Println("Failed to save settings: ", err.Error())
+	}
 }
 
 // Flush and close database.

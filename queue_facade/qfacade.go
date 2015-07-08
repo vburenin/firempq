@@ -22,19 +22,19 @@ type IQueue interface {
 	CustomHandler(action string, params map[string]string) error
 }
 
-type PQFront struct {
+type QFacade struct {
 	allQueues map[string]IQueue
 	lock      sync.Mutex
 }
 
-func NewPQFront() *PQFront {
-	return &PQFront{}
+func NewPQFront() *QFacade {
+	return &QFacade{}
 }
 
 // All queues globally. Global things are terrible. Will move it out of here when design gets clear.
 var ALL_QUEUES = NewPQFront()
 
-func (p *PQFront) AddQueue(queueName string, pq IQueue) error {
+func (p *QFacade) AddQueue(queueName string, pq IQueue) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	_, ok := p.allQueues[queueName]
@@ -46,7 +46,7 @@ func (p *PQFront) AddQueue(queueName string, pq IQueue) error {
 	return nil
 }
 
-func (p *PQFront) DropQueue(queueName string) error {
+func (p *QFacade) DropQueue(queueName string) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	_, ok := p.allQueues[queueName]
@@ -57,7 +57,7 @@ func (p *PQFront) DropQueue(queueName string) error {
 	return nil
 }
 
-func (p *PQFront) GetQueue(name string) (IQueue, error) {
+func (p *QFacade) GetQueue(name string) (IQueue, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	q, ok := p.allQueues[name]

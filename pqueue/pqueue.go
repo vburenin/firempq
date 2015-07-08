@@ -93,6 +93,10 @@ func LoadPQueue(database *db.DataStorage, queueName string) *PQueue {
 	return pq
 }
 
+func (pq *PQueue) SavePQueue() {
+	pq.database.SaveQueueSettings(pq.settings, pq.queueName)
+}
+
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := pq.settings.ToMap()
 	res["TotalMessages"] = len(pq.allMessagesMap)
