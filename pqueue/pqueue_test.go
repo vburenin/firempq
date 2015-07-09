@@ -1,13 +1,18 @@
 package pqueue
 
 import (
+	"firempq/db"
 	"firempq/defs"
 	"testing"
 	"time"
 )
 
+func CreateTestQueue() *PQueue {
+	return NewPQueue(db.GetDatabase(), "name", 100, 1000)
+}
+
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
-	q := CreatePQueue("name", nil)
+	q := CreateTestQueue()
 	q.DeleteAll()
 	defer q.Close()
 	defer q.DeleteAll()
@@ -44,7 +49,7 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 }
 
 func TestAutoExpiration(t *testing.T) {
-	q := CreatePQueue("name", nil)
+	q := CreateTestQueue()
 	q.DeleteAll()
 	defer q.Close()
 	defer q.DeleteAll()
@@ -68,7 +73,7 @@ func TestAutoExpiration(t *testing.T) {
 }
 
 func TestUnlockById(t *testing.T) {
-	q := CreatePQueue("name", nil)
+	q := CreateTestQueue()
 	q.DeleteAll()
 
 	defer q.Close()
@@ -93,7 +98,7 @@ func TestUnlockById(t *testing.T) {
 }
 
 func TestDeleteById(t *testing.T) {
-	q := CreatePQueue("name", nil)
+	q := CreateTestQueue()
 	defer q.Close()
 	defer q.DeleteAll()
 
@@ -114,7 +119,7 @@ func TestDeleteById(t *testing.T) {
 }
 
 func TestDeleteLockedById(t *testing.T) {
-	q := CreatePQueue("name", nil)
+	q := CreateTestQueue()
 	defer q.Close()
 	defer q.DeleteAll()
 
