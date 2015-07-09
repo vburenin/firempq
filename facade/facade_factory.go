@@ -6,11 +6,13 @@ import (
 	"firempq/pqueue"
 )
 
-var QUEUE_REGISTRY = map[string](func(string, map[string]string) IQueue){
+type QueueFactoryFunc func(string, map[string]string) common.IQueue
+
+var QUEUE_REGISTRY = map[string](QueueFactoryFunc){
 	common.QTYPE_PRIORITY_QUEUE: pqueue.CreatePQueue,
 }
 
-var facade QFacade = NewFacade(db.GetDatabase())
+var facade *QFacade = NewFacade(db.GetDatabase())
 
 func CreateFacade() *QFacade {
 	return facade
