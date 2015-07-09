@@ -19,6 +19,6 @@ type IQueue interface {
 }
 
 type IQueueServer interface {
-    Start()
-    Stop()
+	Start()
+	Stop()
 }

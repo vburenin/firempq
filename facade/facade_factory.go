@@ -8,7 +8,6 @@ import (
 
 type QueueFactoryFunc func(string, map[string]string) common.IQueue
 
-
 var QUEUE_REGISTRY = map[string](QueueFactoryFunc){
 	common.QTYPE_PRIORITY_QUEUE: pqueue.CreatePQueue,
 }

@@ -1,8 +1,8 @@
 package pqueue
 
 import (
+	"firempq/common"
 	"firempq/db"
-    "firempq/common"
 )
 
 func CreatePQueue(queueName string, params map[string]string) common.IQueue {

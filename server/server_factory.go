@@ -1,8 +1,8 @@
 package server
 
 import (
-    "firempq/common"
 	"errors"
+	"firempq/common"
 )
 
 func GetServer(serverClass string, serverAddress string) (common.IQueueServer, error) {
