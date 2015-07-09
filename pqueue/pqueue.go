@@ -381,6 +381,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 	if _, ok := pq.allMessagesMap[msgId]; ok {
 		delete(pq.allMessagesMap, msgId)
 		pq.database.DeleteMessage(pq.queueName, msgId)
+		pq.expireHeap.PopById(msgId)
 		return true
 	}
 	return false
@@ -505,6 +506,7 @@ func (pq *PQueue) loadAllMessages() {
 	nowTs := util.Uts()
 	log.Println("Initializing queue:", pq.queueName)
 	iter := pq.database.IterQueue(pq.queueName)
+	defer iter.Close()
 
 	msgs := MessageSlice{}
 	delIds := []string{}
@@ -523,7 +525,6 @@ func (pq *PQueue) loadAllMessages() {
 		}
 		iter.Next()
 	}
-	defer iter.Close()
 	log.Printf("Loaded %d messages for %s queue", len(msgs), pq.queueName)
 	if len(delIds) > 0 {
 		log.Printf("%d messages will be removed because of expiration", len(delIds))
@@ -579,7 +580,6 @@ func (pq *PQueue) Close() {
 		return
 	}
 	pq.workDone = true
-	pq.database.Close()
 	pq.lock.Unlock()
 }
 

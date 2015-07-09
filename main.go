@@ -1,12 +1,13 @@
 package main
 
-import "log"
 import (
 	"firempq/common"
+	"firempq/db"
 	"firempq/defs"
 	"firempq/pqueue"
 	"firempq/server"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -104,9 +105,11 @@ func main() {
 	f, _ := os.Create("pp.dat")
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
+	defer db.GetDatabase().Close()
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	addSpeedTest("tstq")
+
 	//db := factory.GetDatabase()
 	//	qmi1 := common.NewQueueMetaInfo(common.QTYPE_PRIORITY_QUEUE, 1, "test1")
 	//	qmi2 := common.NewQueueMetaInfo(common.QTYPE_PRIORITY_QUEUE, 2, "test2")
