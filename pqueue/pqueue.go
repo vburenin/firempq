@@ -5,7 +5,6 @@ import (
 	"firempq/db"
 	"firempq/defs"
 	"firempq/qerrors"
-	"firempq/queue_facade"
 	"firempq/queues/priority_first"
 	"firempq/structs"
 	"firempq/util"
@@ -55,14 +54,14 @@ type PQueue struct {
 
 func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
 	pq := PQueue{
-		allMessagesMap: 	make(map[string]*PQMessage),
-		availableMsgs:  	priority_first.NewActiveQueues(settings.MaxPriority),
-		database:       	database,
-		expireHeap:     	structs.NewIndexHeap(),
-		inFlightHeap:   	structs.NewIndexHeap(),
-		queueName:      	queueName,
-		settings:       	settings,
-		workDone:       	false,
+		allMessagesMap:     make(map[string]*PQMessage),
+		availableMsgs:      priority_first.NewActiveQueues(settings.MaxPriority),
+		database:           database,
+		expireHeap:         structs.NewIndexHeap(),
+		inFlightHeap:       structs.NewIndexHeap(),
+		queueName:          queueName,
+		settings:           settings,
+		workDone:           false,
 		newMsgNotification: make(chan bool),
 	}
 
@@ -139,8 +138,8 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) error {
 	pq.availableMsgs.Push(msg.Id, msg.Priority)
 	if 0 == queueLen {
 		select {
-			case pq.newMsgNotification <- true:
-			default: // allows non blocking channel usage if there are no users awaiting wor the message
+		case pq.newMsgNotification <- true:
+		default: // allows non blocking channel usage if there are no users awaiting wor the message
 		}
 	}
 
@@ -172,7 +171,7 @@ func (pq *PQueue) Pop() *PQMessage {
 
 // Pop first 'limit' available messages and append them to a 'batch' slice.
 // Will interrupt if there are no more messages available, 'limit' messages were popped, or timeout reached.
-func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]queue_facade.IMessage) (numPopped int, err error) {
+func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]common.IMessage) (numPopped int, err error) {
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
@@ -197,7 +196,7 @@ func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]queue_f
 	return numPopped, nil
 }
 
-func (pq *PQueue) PopMessage() (queue_facade.IMessage, error) {
+func (pq *PQueue) PopMessage() (common.IMessage, error) {
 	msg := pq.Pop()
 	if msg == nil {
 		return nil, qerrors.ERR_QUEUE_EMPTY
@@ -210,17 +209,17 @@ const MESSAGES_BATCH_SIZE = 10
 
 // Will pop 'limit' messages within 'timeoutMsec' time interval. Function will exit on timeout
 // even if queue has enough messages.
-func (pq *PQueue) PopWait(timeoutMsec, limit int) ([]queue_facade.IMessage, error) {
-	msg := make([]queue_facade.IMessage, 0, limit)
+func (pq *PQueue) PopWait(timeoutMsec, limit int) ([]common.IMessage, error) {
+	msg := make([]common.IMessage, 0, limit)
 	// Run timeout control routine
 	timeout := make(chan bool, 1)
 	go func() {
 		time.Sleep(time.Duration(timeoutMsec) * time.Millisecond)
 		timeout <- true
-	} ()
+	}()
 	// Pop messages from the queue
 	needExit := false
-	for len(msg) < limit && !needExit{
+	for len(msg) < limit && !needExit {
 		select {
 		case <-timeout:
 			needExit = true // Will return by time out, even there is enough messages in a queue
@@ -584,4 +583,4 @@ func (pq *PQueue) Close() {
 	pq.lock.Unlock()
 }
 
-var _ queue_facade.IQueue = &PQueue{}
+var _ common.IQueue = &PQueue{}

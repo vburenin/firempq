@@ -2,14 +2,14 @@ package pqueue
 
 import (
 	"encoding/binary"
+	"firempq/common"
 	"firempq/defs"
 	"firempq/qerrors"
-	"firempq/queue_facade"
 	"firempq/util"
 	"strconv"
 )
 
-var _ queue_facade.IMessage = &PQMessage{}
+var _ common.IMessage = &PQMessage{}
 
 const (
 	MAX_MESSAGE_ID_LENGTH = 64

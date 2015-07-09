@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"firempq/common"
 	"firempq/qerrors"
-	"firempq/queue_facade"
 	"firempq/util"
 	"github.com/jmhodges/levigo"
 	"log"
@@ -106,7 +105,7 @@ func makeMsgId(queueName, msgId string) string {
 }
 
 // Message will be stored into cache including payload.
-func (ds *DataStorage) StoreMessage(queueName string, msg queue_facade.IMessage, payload string) {
+func (ds *DataStorage) StoreMessage(queueName string, msg common.IMessage, payload string) {
 	itemId := makeMsgId(queueName, msg.GetId())
 	payloadId := makePayloadId(queueName, msg.GetId())
 
@@ -119,7 +118,7 @@ func (ds *DataStorage) StoreMessage(queueName string, msg queue_facade.IMessage,
 }
 
 // Updates message metadata, affects cache only until flushed.
-func (ds *DataStorage) UpdateMessage(queueName string, msg queue_facade.IMessage) {
+func (ds *DataStorage) UpdateMessage(queueName string, msg common.IMessage) {
 	itemId := makeMsgId(queueName, msg.GetId())
 	msgBody := msg.ToBinary()
 	ds.cacheLock.Lock()

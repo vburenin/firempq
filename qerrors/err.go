@@ -21,6 +21,7 @@ var ERR_LARGE_REQ = &ServerError{"Too large request!", 400}
 var DISCONNECT = &ServerError{"Disconnect requested", 200}
 
 var ERR_NO_QUEUE = &ServerError{"Queue does't exist!", 400}
+var ERR_QUEUE_UNKNOWN_TYPE = &ServerError{"Unknown queue type", 400}
 var ERR_QUEUE_ALREADY_EXISTS = &ServerError{"Queue exists already", 400}
 var ERR_QUEUE_EMPTY = &ServerError{"Queue is empty", 400}
 var ERR_QUEUE_OPERATION_TIMEOUT = &ServerError{"Queue operation timeout", 400}

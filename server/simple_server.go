@@ -2,9 +2,9 @@ package server
 
 import (
 	"bufio"
-	"firempq/factory/queue_factory"
 	"firempq/proto/text_proto"
-	"firempq/queue_facade"
+	"firempq/facade"
+    "firempq/common"
 	"fmt"
 	"io"
 	"log"
@@ -24,16 +24,16 @@ type QueueOpFunc func(req []string) error
 
 type SimpleServer struct {
 	address     string
-	queueFacade *queue_facade.QFacade
+	facade      *facade.QFacade
 	listener    net.Listener
 	quitChan    chan bool
 }
 
-func NewSimpleServer(address string) IQueueServer {
-	return &SimpleServer{address: address,
-		queueFacade: queue_facade.NewQFacade(),
-		listener:    nil,
-		quitChan:    make(chan bool)}
+func NewSimpleServer(address string) common.IQueueServer {
+	return &SimpleServer{address:  address,
+                         facade:   facade.CreateFacade(),
+                         listener: nil,
+                         quitChan: make(chan bool)}
 }
 
 func (this *SimpleServer) Start() {
@@ -166,15 +166,18 @@ func (this *SimpleServer) queueOp(rw *bufio.ReadWriter, args []string, queueFunc
 }
 
 func (this *SimpleServer) createQueue(rw *bufio.ReadWriter, req []string) error {
-	return this.queueOp(rw, req,
-		func(args []string) error {
-			return this.queueFacade.AddQueue(args[0], queue_factory.GetPQueue(args[0]))
-		})
+//	return this.queueOp(rw, req,
+//		func(args []string) error {
+//			return this.facade.AddQueue(args[0], queue_factory.GetPQueue(args[0]))
+//		})
+    return nil
 }
 
+
 func (this *SimpleServer) dropQueue(rw *bufio.ReadWriter, req []string) error {
-	return this.queueOp(rw, req,
-		func(args []string) error {
-			return this.queueFacade.DropQueue(args[0])
-		})
+//	return this.queueOp(rw, req,
+//		func(args []string) error {
+//			return this.facade.DropQueue(args[0])
+//		})
+    return nil
 }
