@@ -49,18 +49,21 @@ type PQueue struct {
 	database *db.DataStorage
 	// Queue settings.
 	settings *PQueueSettings
+
+	newMsgNotification chan bool
 }
 
 func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
 	pq := PQueue{
-		allMessagesMap: make(map[string]*PQMessage),
-		availableMsgs:  priority_first.NewActiveQueues(settings.MaxPriority),
-		database:       database,
-		expireHeap:     structs.NewIndexHeap(),
-		inFlightHeap:   structs.NewIndexHeap(),
-		queueName:      queueName,
-		settings:       settings,
-		workDone:       false,
+		allMessagesMap: 	make(map[string]*PQMessage),
+		availableMsgs:  	priority_first.NewActiveQueues(settings.MaxPriority),
+		database:       	database,
+		expireHeap:     	structs.NewIndexHeap(),
+		inFlightHeap:   	structs.NewIndexHeap(),
+		queueName:      	queueName,
+		settings:       	settings,
+		workDone:       	false,
+		newMsgNotification: make(chan bool),
 	}
 
 	pq.actionHandlers = map[string](func(map[string]string) error){
@@ -130,10 +133,16 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) error {
 	if _, ok := pq.allMessagesMap[msg.Id]; ok {
 		return qerrors.ERR_ITEM_ALREADY_EXISTS
 	}
-
+	queueLen := pq.availableMsgs.Len()
 	pq.allMessagesMap[msg.Id] = msg
 	pq.trackExpiration(msg)
 	pq.availableMsgs.Push(msg.Id, msg.Priority)
+	if 0 == queueLen {
+		select {
+			case pq.newMsgNotification <- true:
+			default: // allows non blocking channel usage if there are no users awaiting wor the message
+		}
+	}
 
 	pq.database.StoreMessage(pq.queueName, msg, payload)
 	return nil
@@ -161,9 +170,82 @@ func (pq *PQueue) Pop() *PQMessage {
 	return msg
 }
 
+// Pop first 'limit' available messages and append them to a 'batch' slice.
+// Will interrupt if there are no more messages available, 'limit' messages were popped, or timeout reached.
+func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]queue_facade.IMessage) (numPopped int, err error) {
+
+	pq.lock.Lock()
+	defer pq.lock.Unlock()
+	numPopped = 0
+	for numPopped < limit {
+		select {
+		case <-timeout:
+			return numPopped, qerrors.ERR_QUEUE_OPERATION_TIMEOUT
+		default:
+			msgId := pq.availableMsgs.Pop()
+			msg, ok := pq.allMessagesMap[msgId]
+			if !ok {
+				break
+			}
+			msg.PopCount += 1
+			pq.lockMessage(msg)
+			pq.database.UpdateMessage(pq.queueName, msg)
+			*batch = append(*batch, msg)
+			numPopped += 1
+		}
+	}
+	return numPopped, nil
+}
+
 func (pq *PQueue) PopMessage() (queue_facade.IMessage, error) {
 	msg := pq.Pop()
 	if msg == nil {
+		return nil, qerrors.ERR_QUEUE_EMPTY
+	}
+	return msg, nil
+}
+
+// Size of one batch of messages for popMessageBatch function
+const MESSAGES_BATCH_SIZE = 10
+
+// Will pop 'limit' messages within 'timeoutMsec' time interval. Function will exit on timeout
+// even if queue has enough messages.
+func (pq *PQueue) PopWait(timeoutMsec, limit int) ([]queue_facade.IMessage, error) {
+	msg := make([]queue_facade.IMessage, 0, limit)
+	// Run timeout control routine
+	timeout := make(chan bool, 1)
+	go func() {
+		time.Sleep(time.Duration(timeoutMsec) * time.Millisecond)
+		timeout <- true
+	} ()
+	// Pop messages from the queue
+	needExit := false
+	for len(msg) < limit && !needExit{
+		select {
+		case <-timeout:
+			needExit = true // Will return by time out, even there is enough messages in a queue
+		default:
+			batchSize := MESSAGES_BATCH_SIZE
+			if (len(msg) + batchSize) > limit {
+				batchSize = limit - len(msg)
+			}
+			numPopped, err := pq.popMessageBatch(batchSize, timeout, &msg) // Get next batch of messages
+			if err == qerrors.ERR_QUEUE_OPERATION_TIMEOUT {
+				needExit = true
+			} else {
+				// Here our strategy is: if queue is empty - get first available messages/timeout and exit
+				if 0 == numPopped {
+					select {
+					case <-timeout:
+					case <-pq.newMsgNotification: // Just wait for new messages in a queue
+						pq.popMessageBatch(limit, timeout, &msg)
+					}
+					needExit = true
+				}
+			}
+		}
+	}
+	if 0 == len(msg) {
 		return nil, qerrors.ERR_QUEUE_EMPTY
 	}
 	return msg, nil

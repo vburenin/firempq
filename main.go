@@ -72,6 +72,13 @@ func addSpeedTest(name string) {
 
 	pq = factory.GetPQueue("somequeue")
 	addMessages(pq)
+	msgq, err := pq.PopWait(1, 104)
+	if err != nil || len(msgq) == 0 {
+		fmt.Printf("PopWait returned empty msgq\n", len(msgq))
+		return
+	} else {
+		fmt.Printf("PopWait done with %v messages\n", len(msgq))
+	}
 	pq.Close()
 
 	//	pq = pqueue.NewPQueue(name, 100, 10000)
