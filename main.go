@@ -1,6 +1,5 @@
 package main
 
-import "log"
 import (
 	"firempq/common"
 	"firempq/db"
@@ -8,6 +7,7 @@ import (
 	"firempq/pqueue"
 	"firempq/server"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"runtime/pprof"
