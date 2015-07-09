@@ -17,3 +17,8 @@ type IQueue interface {
 	CustomHandler(action string, params map[string]string) error
 	PopWait(timeout, limit int) ([]IMessage, error)
 }
+
+type IQueueServer interface {
+	Start()
+	Stop()
+}
