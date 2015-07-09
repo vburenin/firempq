@@ -2,27 +2,27 @@ package main
 
 import "log"
 import (
+	"firempq/common"
 	"firempq/defs"
 	"firempq/pqueue"
-    "firempq/server"
+	"firempq/server"
 	"fmt"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"time"
-    "firempq/common"
 )
 
 func main1() {
 
-    srv, err := server.GetServer(server.SIMPLE_SERVER, ":9033")
-    if err != nil {
-        log.Fatalln("Error: %s", err.Error())
-    }
+	srv, err := server.GetServer(server.SIMPLE_SERVER, ":9033")
+	if err != nil {
+		log.Fatalln("Error: %s", err.Error())
+	}
 
-    go srv.Start()
-    time.Sleep(1E9)
-    srv.Stop()
+	go srv.Start()
+	time.Sleep(1E9)
+	srv.Stop()
 }
 
 func addMessages(pq common.IQueue) {
