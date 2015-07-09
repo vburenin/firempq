@@ -169,6 +169,33 @@ func (pq *PQueue) Pop() *PQMessage {
 	return msg
 }
 
+// Pop first 'limit' available messages and append them to a 'batch' slice.
+// Will interrupt if there are no more messages available, 'limit' messages were popped, or timeout reached.
+func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]common.IMessage) (numPopped int, err error) {
+
+	pq.lock.Lock()
+	defer pq.lock.Unlock()
+	numPopped = 0
+	for numPopped < limit {
+		select {
+		case <-timeout:
+			return numPopped, qerrors.ERR_QUEUE_OPERATION_TIMEOUT
+		default:
+			msgId := pq.availableMsgs.Pop()
+			msg, ok := pq.allMessagesMap[msgId]
+			if !ok {
+				break
+			}
+			msg.PopCount += 1
+			pq.lockMessage(msg)
+			pq.database.UpdateMessage(pq.queueName, msg)
+			*batch = append(*batch, msg)
+			numPopped += 1
+		}
+	}
+	return numPopped, nil
+}
+
 func (pq *PQueue) PopMessage() (common.IMessage, error) {
 	msg := pq.Pop()
 	if msg == nil {
@@ -176,6 +203,9 @@ func (pq *PQueue) PopMessage() (common.IMessage, error) {
 	}
 	return msg, nil
 }
+
+// Size of one batch of messages for popMessageBatch function
+const MESSAGES_BATCH_SIZE = 10
 
 // Will pop 'limit' messages within 'timeoutMsec' time interval. Function will exit on timeout
 // even if queue has enough messages.
@@ -193,17 +223,23 @@ func (pq *PQueue) PopWait(timeoutMsec, limit int) ([]common.IMessage, error) {
 		select {
 		case <-timeout:
 			needExit = true // Will return by time out, even there is enough messages in a queue
-			break
 		default:
-			popMsg := pq.Pop()
-			if nil != popMsg {
-				msg = append(msg, popMsg)
+			batchSize := MESSAGES_BATCH_SIZE
+			if (len(msg) + batchSize) > limit {
+				batchSize = limit - len(msg)
+			}
+			numPopped, err := pq.popMessageBatch(batchSize, timeout, &msg) // Get next batch of messages
+			if err == qerrors.ERR_QUEUE_OPERATION_TIMEOUT {
+				needExit = true
 			} else {
-				select {
-				case <-timeout:
+				// Here our strategy is: if queue is empty - get first available messages/timeout and exit
+				if 0 == numPopped {
+					select {
+					case <-timeout:
+					case <-pq.newMsgNotification: // Just wait for new messages in a queue
+						pq.popMessageBatch(limit, timeout, &msg)
+					}
 					needExit = true
-					break
-				case <-pq.newMsgNotification: // Just wait for new messages in a queue
 				}
 			}
 		}
