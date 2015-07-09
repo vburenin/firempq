@@ -1,37 +1,31 @@
 package main
 
-import "net"
 import "log"
 import (
 	"firempq/defs"
 	"firempq/pqueue"
-	"firempq/proto"
+    "firempq/server"
 	"fmt"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"time"
+    "firempq/common"
 )
 
 func main1() {
 
-	ln, err := net.Listen("tcp", ":5001")
-	if err != nil {
-		log.Fatalln("Can't listen to 5001: %s", err.Error())
-	}
+    srv, err := server.GetServer(server.SIMPLE_SERVER, ":9033")
+    if err != nil {
+        log.Fatalln("Error: %s", err.Error())
+    }
 
-	log.Println("Listening port 5001")
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			//
-		} else {
-			go proto.ServeRequests(conn)
-		}
-	}
+    go srv.Start()
+    time.Sleep(1E9)
+    srv.Stop()
 }
 
-func addMessages(pq *pqueue.PQueue) {
+func addMessages(pq common.IQueue) {
 	ts := time.Now().UnixNano()
 	payload := "0000"
 	//payload += payload
@@ -67,10 +61,10 @@ func popAll(pq *pqueue.PQueue) {
 }
 
 func addSpeedTest(name string) {
-	var pq *pqueue.PQueue
 
-	pq = pqueue.CreatePQueue("somepqueue", nil)
+	var pq common.IQueue = pqueue.CreatePQueue("somepqueue", nil)
 	addMessages(pq)
+
 	msgq, err := pq.PopWait(1, 104)
 	if err != nil || len(msgq) == 0 {
 		fmt.Printf("PopWait returned empty msgq\n", len(msgq))
