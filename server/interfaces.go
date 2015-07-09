@@ -1,6 +1,7 @@
 package server
 
 type IQueueServer interface {
-	Run()
+	Start()
+    Stop()
 }
 

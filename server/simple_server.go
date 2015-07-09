@@ -16,7 +16,7 @@ import (
 
 const (
 	ENDL          = "\n"
-    ENDL_BYTE     = '\n'
+	ENDL_BYTE     = '\n'
 	SIMPLE_SERVER = "simple"
 )
 
@@ -25,29 +25,50 @@ type QueueOpFunc func(req []string) error
 type SimpleServer struct {
 	address     string
 	queueFacade *queue_facade.QFacade
+	listener    net.Listener
+	quitChan    chan bool
 }
 
 func NewSimpleServer(address string) IQueueServer {
 	return &SimpleServer{address: address,
-		queueFacade: queue_facade.NewQFacade()}
+		queueFacade: queue_facade.NewQFacade(),
+		listener:    nil,
+		quitChan:    make(chan bool)}
 }
 
-func (this *SimpleServer) Run() {
+func (this *SimpleServer) Start() {
 
-	listener, err := net.Listen("tcp", this.address)
+	var err error
+
+	this.listener, err = net.Listen("tcp", this.address)
+	defer this.listener.Close()
+
 	if err != nil {
-		log.Fatalln("Can't listen to %s: %s", this.address, err.Error())
+		log.Fatalf("Can't listen to %s: %s", this.address, err.Error())
 	}
 
-	log.Println("Listening at %s", this.address)
+	log.Printf("Listening at %s", this.address)
 	for {
-		conn, err := listener.Accept()
+		conn, err := this.listener.Accept()
 		if err == nil {
 			go this.handleConnection(conn)
 		} else {
-			log.Println("Could not accept incoming request: %s", err.Error())
+			select {
+			case <-this.quitChan:
+				log.Printf("Server stopped.")
+				return
+			default:
+				log.Printf("Could not accept incoming request: %s", err.Error())
+			}
 		}
 	}
+}
+
+func (this *SimpleServer) Stop() {
+
+	log.Printf("Server has been told to stop.")
+	close(this.quitChan)
+	this.listener.Close()
 }
 
 func (this *SimpleServer) handleConnection(conn net.Conn) {
