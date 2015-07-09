@@ -4,7 +4,6 @@ import "net"
 import "log"
 import (
 	"firempq/defs"
-	"firempq/factory"
 	"firempq/pqueue"
 	"firempq/proto"
 	"fmt"
@@ -70,7 +69,7 @@ func popAll(pq *pqueue.PQueue) {
 func addSpeedTest(name string) {
 	var pq *pqueue.PQueue
 
-	pq = factory.GetPQueue("somequeue")
+	pq = pqueue.CreatePQueue("somepqueue", nil)
 	addMessages(pq)
 	msgq, err := pq.PopWait(1, 1999)
 	if err != nil || len(msgq) == 0 {

@@ -7,7 +7,7 @@ import (
 )
 
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
-	q := NewPQueue("name", 100, 10000)
+	q := CreatePQueue("name", nil)
 	q.DeleteAll()
 	defer q.Close()
 	defer q.DeleteAll()
@@ -44,14 +44,14 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 }
 
 func TestAutoExpiration(t *testing.T) {
-	q := NewPQueue("name", 100, 10000)
+	q := CreatePQueue("name", nil)
 	q.DeleteAll()
 	defer q.Close()
 	defer q.DeleteAll()
 
 	q.DeleteAll()
 
-	q.MsgTTL = 10
+	q.settings.MsgTTL = 10
 	msg1 := NewPQMessageWithId("data1", 12)
 	msg2 := NewPQMessageWithId("data2", 12)
 
@@ -70,7 +70,7 @@ func TestAutoExpiration(t *testing.T) {
 }
 
 func TestUnlockById(t *testing.T) {
-	q := NewPQueue("name", 100, 10000)
+	q := CreatePQueue("name", nil)
 	q.DeleteAll()
 
 	defer q.Close()
@@ -95,7 +95,7 @@ func TestUnlockById(t *testing.T) {
 }
 
 func TestDeleteById(t *testing.T) {
-	q := NewPQueue("name", 100, 10000)
+	q := CreatePQueue("name", nil)
 	defer q.Close()
 	defer q.DeleteAll()
 
@@ -116,7 +116,7 @@ func TestDeleteById(t *testing.T) {
 }
 
 func TestDeleteLockedById(t *testing.T) {
-	q := NewPQueue("name", 100, 10000)
+	q := CreatePQueue("name", nil)
 	defer q.Close()
 	defer q.DeleteAll()
 
