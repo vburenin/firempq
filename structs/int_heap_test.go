@@ -11,8 +11,8 @@ func TestIntHeap1(t *testing.T) {
 
 	st := time.Now().UnixNano()
 
-	var i int
-	for i = 0; i < 20000000; i++ {
+	var i int64
+	for i = 0; i < 200000; i++ {
 		intHeap.PushItem(i)
 	}
 

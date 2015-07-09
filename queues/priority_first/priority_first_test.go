@@ -56,17 +56,17 @@ func TestActiveQueue1(t *testing.T) {
 }
 
 func TestRandomItems(t *testing.T) {
-	border := 10
+	border := int64(10)
 	history := make([][]string, border)
 	aq := NewActiveQueues(border)
 	for i := 0; i < 100000; i++ {
-		priority := rand.Intn(border)
+		priority := int64(rand.Intn(int(border)))
 		itemId := strconv.Itoa(rand.Int())
 		history[priority] = append(history[priority], itemId)
 		aq.Push(itemId, priority)
 	}
 
-	prevp := 0
+	var prevp int64 = 0
 	for !aq.Empty() {
 		p := aq.getFirstAvailable()
 		if p >= prevp {
