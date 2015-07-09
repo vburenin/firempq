@@ -49,8 +49,6 @@ func TestAutoExpiration(t *testing.T) {
 	defer q.Close()
 	defer q.DeleteAll()
 
-	q.DeleteAll()
-
 	q.settings.MsgTTL = 10
 	msg1 := NewPQMessageWithId("data1", 12)
 	msg2 := NewPQMessageWithId("data2", 12)
@@ -59,7 +57,7 @@ func TestAutoExpiration(t *testing.T) {
 	q.Push(msg2, "data2")
 
 	// Wait for auto expiration.
-	time.Sleep(110000000)
+	time.Sleep(130000000)
 	msg := q.Pop()
 	if msg != nil {
 		t.Error("Unexpected message! It should be expired!")
