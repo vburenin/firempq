@@ -2,8 +2,8 @@ package db
 
 // Level DB wrapper over multiple queue data store.
 // Each key has a prefix that combines queue name as well as type of stored data.
-// The following format is used for message keys:
-// somename:m:msgid
+// The following format is used for item keys:
+// somename:m:itemid
 // This format is used for payload keys:
 // somename:p:payload
 
@@ -17,21 +17,22 @@ import (
 	"sync"
 )
 
-// Message iterator built on top of LevelDB. It takes into account queue name to limit the amount of selected data.
-type MsgIterator struct {
+// Item iterator built on top of LevelDB.
+// It takes into account queue name to limit the amount of selected data.
+type ItemIterator struct {
 	iter   *levigo.Iterator
 	prefix []byte // Prefix for look ups.
 	Key    []byte // Currently selected key. Valid only if the iterator is valid.
 	Value  []byte // Currently selected value. Valid only if the iterator is valid.
 }
 
-func NewIter(iter *levigo.Iterator, prefix []byte) *MsgIterator {
+func NewIter(iter *levigo.Iterator, prefix []byte) *ItemIterator {
 	iter.Seek(prefix)
-	return &MsgIterator{iter, prefix, nil, nil}
+	return &ItemIterator{iter, prefix, nil, nil}
 }
 
 // Switch to the next element.
-func (mi *MsgIterator) Next() {
+func (mi *ItemIterator) Next() {
 	mi.iter.Next()
 }
 
@@ -42,7 +43,7 @@ func (mi *MsgIterator) Next() {
 //    ......
 //    iter.Next()
 //}
-func (mi *MsgIterator) Valid() bool {
+func (mi *ItemIterator) Valid() bool {
 	valid := mi.iter.Valid()
 	if valid {
 		k := mi.iter.Key()
@@ -59,16 +60,16 @@ func (mi *MsgIterator) Valid() bool {
 }
 
 // Iterator must be closed!
-func (mi *MsgIterator) Close() {
+func (mi *ItemIterator) Close() {
 	mi.iter.Close()
 }
 
 type DataStorage struct {
 	db              *levigo.DB        // Pointer the the instance of level db.
 	dbName          string            // LevelDB database name.
-	msgCache        map[string][]byte // Active cache for message metadata.
-	payloadCache    map[string]string // Active cache for message payload.
-	tmpMsgCache     map[string][]byte // Temporary map of cached data while it is in process of flushing into DB.
+	itemCache       map[string][]byte // Active cache for item metadata.
+	payloadCache    map[string]string // Active cache for item payload.
+	tmpItemCache    map[string][]byte // Temporary map of cached data while it is in process of flushing into DB.
 	tmpPayloadCache map[string]string // Temporary map of cached payloads while it is in process of flushing into DB.
 	cacheLock       sync.Mutex        // Used for caches access.
 	flushLock       sync.Mutex        // Used to prevent double flush.
@@ -77,9 +78,9 @@ type DataStorage struct {
 func NewDataStorage(dbName string) *DataStorage {
 	ds := DataStorage{
 		dbName:          dbName,
-		msgCache:        make(map[string][]byte),
+		itemCache:       make(map[string][]byte),
 		payloadCache:    make(map[string]string),
-		tmpMsgCache:     make(map[string][]byte),
+		tmpItemCache:    make(map[string][]byte),
 		tmpPayloadCache: make(map[string]string),
 	}
 	opts := levigo.NewOptions()
@@ -94,56 +95,56 @@ func NewDataStorage(dbName string) *DataStorage {
 	return &ds
 }
 
-// Message payload Id.
-func makePayloadId(queueName, msgId string) string {
-	return "p:" + queueName + ":" + msgId
+// Item payload Id.
+func makePayloadId(queueName, id string) string {
+	return "p:" + queueName + ":" + id
 }
 
-// Message Id.
-func makeMsgId(queueName, msgId string) string {
-	return "m:" + queueName + ":" + msgId
+// Item Id.
+func makeItemId(queueName, id string) string {
+	return "m:" + queueName + ":" + id
 }
 
-// Message will be stored into cache including payload.
-func (ds *DataStorage) StoreMessage(queueName string, msg common.IMessage, payload string) {
-	itemId := makeMsgId(queueName, msg.GetId())
-	payloadId := makePayloadId(queueName, msg.GetId())
+// Item will be stored into cache including payload.
+func (ds *DataStorage) StoreItem(queueName string, item common.IBinaryItem, payload string) {
+	itemId := makeItemId(queueName, item.GetId())
+	payloadId := makePayloadId(queueName, item.GetId())
 
-	msgBody := msg.ToBinary()
+	itemBody := item.ToBinary()
 
 	ds.cacheLock.Lock()
-	ds.msgCache[itemId] = msgBody
+	ds.itemCache[itemId] = itemBody
 	ds.payloadCache[payloadId] = payload
 	ds.cacheLock.Unlock()
 }
 
-// Updates message metadata, affects cache only until flushed.
-func (ds *DataStorage) UpdateMessage(queueName string, msg common.IMessage) {
-	itemId := makeMsgId(queueName, msg.GetId())
-	msgBody := msg.ToBinary()
+// Updates item metadata, affects cache only until flushed.
+func (ds *DataStorage) UpdateItem(queueName string, item common.IBinaryItem) {
+	itemId := makeItemId(queueName, item.GetId())
+	itemBody := item.ToBinary()
 	ds.cacheLock.Lock()
-	ds.msgCache[itemId] = msgBody
+	ds.itemCache[itemId] = itemBody
 	ds.cacheLock.Unlock()
 }
 
-// Deletes message metadata and payload, affects cache only until flushed.
-func (ds *DataStorage) DeleteMessage(queueName string, msgId string) {
-	itemId := makeMsgId(queueName, msgId)
-	payloadId := makePayloadId(queueName, msgId)
+// Deletes item metadata and payload, affects cache only until flushed.
+func (ds *DataStorage) DeleteItem(queueName string, itemId string) {
+	id := makeItemId(queueName, itemId)
+	payloadId := makePayloadId(queueName, itemId)
 	ds.cacheLock.Lock()
-	ds.msgCache[itemId] = nil
+	ds.itemCache[id] = nil
 	ds.payloadCache[payloadId] = ""
 	ds.cacheLock.Unlock()
 }
 
-// Returns message payload. Three places are checked:
+// Returns item payload. Three places are checked:
 // 1. Top level cache.
 // 2. Temp cache while data is getting flushed into db.
 // 3. If not found in cache, will do actually DB lookup.
-func (ds *DataStorage) GetPayload(queueName string, msgId string) string {
-	payloadId := makePayloadId(queueName, msgId)
+func (ds *DataStorage) GetPayload(queueName string, itemId string) string {
+	payloadId := makePayloadId(queueName, itemId)
 	ds.cacheLock.Lock()
-	payload, ok := ds.payloadCache[msgId]
+	payload, ok := ds.payloadCache[itemId]
 	if ok {
 		ds.cacheLock.Unlock()
 		return payload
@@ -161,14 +162,14 @@ func (ds *DataStorage) GetPayload(queueName string, msgId string) string {
 
 func (ds *DataStorage) FlushCache() {
 	ds.cacheLock.Lock()
-	ds.tmpMsgCache = ds.msgCache
+	ds.tmpItemCache = ds.itemCache
 	ds.tmpPayloadCache = ds.payloadCache
-	ds.msgCache = make(map[string][]byte)
+	ds.itemCache = make(map[string][]byte)
 	ds.payloadCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
 	wb := levigo.NewWriteBatch()
-	for k, v := range ds.tmpMsgCache {
+	for k, v := range ds.tmpItemCache {
 		key := []byte(k)
 		if v == nil {
 			wb.Delete(key)
@@ -192,17 +193,17 @@ func (ds *DataStorage) FlushCache() {
 	ds.flushLock.Unlock()
 
 	ds.cacheLock.Lock()
-	ds.tmpMsgCache = make(map[string][]byte)
+	ds.tmpItemCache = make(map[string][]byte)
 	ds.tmpPayloadCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 }
 
 // Returns new Iterator that must be closed!
-// Queue name used as a prefix to iterate over all message metadata that belongs to the specific queue.
-func (ds *DataStorage) IterQueue(queueName string) *MsgIterator {
+// Queue name used as a prefix to iterate over all item metadata that belongs to the specific queue.
+func (ds *DataStorage) IterQueue(queueName string) *ItemIterator {
 	ropts := levigo.NewReadOptions()
 	iter := ds.db.NewIterator(ropts)
-	prefix := []byte(makeMsgId(queueName, ""))
+	prefix := []byte(makeItemId(queueName, ""))
 	return NewIter(iter, prefix)
 }
 

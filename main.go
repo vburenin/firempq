@@ -4,6 +4,7 @@ import (
 	"firempq/common"
 	"firempq/db"
 	"firempq/defs"
+	"firempq/facade"
 	"firempq/pqueue"
 	"firempq/server"
 	"fmt"
@@ -63,7 +64,11 @@ func popAll(pq *pqueue.PQueue) {
 
 func addSpeedTest(name string) {
 
-	var pq common.IQueue = pqueue.CreatePQueue("somepqueue", nil)
+	fc := facade.CreateFacade()
+	fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, "tstqueue", nil)
+
+	pq, _ := fc.GetQueue("tstqueue")
+
 	addMessages(pq)
 
 	msgq, err := pq.PopWait(1, 104)

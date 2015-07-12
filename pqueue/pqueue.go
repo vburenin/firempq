@@ -143,7 +143,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) error {
 		}
 	}
 
-	pq.database.StoreMessage(pq.queueName, msg, payload)
+	pq.database.StoreItem(pq.queueName, msg, payload)
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (pq *PQueue) Pop() *PQMessage {
 	}
 	msg.PopCount += 1
 	pq.lockMessage(msg)
-	pq.database.UpdateMessage(pq.queueName, msg)
+	pq.database.UpdateItem(pq.queueName, msg)
 	return msg
 }
 
@@ -173,14 +173,13 @@ func (pq *PQueue) Pop() *PQMessage {
 // Will interrupt if there are no more messages available, 'limit' messages were popped, or timeout reached.
 func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]common.IMessage) (numPopped int, err error) {
 
-	pq.lock.Lock()
-	defer pq.lock.Unlock()
 	numPopped = 0
 	for numPopped < limit {
 		select {
 		case <-timeout:
 			return numPopped, qerrors.ERR_QUEUE_OPERATION_TIMEOUT
 		default:
+			pq.lock.Lock()
 			msgId := pq.availableMsgs.Pop()
 			msg, ok := pq.allMessagesMap[msgId]
 			if !ok {
@@ -188,7 +187,8 @@ func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]common.
 			}
 			msg.PopCount += 1
 			pq.lockMessage(msg)
-			pq.database.UpdateMessage(pq.queueName, msg)
+			pq.database.UpdateItem(pq.queueName, msg)
+			pq.lock.Unlock()
 			*batch = append(*batch, msg)
 			numPopped += 1
 		}
@@ -334,7 +334,7 @@ func (pq *PQueue) SetLockTimeout(params map[string]string) error {
 	msg.UnlockTs = util.Uts() + int64(timeout)
 
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	pq.database.UpdateMessage(pq.queueName, msg)
+	pq.database.UpdateItem(pq.queueName, msg)
 
 	return nil
 }
@@ -408,7 +408,7 @@ func (pq *PQueue) returnToFront(msg *PQMessage) error {
 	msg.UnlockTs = 0
 	pq.availableMsgs.PushFront(msg.Id)
 	pq.trackExpiration(msg)
-	pq.database.UpdateMessage(pq.queueName, msg)
+	pq.database.UpdateItem(pq.queueName, msg)
 	return nil
 }
 

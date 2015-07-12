@@ -6,6 +6,11 @@ type IMessage interface {
 	ToBinary() []byte
 }
 
+type IBinaryItem interface {
+	GetId() string
+	ToBinary() []byte
+}
+
 type IQueue interface {
 	PushMessage(msgData map[string]string, payload string) error
 	PopMessage() (IMessage, error)
