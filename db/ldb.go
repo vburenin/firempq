@@ -13,9 +13,12 @@ import (
 	"firempq/qerrors"
 	"firempq/util"
 	"github.com/jmhodges/levigo"
-	"log"
+	"github.com/op/go-logging"
 	"sync"
+	"time"
 )
+
+var log = logging.MustGetLogger("ldb")
 
 // Item iterator built on top of LevelDB.
 // It takes into account queue name to limit the amount of selected data.
@@ -73,6 +76,7 @@ type DataStorage struct {
 	tmpPayloadCache map[string]string // Temporary map of cached payloads while it is in process of flushing into DB.
 	cacheLock       sync.Mutex        // Used for caches access.
 	flushLock       sync.Mutex        // Used to prevent double flush.
+	closed          bool
 }
 
 func NewDataStorage(dbName string) *DataStorage {
@@ -82,6 +86,7 @@ func NewDataStorage(dbName string) *DataStorage {
 		payloadCache:    make(map[string]string),
 		tmpItemCache:    make(map[string][]byte),
 		tmpPayloadCache: make(map[string]string),
+		closed:          false,
 	}
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
@@ -89,10 +94,19 @@ func NewDataStorage(dbName string) *DataStorage {
 	opts.SetCompression(levigo.SnappyCompression)
 	db, err := levigo.Open(dbName, opts)
 	if err != nil {
-		log.Fatalln("Could not initialize database: ", err)
+		log.Critical("Could not initialize database: %s", err.Error())
+		return nil
 	}
 	ds.db = db
+	go ds.periodicCacheFlush()
 	return &ds
+}
+
+func (ds *DataStorage) periodicCacheFlush() {
+	for !ds.closed {
+		ds.FlushCache()
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // Item payload Id.
@@ -212,7 +226,7 @@ const QUEUE_SETTINGS_PREFIX = "qsettings:"
 
 // Read all available queues.
 func (ds *DataStorage) GetAllQueueMeta() []*common.QueueMetaInfo {
-	qmiList := make([]*common.QueueMetaInfo, 1)
+	qmiList := make([]*common.QueueMetaInfo, 0, 1000)
 	qtPrefix := []byte(QUEUE_META_PREFIX)
 	ropts := levigo.NewReadOptions()
 	iter := ds.db.NewIterator(ropts)
@@ -226,12 +240,12 @@ func (ds *DataStorage) GetAllQueueMeta() []*common.QueueMetaInfo {
 		}
 		qmi, err := common.QueueInfoFromBinary(iter.Value())
 		if err != nil {
-			log.Println("Coudn't read queue meta data because of:", err.Error())
+			log.Error("Coudn't read queue meta data because of: %s", err.Error())
 			iter.Next()
 			continue
 		}
 		if qmi.Disabled {
-			log.Println("Qeueue is disabled. Skipping:", qmi.Name)
+			log.Error("Qeueue is disabled. Skipping: %s", qmi.Name)
 			iter.Next()
 			continue
 		}
@@ -269,12 +283,13 @@ func (ds *DataStorage) SaveQueueSettings(settings interface{}, queueName string)
 	data := util.StructToBinary(settings)
 	err := ds.db.Put(wopts, key, data)
 	if err != nil {
-		log.Println("Failed to save settings: ", err.Error())
+		log.Error("Failed to save settings: %s", err.Error())
 	}
 }
 
 // Flush and close database.
 func (ds *DataStorage) Close() {
+	ds.closed = true
 	ds.FlushCache()
 	ds.db.Close()
 }

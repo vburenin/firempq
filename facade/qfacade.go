@@ -4,8 +4,11 @@ import (
 	"firempq/common"
 	"firempq/db"
 	"firempq/qerrors"
+	"github.com/op/go-logging"
 	"sync"
 )
+
+var log = logging.MustGetLogger("firempq")
 
 type QFacade struct {
 	allQueues map[string]common.IQueue
@@ -18,11 +21,25 @@ func NewFacade(database *db.DataStorage) *QFacade {
 		database:  database,
 		allQueues: make(map[string]common.IQueue),
 	}
+	f.loadAllQueues()
 	return &f
 }
 
 func (p *QFacade) loadAllQueues() {
-
+	for _, qm := range p.database.GetAllQueueMeta() {
+		log.Info("Loading queue data for: %s", qm.Name)
+		objLoader, ok := QUEUE_LOADER[qm.Qtype]
+		if !ok {
+			log.Error("Unknown queue '%s' type: %s", qm.Name, qm.Qtype)
+			continue
+		}
+		queueInstance, err := objLoader(p.database, qm.Name)
+		if err != nil {
+			log.Error("Queue '%s' was not loaded because of: %s", qm.Name, err.Error())
+		} else {
+			p.allQueues[qm.Name] = queueInstance
+		}
+	}
 }
 
 func (p *QFacade) CreateQueue(queueType string, queueName string, queueParams map[string]string) error {
@@ -32,11 +49,15 @@ func (p *QFacade) CreateQueue(queueType string, queueName string, queueParams ma
 	if _, ok := p.allQueues[queueName]; ok {
 		return qerrors.ERR_QUEUE_ALREADY_EXISTS
 	}
-	queueCrt, ok := QUEUE_REGISTRY[queueType]
+	queueCrt, ok := QUEUE_CREATER[queueType]
 	if !ok {
 		return qerrors.ERR_QUEUE_UNKNOWN_TYPE
 	}
-	p.allQueues[queueName] = queueCrt(queueName, queueParams)
+	qmeta := common.NewQueueMetaInfo(queueType, 0, queueName)
+	p.database.SaveQueueMeta(qmeta)
+	queue := queueCrt(queueName, queueParams)
+	p.allQueues[queueName] = queue
+
 	return nil
 }
 
@@ -59,4 +80,12 @@ func (p *QFacade) GetQueue(name string) (common.IQueue, error) {
 		return nil, qerrors.ERR_NO_QUEUE
 	}
 	return q, nil
+}
+
+func (p *QFacade) Close() {
+	for _, q := range p.allQueues {
+		q.Close()
+	}
+	p.database.FlushCache()
+	p.database.Close()
 }

@@ -8,12 +8,14 @@ import (
 	"firempq/queues/priority_first"
 	"firempq/structs"
 	"firempq/util"
-	"log"
+	"github.com/op/go-logging"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 )
+
+var log = logging.MustGetLogger("firempq")
 
 const (
 	ACTION_UNLOCK_BY_ID        = "UNLOCK"
@@ -78,21 +80,19 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 }
 
 func NewPQueue(database *db.DataStorage, queueName string, priorities int64, size int64) *PQueue {
-	return initPQueue(database, queueName, NewPQueueSettings(priorities, size))
+	queue := initPQueue(database, queueName, NewPQueueSettings(priorities, size))
+	queue.SavePQueue()
+	return queue
 }
 
-func LoadPQueue(database *db.DataStorage, queueName string) *PQueue {
-
-	// Covert to milliseconds.
+func LoadPQueue(database *db.DataStorage, queueName string) (common.IQueue, error) {
 	settings := new(PQueueSettings)
 	err := database.GetQueueSettings(settings, queueName)
 	if err != nil {
-		log.Printf("Failed to load settings for queue: %s. Error: %s", queueName, err.Error())
-		return nil
+		return nil, err
 	}
 	pq := initPQueue(database, queueName, settings)
-
-	return pq
+	return pq, nil
 }
 
 func (pq *PQueue) SavePQueue() {
@@ -391,7 +391,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 func (pq *PQueue) trackExpiration(msg *PQMessage) {
 	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.settings.MsgTTL))
 	if !ok {
-		log.Println("Error! Item already exists in the expire heap: ", msg.Id)
+		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
 	}
 }
 
@@ -470,7 +470,7 @@ func (pq *PQueue) periodicCleanUp() {
 		if !(pq.workDone) {
 			cleaned := pq.releaseInFlight()
 			if cleaned > 0 {
-				log.Println(cleaned, "messages returned to the front of the queue.")
+				log.Debug("%s messages returned to the front of the queue.", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
@@ -480,18 +480,14 @@ func (pq *PQueue) periodicCleanUp() {
 		if !(pq.workDone) {
 			cleaned := pq.cleanExpiredItems()
 			if cleaned > 0 {
-				log.Println(cleaned, "items expired.")
+				log.Debug("%s items expired.", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
 		pq.lock.Unlock()
-
-		pq.lock.Lock()
-		if !(pq.workDone) {
-			pq.database.FlushCache()
+		if !pq.workDone {
+			time.Sleep(sleepTime)
 		}
-		pq.lock.Unlock()
-		time.Sleep(sleepTime)
 	}
 }
 
@@ -504,7 +500,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (pq *PQueue) loadAllMessages() {
 	nowTs := util.Uts()
-	log.Println("Initializing queue:", pq.queueName)
+	log.Info("Initializing queue: %s", pq.queueName)
 	iter := pq.database.IterQueue(pq.queueName)
 	defer iter.Close()
 
@@ -525,9 +521,9 @@ func (pq *PQueue) loadAllMessages() {
 		}
 		iter.Next()
 	}
-	log.Printf("Loaded %d messages for %s queue", len(msgs), pq.queueName)
+	log.Debug("Loaded %d messages for %s queue", len(msgs), pq.queueName)
 	if len(delIds) > 0 {
-		log.Printf("%d messages will be removed because of expiration", len(delIds))
+		log.Debug("%d messages will be removed because of expiration", len(delIds))
 		for _, msgId := range delIds {
 			pq.database.DeleteItem(pq.queueName, msgId)
 		}
@@ -546,8 +542,8 @@ func (pq *PQueue) loadAllMessages() {
 		}
 	}
 
-	log.Printf("Messages available: %d", pq.expireHeap.Len())
-	log.Printf("Messages in flight: %d", pq.inFlightHeap.Len())
+	log.Debug("Messages available: %d", pq.expireHeap.Len())
+	log.Debug("Messages in flight: %d", pq.inFlightHeap.Len())
 }
 
 func (pq *PQueue) DeleteAll() {
@@ -571,7 +567,7 @@ func (pq *PQueue) DeleteAll() {
 		}
 		pq.lock.Unlock()
 	}
-	log.Printf("Removed %d messages.", total)
+	log.Debug("Removed %d messages.", total)
 }
 
 func (pq *PQueue) Close() {
