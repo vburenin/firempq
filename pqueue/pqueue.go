@@ -380,7 +380,7 @@ func (pq *PQueue) UnlockMessageById(params map[string]string) error {
 func (pq *PQueue) deleteMessage(msgId string) bool {
 	if _, ok := pq.allMessagesMap[msgId]; ok {
 		delete(pq.allMessagesMap, msgId)
-		pq.database.DeleteMessage(pq.queueName, msgId)
+		pq.database.DeleteItem(pq.queueName, msgId)
 		pq.expireHeap.PopById(msgId)
 		return true
 	}
@@ -529,7 +529,7 @@ func (pq *PQueue) loadAllMessages() {
 	if len(delIds) > 0 {
 		log.Printf("%d messages will be removed because of expiration", len(delIds))
 		for _, msgId := range delIds {
-			pq.database.DeleteMessage(pq.queueName, msgId)
+			pq.database.DeleteItem(pq.queueName, msgId)
 		}
 
 	}
