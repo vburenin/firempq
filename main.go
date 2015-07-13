@@ -23,10 +23,7 @@ func init_logging() {
 	logbackend := logging.NewLogBackend(os.Stderr, "", 0)
 	formatter := logging.NewBackendFormatter(logbackend, format)
 	logging.SetBackend(formatter)
-	//	logging.SetBackend(beleveled, formatter)
-	//
 	logging.SetLevel(logging.DEBUG, "firempq")
-	//	logging.AddModuleLevel(logbackend)
 }
 
 func main1() {
