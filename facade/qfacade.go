@@ -35,7 +35,7 @@ func (p *QFacade) loadAllQueues() {
 		}
 		queueInstance, err := objLoader(p.database, qm.Name)
 		if err != nil {
-			log.Error("Queue '%s' was not loaded because of: %s", qm.Name, err.Error())
+			log.Error("Queue '%s' was not loaded because of: %s", qm.Name, err)
 		} else {
 			p.allQueues[qm.Name] = queueInstance
 		}
