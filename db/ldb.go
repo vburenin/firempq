@@ -104,7 +104,11 @@ func NewDataStorage(dbName string) *DataStorage {
 
 func (ds *DataStorage) periodicCacheFlush() {
 	for !ds.closed {
-		ds.FlushCache()
+		ds.flushLock.Lock()
+		if !ds.closed {
+			ds.FlushCache()
+		}
+		ds.flushLock.Unlock()
 		time.Sleep(100 * time.Millisecond)
 	}
 }
@@ -175,6 +179,9 @@ func (ds *DataStorage) GetPayload(queueName string, itemId string) string {
 }
 
 func (ds *DataStorage) FlushCache() {
+	if ds.closed {
+		return
+	}
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = ds.itemCache
 	ds.tmpPayloadCache = ds.payloadCache
@@ -202,9 +209,7 @@ func (ds *DataStorage) FlushCache() {
 	}
 
 	wopts := levigo.NewWriteOptions()
-	ds.flushLock.Lock()
 	ds.db.Write(wopts, wb)
-	ds.flushLock.Unlock()
 
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = make(map[string][]byte)
@@ -289,7 +294,13 @@ func (ds *DataStorage) SaveQueueSettings(settings interface{}, queueName string)
 
 // Flush and close database.
 func (ds *DataStorage) Close() {
-	ds.closed = true
-	ds.FlushCache()
-	ds.db.Close()
+	ds.flushLock.Lock()
+	defer ds.flushLock.Unlock()
+	if !ds.closed {
+		ds.closed = true
+		ds.FlushCache()
+		ds.db.Close()
+	} else {
+		log.Error("Attempt to close database more than once!")
+	}
 }
