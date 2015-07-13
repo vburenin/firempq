@@ -157,6 +157,7 @@ func (pq *PQueue) Pop() *PQMessage {
 	if pq.availableMsgs.Empty() {
 		return nil
 	}
+
 	msgId := pq.availableMsgs.Pop()
 	msg, ok := pq.allMessagesMap[msgId]
 
@@ -169,33 +170,6 @@ func (pq *PQueue) Pop() *PQMessage {
 	return msg
 }
 
-// Pop first 'limit' available messages and append them to a 'batch' slice.
-// Will interrupt if there are no more messages available, 'limit' messages were popped, or timeout reached.
-func (pq *PQueue) popMessageBatch(limit int, timeout chan bool, batch *[]common.IMessage) (numPopped int, err error) {
-
-	numPopped = 0
-	for numPopped < limit {
-		select {
-		case <-timeout:
-			return numPopped, qerrors.ERR_QUEUE_OPERATION_TIMEOUT
-		default:
-			pq.lock.Lock()
-			msgId := pq.availableMsgs.Pop()
-			msg, ok := pq.allMessagesMap[msgId]
-			if !ok {
-				break
-			}
-			msg.PopCount += 1
-			pq.lockMessage(msg)
-			pq.database.UpdateItem(pq.queueName, msg)
-			pq.lock.Unlock()
-			*batch = append(*batch, msg)
-			numPopped += 1
-		}
-	}
-	return numPopped, nil
-}
-
 func (pq *PQueue) PopMessage() (common.IMessage, error) {
 	msg := pq.Pop()
 	if msg == nil {
@@ -205,49 +179,50 @@ func (pq *PQueue) PopMessage() (common.IMessage, error) {
 }
 
 // Size of one batch of messages for popMessageBatch function
-const MESSAGES_BATCH_SIZE = 10
+const MESSAGES_BATCH_SIZE_LIMIT = 10
 
 // Will pop 'limit' messages within 'timeoutMsec' time interval. Function will exit on timeout
 // even if queue has enough messages.
-func (pq *PQueue) PopWait(timeoutMsec, limit int) ([]common.IMessage, error) {
-	msg := make([]common.IMessage, 0, limit)
-	// Run timeout control routine
-	timeout := make(chan bool, 1)
+func (pq *PQueue) PopWait(timeoutMsec, limit int) []common.IMessage {
+	if limit > MESSAGES_BATCH_SIZE_LIMIT {
+		limit = MESSAGES_BATCH_SIZE_LIMIT
+	}
+	msgs := make([]common.IMessage, 0, limit)
+
+	popLimitItems := func() {
+		for len(msgs) < limit {
+			msg := pq.Pop()
+			if msg == nil {
+				break
+			}
+			msgs = append(msgs, msg)
+		}
+	}
+	// Try to pop items first time and return them if number of popped items is greater than 0.
+	popLimitItems()
+	if len(msgs) > 0 {
+		return msgs
+	}
+	// If items not founds lets wait for any incoming.
+	timeout := make(chan bool)
 	go func() {
 		time.Sleep(time.Duration(timeoutMsec) * time.Millisecond)
 		timeout <- true
 	}()
-	// Pop messages from the queue
+
 	needExit := false
-	for len(msg) < limit && !needExit {
+	for !needExit && len(msgs) == 0 {
 		select {
-		case <-timeout:
-			needExit = true // Will return by time out, even there is enough messages in a queue
-		default:
-			batchSize := MESSAGES_BATCH_SIZE
-			if (len(msg) + batchSize) > limit {
-				batchSize = limit - len(msg)
-			}
-			numPopped, err := pq.popMessageBatch(batchSize, timeout, &msg) // Get next batch of messages
-			if err == qerrors.ERR_QUEUE_OPERATION_TIMEOUT {
-				needExit = true
-			} else {
-				// Here our strategy is: if queue is empty - get first available messages/timeout and exit
-				if 0 == numPopped {
-					select {
-					case <-timeout:
-					case <-pq.newMsgNotification: // Just wait for new messages in a queue
-						pq.popMessageBatch(limit, timeout, &msg)
-					}
-					needExit = true
-				}
-			}
+		case t := <-pq.newMsgNotification:
+			popLimitItems()
+			needExit = len(msgs) == 0 && t
+		case t := <-timeout:
+			needExit = true || t
+			popLimitItems()
 		}
 	}
-	if 0 == len(msg) {
-		return nil, qerrors.ERR_QUEUE_EMPTY
-	}
-	return msg, nil
+	close(timeout)
+	return msgs
 }
 
 // Returns message payload.
@@ -350,7 +325,6 @@ func (pq *PQueue) DeleteLockedById(params map[string]string) error {
 	defer pq.lock.Unlock()
 
 	_, err := pq.unflightMessage(msgId)
-
 	if err != nil {
 		return err
 	}
@@ -378,8 +352,9 @@ func (pq *PQueue) UnlockMessageById(params map[string]string) error {
 }
 
 func (pq *PQueue) deleteMessage(msgId string) bool {
-	if _, ok := pq.allMessagesMap[msgId]; ok {
+	if msg, ok := pq.allMessagesMap[msgId]; ok {
 		delete(pq.allMessagesMap, msgId)
+		pq.availableMsgs.RemoveItem(msgId, msg.Priority)
 		pq.database.DeleteItem(pq.queueName, msgId)
 		pq.expireHeap.PopById(msgId)
 		return true
@@ -470,7 +445,7 @@ func (pq *PQueue) periodicCleanUp() {
 		if !(pq.workDone) {
 			cleaned := pq.releaseInFlight()
 			if cleaned > 0 {
-				log.Debug("%s messages returned to the front of the queue.", cleaned)
+				log.Debug("%d messages returned to the front of the queue.", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
@@ -480,7 +455,7 @@ func (pq *PQueue) periodicCleanUp() {
 		if !(pq.workDone) {
 			cleaned := pq.cleanExpiredItems()
 			if cleaned > 0 {
-				log.Debug("%s items expired.", cleaned)
+				log.Debug("%d items expired.", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}

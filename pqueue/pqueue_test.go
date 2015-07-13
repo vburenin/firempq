@@ -8,7 +8,9 @@ import (
 )
 
 func CreateTestQueue() *PQueue {
-	return NewPQueue(db.GetDatabase(), "name", 100, 1000)
+	ldb := db.GetDatabase()
+	ldb.FlushCache()
+	return NewPQueue(ldb, "name", 100, 1000)
 }
 
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
@@ -55,8 +57,8 @@ func TestAutoExpiration(t *testing.T) {
 	defer q.DeleteAll()
 
 	q.settings.MsgTTL = 10
-	msg1 := NewPQMessageWithId("data1", 12)
-	msg2 := NewPQMessageWithId("data2", 12)
+	msg1 := NewPQMessageWithId("dd1", 12)
+	msg2 := NewPQMessageWithId("dd2", 12)
 
 	q.Push(msg1, "data1")
 	q.Push(msg2, "data2")
@@ -125,16 +127,21 @@ func TestDeleteLockedById(t *testing.T) {
 
 	q.DeleteAll()
 
-	msg1 := NewPQMessageWithId("id1", 12)
+	msg1 := NewPQMessageWithId("idd", 12)
 	q.Push(msg1, "data1")
 
 	params := map[string]string{defs.PARAM_MSG_ID: msg1.Id}
 	res := q.CustomHandler(ACTION_DELETE_LOCKED_BY_ID, params)
 	if res == nil {
-		t.Error("Not locked item is unlocked!")
+		t.Error("Non-locked item is unlocked!")
 	}
 
-	q.Pop()
+	m := q.Pop()
+
+	if m.GetId() != "idd" {
+		t.Error("Unexpected id!")
+	}
+
 	res = q.CustomHandler(ACTION_DELETE_LOCKED_BY_ID, params)
 	if res != nil {
 		t.Error("Failed unlock!")
@@ -146,5 +153,39 @@ func TestDeleteLockedById(t *testing.T) {
 	}
 	if len(q.allMessagesMap) != 0 {
 		t.Error("Messages map must be empty!")
+	}
+}
+
+func TestPopWaitBatch(t *testing.T) {
+	q := CreateTestQueue()
+	defer q.Close()
+	defer q.DeleteAll()
+
+	q.DeleteAll()
+
+	go func() {
+		time.Sleep(time.Second / 3)
+		q.Push(NewPQMessageWithId("id1", 12), "data1")
+		q.Push(NewPQMessageWithId("id2", 12), "data1")
+		q.Push(NewPQMessageWithId("id3", 12), "data1")
+	}()
+
+	msgs := q.PopWait(10, 10)
+	if len(msgs) > 0 {
+		t.Error("No messages should be received! It have to timeout!")
+	}
+
+	// It is waiting for 1000 milliseconds so by this time we should receive 1 message.
+	msgs = q.PopWait(1000, 10)
+	if len(msgs) == 0 {
+		t.Error("No messages received!")
+	} else {
+		msgId := msgs[0].GetId()
+		if msgId != "id1" {
+			t.Error("Wrong message id!")
+		}
+		if len(msgs) != 3 {
+			t.Error("Number of received messages should be 3!")
+		}
 	}
 }
