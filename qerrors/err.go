@@ -33,11 +33,12 @@ var ERR_MSG_IS_LOCKED = &ServerError{"Message is locked", 400}
 var ERR_MSG_POP_ATTEMPTS_EXCEEDED = &ServerError{"Message is locked", 400}
 
 // Param errors
-var ERR_MSG_NOT_DEFINED = &ServerError{"Message ID is not defined", 400}
+var ERR_MSG_ID_NOT_DEFINED = &ServerError{"Message ID is not defined", 400}
 var ERR_MSG_TIMEOUT_NOT_DEFINED = &ServerError{"Message timeout is not defined", 400}
 var ERR_MSG_ID_TOO_LARGE = &ServerError{"Message ID is limited to 64 symbols", 400}
 var ERR_MSG_NO_PRIORITY = &ServerError{"Message has not prirority", 400}
 var ERR_MSG_WRONG_PRIORITY = &ServerError{"Message priority is incorrect", 400}
 
 // TODO: Include allowed time out limits.
-var ERR_MSG_TIMEOUT_IS_WRONG = &ServerError{"Message timeout value is wrong", 400}
+var ERR_MSG_TIMEOUT_IS_WRONG = &ServerError{"Message timeout value is wrong.", 400}
+var ERR_MSG_LIMIT_IS_WRONG = &ServerError{"Message limit value is wrong.", 400}

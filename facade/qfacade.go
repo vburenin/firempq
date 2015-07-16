@@ -11,7 +11,7 @@ import (
 var log = logging.MustGetLogger("firempq")
 
 type QFacade struct {
-	allQueues map[string]common.IQueue
+	allQueues map[string]common.IItemHandler
 	lock      sync.Mutex
 	database  *db.DataStorage
 }
@@ -19,7 +19,7 @@ type QFacade struct {
 func NewFacade(database *db.DataStorage) *QFacade {
 	f := QFacade{
 		database:  database,
-		allQueues: make(map[string]common.IQueue),
+		allQueues: make(map[string]common.IItemHandler),
 	}
 	f.loadAllQueues()
 	return &f
@@ -72,7 +72,7 @@ func (p *QFacade) DropQueue(queueName string) error {
 	return nil
 }
 
-func (p *QFacade) GetQueue(name string) (common.IQueue, error) {
+func (p *QFacade) GetQueue(name string) (common.IItemHandler, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	q, ok := p.allQueues[name]

@@ -124,7 +124,7 @@ func makeItemId(queueName, id string) string {
 }
 
 // Item will be stored into cache including payload.
-func (ds *DataStorage) StoreItem(queueName string, item common.IBinaryItem, payload string) {
+func (ds *DataStorage) StoreItem(queueName string, item common.IItemMetaData, payload string) {
 	itemId := makeItemId(queueName, item.GetId())
 	payloadId := makePayloadId(queueName, item.GetId())
 
@@ -137,7 +137,7 @@ func (ds *DataStorage) StoreItem(queueName string, item common.IBinaryItem, payl
 }
 
 // Updates item metadata, affects cache only until flushed.
-func (ds *DataStorage) UpdateItem(queueName string, item common.IBinaryItem) {
+func (ds *DataStorage) UpdateItem(queueName string, item common.IItemMetaData) {
 	itemId := makeItemId(queueName, item.GetId())
 	itemBody := item.ToBinary()
 	ds.cacheLock.Lock()
@@ -282,7 +282,7 @@ func (ds *DataStorage) GetQueueSettings(settings interface{}, queueName string) 
 	return err
 }
 
-func (ds *DataStorage) SaveQueueSettings(settings interface{}, queueName string) {
+func (ds *DataStorage) SaveQueueSettings(queueName string, settings interface{}) {
 	key := makeSettingsKey(queueName)
 	wopts := levigo.NewWriteOptions()
 	data := util.StructToBinary(settings)

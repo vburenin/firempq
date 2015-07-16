@@ -1,26 +1,25 @@
 package common
 
-type IMessage interface {
-	GetId() string
-	GetStatus() map[string]interface{}
-	ToBinary() []byte
-}
+import "firempq/defs"
 
-type IBinaryItem interface {
+type IItemMetaData interface {
 	GetId() string
 	ToBinary() []byte
+	GetStatus() map[string]interface{}
 }
 
-type IQueue interface {
-	PushMessage(msgData map[string]string, payload string) error
-	PopMessage() (IMessage, error)
-	GetMessagePayload(msgId string) string
-	DeleteById(msgId string) error
+type IItem interface {
+	GetId() string
+	GetContent() string
+	GetContentType() defs.DataType
 	GetStatus() map[string]interface{}
-	DeleteAll()
-	GetQueueType() string
-	CustomHandler(action string, params map[string]string) error
-	PopWait(timeout, limit int) []IMessage
+}
+
+type IItemHandler interface {
+	GetStatus() map[string]interface{}
+	GetType() defs.ItemHandlerType
+	Call(action string, params map[string]string) *ReturnData
+	Clear()
 	Close()
 }
 
@@ -28,3 +27,27 @@ type IQueueServer interface {
 	Start()
 	Stop()
 }
+
+type CallFuncType func(map[string]string) *ReturnData
+
+type ReturnData struct {
+	Items []IItem       // Optional array of returned items.
+	Code  defs.RespCode // response code if needed.
+	Msg   string        // Text message that may be returned to the caller.
+	Err   error         // Optional error.
+}
+
+func NewRetDataError(err error) *ReturnData {
+	return &ReturnData{Err: err}
+}
+
+func NewRetDataMessage(msg string, code defs.RespCode) *ReturnData {
+	return &ReturnData{Msg: msg, Code: code}
+}
+
+func NewRetData(msg string, code defs.RespCode, items []IItem) *ReturnData {
+	return &ReturnData{Msg: msg, Code: code, Items: items}
+}
+
+var RETDATA_200OK *ReturnData = &ReturnData{Code: defs.CODE_200_OK, Msg: "OK"}
+var RETDATA_201OK *ReturnData = &ReturnData{Code: defs.CODE_201_OK, Msg: "OK"}

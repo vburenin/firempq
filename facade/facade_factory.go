@@ -7,8 +7,8 @@ import (
 	"sync"
 )
 
-type CreateFactoryFunc func(string, map[string]string) common.IQueue
-type DataLoaderFunc func(*db.DataStorage, string) (common.IQueue, error)
+type CreateFactoryFunc func(string, map[string]string) common.IItemHandler
+type DataLoaderFunc func(*db.DataStorage, string) (common.IItemHandler, error)
 
 var QUEUE_CREATER = map[string](CreateFactoryFunc){
 	common.QTYPE_PRIORITY_QUEUE: pqueue.CreatePQueue,

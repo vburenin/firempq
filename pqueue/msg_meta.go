@@ -9,16 +9,9 @@ import (
 	"strconv"
 )
 
-var _ common.IMessage = &PQMessage{}
-
 const (
 	MAX_MESSAGE_ID_LENGTH = 64
 )
-
-type Replica struct {
-	ServerId  string
-	ReplicaTs uint64
-}
 
 type PQMessage struct {
 	Id        string
@@ -48,14 +41,14 @@ func MessageFromMap(params map[string]string) (*PQMessage, error) {
 	var priority int64
 	var err error
 
-	msgId, ok = params[defs.PARAM_MSG_ID]
+	msgId, ok = params[defs.PRM_ID]
 	if !ok {
 		msgId = util.GenRandMsgId()
 	} else if len(msgId) > MAX_MESSAGE_ID_LENGTH {
 		return nil, qerrors.ERR_MSG_ID_TOO_LARGE
 	}
 
-	strValue, ok = params[defs.PARAM_MSG_PRIORITY]
+	strValue, ok = params[defs.PRM_PRIORITY]
 	if !ok {
 		return nil, qerrors.ERR_MSG_NO_PRIORITY
 	}
@@ -94,6 +87,10 @@ func PQMessageFromBinary(msgId string, buf []byte) *PQMessage {
 	}
 }
 
+func (pqm *PQMessage) GetId() string {
+	return pqm.Id
+}
+
 func (pqm *PQMessage) ToBinary() []byte {
 	// length of 4 64 bits integers.
 
@@ -114,10 +111,6 @@ func (pqm *PQMessage) ToBinary() []byte {
 	return buf
 }
 
-func (pqm *PQMessage) GetId() string {
-	return pqm.Id
-}
-
 func (pqm *PQMessage) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
 	res["CreatedTs"] = pqm.CreatedTs
@@ -126,3 +119,5 @@ func (pqm *PQMessage) GetStatus() map[string]interface{} {
 	res["UnlockTs"] = pqm.UnlockTs
 	return res
 }
+
+var _ common.IItemMetaData = &PQMessage{}

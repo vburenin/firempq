@@ -38,7 +38,7 @@ func main1() {
 	srv.Stop()
 }
 
-func addMessages(pq common.IQueue) {
+func addMessages(pq common.IItemHandler) {
 	//	ts := time.Now().UnixNano()
 	payload := "0000"
 	//payload += payload
@@ -48,32 +48,19 @@ func addMessages(pq common.IQueue) {
 	//	payload += payload
 	//time.Sleep(60 * 1000000000)
 	//pq.DeleteAll()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100000; i++ {
 		v := map[string]string{
-			defs.PARAM_MSG_PRIORITY: "1",
+			defs.PRM_PRIORITY: "1",
+			defs.PRM_PAYLOAD:  payload,
 		}
-		pq.PushMessage(v, payload)
+		pq.Call(pqueue.ACTION_PUSH, v)
 	}
 	//end_t := time.Now().UnixNano()
 
 	//fmt.Println((end_t - ts) / 1000000)
 }
 
-func popAll(pq *pqueue.PQueue) {
-	//ts := time.Now().UnixNano()
-	for {
-		msg, err := pq.PopMessage()
-		if err != nil {
-			break
-		}
-		pq.GetMessagePayload(msg.GetId())
-		pq.DeleteLockedById(map[string]string{defs.PARAM_MSG_ID: msg.GetId()})
-	}
-	//end_t := time.Now().UnixNano()
-	//fmt.Println((end_t - ts) / 1000000)
-}
-
-func addSpeedTest(q common.IQueue) {
+func addSpeedTest(q common.IItemHandler) {
 
 	addMessages(q)
 
