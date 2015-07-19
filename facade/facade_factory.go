@@ -3,7 +3,7 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
-	"firempq/pqueue"
+	"firempq/features/pqueue"
 	"sync"
 )
 

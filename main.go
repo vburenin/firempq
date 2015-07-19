@@ -4,7 +4,7 @@ import (
 	"firempq/common"
 	"firempq/defs"
 	"firempq/facade"
-	"firempq/pqueue"
+	"firempq/features/pqueue"
 	"firempq/server"
 	"github.com/op/go-logging"
 	"os"
@@ -48,7 +48,7 @@ func addMessages(pq common.IItemHandler) {
 	//	payload += payload
 	//time.Sleep(60 * 1000000000)
 	//pq.DeleteAll()
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 1000; i++ {
 		v := map[string]string{
 			defs.PRM_PRIORITY: "1",
 			defs.PRM_PAYLOAD:  payload,
