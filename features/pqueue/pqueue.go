@@ -187,7 +187,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) *common.ReturnDat
 		}
 	}
 
-	pq.database.StoreItem(pq.queueName, msg, payload)
+	pq.database.StoreItemWithPayload(pq.queueName, msg, payload)
 	return common.RETDATA_201OK
 }
 

@@ -124,7 +124,7 @@ func makeItemId(queueName, id string) string {
 }
 
 // Item will be stored into cache including payload.
-func (ds *DataStorage) StoreItem(queueName string, item common.IItemMetaData, payload string) {
+func (ds *DataStorage) StoreItemWithPayload(queueName string, item common.IItemMetaData, payload string) {
 	itemId := makeItemId(queueName, item.GetId())
 	payloadId := makePayloadId(queueName, item.GetId())
 
@@ -133,6 +133,16 @@ func (ds *DataStorage) StoreItem(queueName string, item common.IItemMetaData, pa
 	ds.cacheLock.Lock()
 	ds.itemCache[itemId] = itemBody
 	ds.payloadCache[payloadId] = payload
+	ds.cacheLock.Unlock()
+}
+
+func (ds *DataStorage) StoreItem(queueName string, item common.IItemMetaData) {
+	itemId := makeItemId(queueName, item.GetId())
+
+	itemBody := item.ToBinary()
+
+	ds.cacheLock.Lock()
+	ds.itemCache[itemId] = itemBody
 	ds.cacheLock.Unlock()
 }
 
