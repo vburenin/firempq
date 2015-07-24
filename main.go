@@ -78,7 +78,8 @@ func main() {
 	defer fc.Close()
 	for i := 0; i < 4; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
-		err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
+		err := fc.CreateQueue(common.QTYPE_DOUBLE_SIDED_QUEUE, qid, nil)
+		// err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
 			log.Notice(err.Error())
 		}
