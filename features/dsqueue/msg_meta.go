@@ -13,24 +13,24 @@ const (
 )
 
 type DSQMessage struct {
-	Id        	string
-	CreatedTs 	int64
-	PopCount  	int64
-	UnlockTs  	int64
-	DeliveryTs 	int64
-	pushAt		uint8
+	Id         string
+	CreatedTs  int64
+	PopCount   int64
+	UnlockTs   int64
+	DeliveryTs int64
+	pushAt     uint8
 }
 
 func NewDSQMessageWithId(id string) *DSQMessage {
 
-	pqm := DSQMessage{
-		Id:        	id,
-		CreatedTs: 	util.Uts(),
-		PopCount:  	0,
-		UnlockTs:  	0,
-		DeliveryTs:	0,
+	m := DSQMessage{
+		Id:         id,
+		CreatedTs:  util.Uts(),
+		PopCount:   0,
+		UnlockTs:   0,
+		DeliveryTs: 0,
 	}
-	return &pqm
+	return &m
 }
 
 func MessageFromMap(params map[string]string) (*DSQMessage, error) {
@@ -65,49 +65,49 @@ func PQMessageFromBinary(msgId string, buf []byte) *DSQMessage {
 	pushAt := uint8(buf[bufOffset])
 
 	return &DSQMessage{
-		Id:        	msgId,
-		CreatedTs: 	int64(createdTs),
-		PopCount:  	int64(popCount),
-		UnlockTs:  	int64(unlockTs),
-		DeliveryTs:	int64(deliveryTs),
-		pushAt:		uint8(pushAt),
+		Id:         msgId,
+		CreatedTs:  int64(createdTs),
+		PopCount:   int64(popCount),
+		UnlockTs:   int64(unlockTs),
+		DeliveryTs: int64(deliveryTs),
+		pushAt:     uint8(pushAt),
 	}
 }
 
-func (pqm *DSQMessage) GetId() string {
-	return pqm.Id
+func (m *DSQMessage) GetId() string {
+	return m.Id
 }
 
-func (pqm *DSQMessage) ToBinary() []byte {
+func (m *DSQMessage) ToBinary() []byte {
 	// length of 4 64 bits integers ann one 8 bit.
 
-	buf := make([]byte, 8*4 + 1)
+	buf := make([]byte, 8*4+1)
 
 	bufOffset := 0
-	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.CreatedTs))
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.CreatedTs))
 
 	bufOffset += 8
-	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.PopCount))
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.PopCount))
 
 	bufOffset += 8
-	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.UnlockTs))
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.UnlockTs))
 
 	bufOffset += 8
-	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(pqm.DeliveryTs))
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.DeliveryTs))
 
 	bufOffset += 8
-	buf[bufOffset] = pqm.pushAt // uint8
+	buf[bufOffset] = m.pushAt // uint8
 
 	return buf
 }
 
-func (pqm *DSQMessage) GetStatus() map[string]interface{} {
+func (m *DSQMessage) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
-	res["CreatedTs"] = pqm.CreatedTs
-	res["DeliveryTs"] = pqm.DeliveryTs
-	res["pushAt"] = pqm.pushAt
-	res["PopCount"] = pqm.PopCount
-	res["UnlockTs"] = pqm.UnlockTs
+	res["CreatedTs"] = m.CreatedTs
+	res["DeliveryTs"] = m.DeliveryTs
+	res["pushAt"] = m.pushAt
+	res["PopCount"] = m.PopCount
+	res["UnlockTs"] = m.UnlockTs
 	return res
 }
 

@@ -8,7 +8,7 @@ func TestBinary(t *testing.T) {
 	msg := NewDSQMessageWithId("123")
 	msg.PopCount = 33
 	msg.UnlockTs = 987654321
-	msg.DeliveryTs  = 987654322
+	msg.DeliveryTs = 987654322
 	msg.pushAt = 1
 
 	data := msg.ToBinary()

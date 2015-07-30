@@ -39,7 +39,7 @@ var ERR_MSG_ID_TOO_LARGE = &ServerError{"Message ID is limited to 64 symbols", 4
 var ERR_MSG_NO_PRIORITY = &ServerError{"Message has not prirority", 400}
 var ERR_MSG_WRONG_PRIORITY = &ServerError{"Message priority is incorrect", 400}
 var ERR_MSG_DELIVERY_INTERVAL_NOT_DEFINED = &ServerError{"Delivery interval not defined", 400}
-var ERR_MSG_BAD_DELIVERY_TIMEOUT  = &ServerError{"Bad delivery interval specified", 400}
+var ERR_MSG_BAD_DELIVERY_TIMEOUT = &ServerError{"Bad delivery interval specified", 400}
 
 // TODO: Include allowed time out limits.
 var ERR_MSG_TIMEOUT_IS_WRONG = &ServerError{"Message timeout value is wrong.", 400}
