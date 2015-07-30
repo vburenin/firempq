@@ -309,6 +309,7 @@ func (ds *DataStorage) Close() {
 	if !ds.closed {
 		ds.closed = true
 		ds.FlushCache()
+		ds.db.CompactRange(levigo.Range{nil, nil})
 		ds.db.Close()
 	} else {
 		log.Error("Attempt to close database more than once!")
