@@ -10,6 +10,7 @@ import (
 	"github.com/op/go-logging"
 	"strconv"
 	"sync"
+	"sort"
 	"testing"
 	"time"
 )
@@ -38,6 +39,8 @@ const (
 	QUEUE_DIRECTION_NONE  = 0
 	QUEUE_DIRECTION_FRONT = 1
 	QUEUE_DIRECTION_BACK  = 2
+	QUEUE_DIRECTION_FRONT_UNLOCKED = 3
+	QUEUE_DIRECTION_BACK_UNLOCKED  = 4
 )
 
 const CLEAN_BATCH_SIZE = 1000000
@@ -46,6 +49,10 @@ type DSQueue struct {
 	queueName string
 	// Messages which are waiting to be picked up
 	availableMsgs *structs.IndexList
+
+	// Returned messages front/back. PopFront/PopBack first should pop elements from this lists
+	highPriorityFrontMsgs *structs.IndexList
+	highPriorityBackMsgs *structs.IndexList
 
 	// All messages with the ticking counters except those which are inFlight.
 	expireHeap *structs.IndexHeap
@@ -73,18 +80,20 @@ type DSQueue struct {
 	testLog *testing.T
 }
 
-func initFBueue(database *db.DataStorage, queueName string, settings *DSQueueSettings) *DSQueue {
+func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSettings) *DSQueue {
 	dsq := DSQueue{
-		allMessagesMap:     make(map[string]*DSQMessage),
-		availableMsgs:      structs.NewListQueue(),
-		database:           database,
-		expireHeap:         structs.NewIndexHeap(),
-		inFlightHeap:       structs.NewIndexHeap(),
-		deliveryHeap:       structs.NewIndexHeap(),
-		queueName:          queueName,
-		settings:           settings,
-		workDone:           false,
-		newMsgNotification: make(chan bool),
+		allMessagesMap:     	make(map[string]*DSQMessage),
+		availableMsgs:      	structs.NewListQueue(),
+		highPriorityFrontMsgs: 	structs.NewListQueue(),
+		highPriorityBackMsgs: 	structs.NewListQueue(),
+		database:           	database,
+		expireHeap:         	structs.NewIndexHeap(),
+		inFlightHeap:       	structs.NewIndexHeap(),
+		deliveryHeap:       	structs.NewIndexHeap(),
+		queueName:          	queueName,
+		settings:           	settings,
+		workDone:           	false,
+		newMsgNotification: 	make(chan bool),
 	}
 
 	dsq.actionHandlers = map[string](common.CallFuncType){
@@ -111,7 +120,7 @@ func initFBueue(database *db.DataStorage, queueName string, settings *DSQueueSet
 
 func NewDSQueue(database *db.DataStorage, queueName string, size int64) *DSQueue {
 	settings := NewDSQueueSettings(size)
-	queue := initFBueue(database, queueName, settings)
+	queue := initDSQueue(database, queueName, settings)
 	queue.database.SaveQueueSettings(queueName, settings)
 	return queue
 }
@@ -122,7 +131,7 @@ func LoadDSQueue(database *db.DataStorage, queueName string) (common.IItemHandle
 	if err != nil {
 		return nil, err
 	}
-	dsq := initFBueue(database, queueName, settings)
+	dsq := initDSQueue(database, queueName, settings)
 	return dsq, nil
 }
 
@@ -172,7 +181,7 @@ func (dsq *DSQueue) Clear() {
 		}
 		dsq.lock.Unlock()
 	}
-	log.Debug("Removed %d messages.", total)
+	log.Debug("Clear: Removed %d messages.", total)
 }
 
 func (dsq *DSQueue) Close() {
@@ -339,18 +348,30 @@ func (dsq *DSQueue) UnlockMessageById(params map[string]string) *common.ReturnDa
 	return common.RETDATA_201OK
 }
 
-//
+// *********************************************************************************************************
 // Internal subroutines
 //
 
-func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) {
+func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 
 	switch msg.pushAt {
 	case QUEUE_DIRECTION_FRONT:
+		msg.ListId = int64(dsq.availableMsgs.Len()) + 1
 		dsq.availableMsgs.PushFront(msg.Id)
 	case QUEUE_DIRECTION_BACK:
 		dsq.availableMsgs.PushBack(msg.Id)
+		msg.ListId = -int64(dsq.availableMsgs.Len() + 1)
+	case QUEUE_DIRECTION_FRONT_UNLOCKED:
+		dsq.highPriorityFrontMsgs.PushFront(msg.Id)
+		msg.ListId = int64(dsq.highPriorityFrontMsgs.Len())
+	case QUEUE_DIRECTION_BACK_UNLOCKED:
+		msg.ListId = int64(dsq.highPriorityBackMsgs.Len())
+		dsq.highPriorityBackMsgs.PushFront(msg.Id)
+	default:
+		log.Error("Error! Wrong pushAt value %d for message %s", msg.pushAt, msg.Id)
+		return qerrors.ERR_QUEUE_INTERNAL_ERROR
 	}
+	return nil
 }
 
 func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) *common.ReturnData {
@@ -425,15 +446,25 @@ func (dsq *DSQueue) push(msgData map[string]string, direction uint8) *common.Ret
 func (dsq *DSQueue) popMetaMessage(popFrom uint8, permanentPop bool) *DSQMessage {
 	var msgId = ""
 
-	if dsq.availableMsgs.Empty() {
+	if dsq.availableMsgs.Empty() && dsq.highPriorityFrontMsgs.Empty() && dsq.highPriorityBackMsgs.Empty() {
 		return nil
 	}
-
+	returnTo := QUEUE_DIRECTION_NONE
 	switch popFrom {
 	case QUEUE_DIRECTION_FRONT:
-		msgId = dsq.availableMsgs.PopFront()
+		returnTo = QUEUE_DIRECTION_FRONT_UNLOCKED
+		if dsq.highPriorityFrontMsgs.Len() > 0 {
+			msgId = dsq.highPriorityFrontMsgs.PopBack()
+		} else {
+			msgId = dsq.availableMsgs.PopFront()
+		}
 	case QUEUE_DIRECTION_BACK:
-		msgId = dsq.availableMsgs.PopBack()
+		returnTo = QUEUE_DIRECTION_BACK_UNLOCKED
+		if dsq.highPriorityBackMsgs.Len() > 0 {
+			msgId = dsq.highPriorityBackMsgs.PopBack()
+		} else {
+			msgId = dsq.availableMsgs.PopBack()
+		}
 	default:
 		return nil
 	}
@@ -442,8 +473,9 @@ func (dsq *DSQueue) popMetaMessage(popFrom uint8, permanentPop bool) *DSQMessage
 		return nil
 	}
 	msg.PopCount += 1
+	msg.ListId = 0;
 	if !permanentPop {
-		msg.pushAt = popFrom
+		msg.pushAt = uint8(returnTo)
 		dsq.lockMessage(msg)
 	} else {
 		msg.pushAt = QUEUE_DIRECTION_NONE
@@ -525,8 +557,15 @@ func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMessage, error) {
 }
 
 func (dsq *DSQueue) deleteMessage(msgId string) bool {
-	if _, ok := dsq.allMessagesMap[msgId]; ok {
-		dsq.availableMsgs.RemoveById(msgId)
+	if msg, ok := dsq.allMessagesMap[msgId]; ok {
+		switch msg.pushAt {
+		case QUEUE_DIRECTION_FRONT_UNLOCKED:
+			dsq.highPriorityFrontMsgs.RemoveById(msgId)
+		case QUEUE_DIRECTION_BACK_UNLOCKED:
+			dsq.highPriorityBackMsgs.RemoveById(msgId)
+		default:
+			dsq.availableMsgs.RemoveById(msgId)
+		}
 		delete(dsq.allMessagesMap, msgId)
 		dsq.database.DeleteItem(dsq.queueName, msgId)
 		dsq.expireHeap.PopById(msgId)
@@ -544,7 +583,7 @@ func (dsq *DSQueue) trackExpiration(msg *DSQMessage) {
 	}
 }
 
-// Attempts to return a message into the front of the queue.
+// Attempts to return a message into the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
 func (dsq *DSQueue) returnTo(msg *DSQMessage, place uint8) error {
 	lim := dsq.settings.PopCountLimit
@@ -554,16 +593,9 @@ func (dsq *DSQueue) returnTo(msg *DSQMessage, place uint8) error {
 			return qerrors.ERR_MSG_POP_ATTEMPTS_EXCEEDED
 		}
 	}
-	switch place {
-	case QUEUE_DIRECTION_FRONT:
-		dsq.availableMsgs.PushFront(msg.Id)
-	case QUEUE_DIRECTION_BACK:
-		dsq.availableMsgs.PushFront(msg.Id)
-	default:
-		// Log & Return some error here
-	}
+	msg.pushAt = place
 	msg.UnlockTs = 0
-	msg.pushAt = QUEUE_DIRECTION_NONE
+	dsq.addMessageToQueue(msg)
 	dsq.trackExpiration(msg)
 	dsq.database.UpdateItem(dsq.queueName, msg)
 	return nil
@@ -613,14 +645,7 @@ func (dsq *DSQueue) cleanExpiredItems() int {
 	for !(eh.Empty()) && eh.MinElement() < cur_ts {
 		i++
 		hi := eh.PopItem()
-		// There are two places to remove expired item:
-		// 1. Map of all items - all items map.
-		// 2. Available message.
-		msg, ok := dsq.allMessagesMap[hi.Id]
-		if ok {
-			dsq.availableMsgs.RemoveById(msg.Id)
-		}
-		dsq.deleteMessage(msg.Id)
+		dsq.deleteMessage(hi.Id)
 		if i >= MAX_CLEANS_PER_ATTEMPT {
 			break
 		}
@@ -649,7 +674,7 @@ func (dsq *DSQueue) periodicCleanUp() {
 		if !(dsq.workDone) {
 			cleaned := dsq.deliverMessages()
 			if cleaned > 0 {
-				log.Debug("%d messages pushed to the queue.", cleaned)
+				log.Debug("%d messages pushed to the queue (from delivery queue).", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
@@ -659,7 +684,7 @@ func (dsq *DSQueue) periodicCleanUp() {
 		if !(dsq.workDone) {
 			cleaned := dsq.releaseInFlight()
 			if cleaned > 0 {
-				log.Debug("%d messages returned to the front of the queue.", cleaned)
+				log.Debug("%d messages returned to the queue.", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
@@ -684,10 +709,80 @@ func (dsq *DSQueue) periodicCleanUp() {
 type MessageSlice []*DSQMessage
 
 func (p MessageSlice) Len() int           { return len(p) }
-func (p MessageSlice) Less(i, j int) bool { return p[i].CreatedTs < p[j].CreatedTs }
+func (p MessageSlice) Less(i, j int) bool { return p[i].ListId < p[j].ListId }
 func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (dsq *DSQueue) loadAllMessages() {
+	nowTs := util.Uts()
+	log.Info("Initializing queue: %s", dsq.queueName)
+	iter := dsq.database.IterQueue(dsq.queueName)
+	defer iter.Close()
+
+	msgs := MessageSlice{}
+	unlockedFrontMsgs := MessageSlice{}
+ 	unlockedBackMsgs := MessageSlice{}
+ 	delIds := []string{}
+
+	s := dsq.settings
+	for iter.Valid() {
+		pqmsg := PQMessageFromBinary(string(iter.Key), iter.Value)
+
+		// Store list if message IDs that should be removed.
+		if pqmsg.CreatedTs+s.MsgTTL < nowTs ||
+			(pqmsg.PopCount >= s.PopCountLimit && s.PopCountLimit > 0) {
+			delIds = append(delIds, pqmsg.Id)
+		} else {
+			switch pqmsg.pushAt {
+			case QUEUE_DIRECTION_FRONT_UNLOCKED:
+				unlockedFrontMsgs = append(msgs, pqmsg)
+			case QUEUE_DIRECTION_BACK_UNLOCKED:
+				unlockedBackMsgs = append(msgs, pqmsg)
+			default:
+				msgs = append(msgs, pqmsg)
+			}
+		}
+		iter.Next()
+	}
+	log.Debug("Loaded %d messages for %s queue",
+		len(msgs) + len(unlockedFrontMsgs) + len(unlockedBackMsgs), dsq.queueName)
+	if len(delIds) > 0 {
+		log.Debug("%d messages will be removed because of expiration", len(delIds))
+		for _, msgId := range delIds {
+			dsq.database.DeleteItem(dsq.queueName, msgId)
+		}
+
+	}
+	// Sorting data guarantees that messages will be available almost in the same order as they arrived.
+	sort.Sort(unlockedFrontMsgs)
+	for _, msg := range unlockedFrontMsgs {
+		dsq.allMessagesMap[msg.Id] = msg
+		dsq.highPriorityFrontMsgs.PushBack(msg.Id)
+	}
+	sort.Sort(unlockedBackMsgs)
+	for _, msg := range unlockedBackMsgs {
+		dsq.allMessagesMap[msg.Id] = msg
+		dsq.highPriorityBackMsgs.PushBack(msg.Id)
+	}
+	sort.Sort(msgs)
+	for _, msg := range msgs {
+		dsq.allMessagesMap[msg.Id] = msg
+		if msg.UnlockTs > nowTs {
+			dsq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
+		} else {
+			if 	msg.DeliveryTs > 0 {
+				dsq.deliveryHeap.PushItem(msg.Id, msg.DeliveryTs)
+			} else {
+				dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+s.MsgTTL)
+				dsq.availableMsgs.PushBack(msg.Id)
+			}
+		}
+	}
+
+	log.Debug("Messages available: %d", dsq.expireHeap.Len())
+	log.Debug("Messages in flight: %d", dsq.inFlightHeap.Len())
+	log.Debug("Messages in delivery queue: %d", dsq.deliveryHeap.Len())
+	log.Debug("Messages in high prioity/unlocked front: %d", dsq.highPriorityFrontMsgs.Len())
+	log.Debug("Messages in high prioity/unlocked back: %d", dsq.highPriorityBackMsgs.Len())
 }
 
 var _ common.IItemHandler = &DSQueue{}

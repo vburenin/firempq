@@ -10,7 +10,7 @@ import (
 func CreateTestQueue() *DSQueue {
 	ldb := db.GetDatabase()
 	ldb.FlushCache()
-	return NewDSQueue(ldb, "name", 1000)
+	return NewDSQueue(ldb, "", 1000)
 }
 
 func TestDelete(t *testing.T) {

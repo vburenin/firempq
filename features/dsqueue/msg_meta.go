@@ -19,6 +19,7 @@ type DSQMessage struct {
 	UnlockTs   int64
 	DeliveryTs int64
 	pushAt     uint8
+	ListId     int64
 }
 
 func NewDSQMessageWithId(id string) *DSQMessage {
@@ -29,6 +30,7 @@ func NewDSQMessageWithId(id string) *DSQMessage {
 		PopCount:   0,
 		UnlockTs:   0,
 		DeliveryTs: 0,
+		ListId:  0,
 	}
 	return &m
 }
@@ -62,6 +64,9 @@ func PQMessageFromBinary(msgId string, buf []byte) *DSQMessage {
 	deliveryTs := binary.BigEndian.Uint64(buf[bufOffset:])
 
 	bufOffset += 8
+	listID := binary.BigEndian.Uint64(buf[bufOffset:])
+
+	bufOffset += 8
 	pushAt := uint8(buf[bufOffset])
 
 	return &DSQMessage{
@@ -71,6 +76,7 @@ func PQMessageFromBinary(msgId string, buf []byte) *DSQMessage {
 		UnlockTs:   int64(unlockTs),
 		DeliveryTs: int64(deliveryTs),
 		pushAt:     uint8(pushAt),
+		ListId:     int64(listID),
 	}
 }
 
@@ -79,9 +85,9 @@ func (m *DSQMessage) GetId() string {
 }
 
 func (m *DSQMessage) ToBinary() []byte {
-	// length of 4 64 bits integers ann one 8 bit.
+	// length of 5 64 bits integers and one 8 bit.
 
-	buf := make([]byte, 8*4+1)
+	buf := make([]byte, 8*6)
 
 	bufOffset := 0
 	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.CreatedTs))
@@ -96,7 +102,10 @@ func (m *DSQMessage) ToBinary() []byte {
 	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.DeliveryTs))
 
 	bufOffset += 8
-	buf[bufOffset] = m.pushAt // uint8
+	binary.BigEndian.PutUint64(buf[bufOffset:], uint64(m.ListId))
+
+	bufOffset += 8
+	buf[bufOffset] = m.pushAt
 
 	return buf
 }
@@ -108,6 +117,7 @@ func (m *DSQMessage) GetStatus() map[string]interface{} {
 	res["pushAt"] = m.pushAt
 	res["PopCount"] = m.PopCount
 	res["UnlockTs"] = m.UnlockTs
+	res["ListID"] = m.ListId
 	return res
 }
 
