@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"sync"
 	"sort"
-	"testing"
 	"time"
 )
 
