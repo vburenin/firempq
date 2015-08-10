@@ -70,7 +70,6 @@ func TestPushFront(t *testing.T) {
 
 func TestPushFrontDelayed(t *testing.T) {
 	q := CreateTestQueue()
-	q.SetTestLog(t)
 	q.Clear()
 	defer q.Close()
 	defer q.Clear()
@@ -124,7 +123,6 @@ func TestUnlockById(t *testing.T) {
 
 func TestPushBackDelayed(t *testing.T) {
 	q := CreateTestQueue()
-	q.SetTestLog(t)
 	q.Clear()
 	defer q.Close()
 	defer q.Clear()
@@ -177,7 +175,6 @@ func TestAutoExpiration(t *testing.T) {
 
 func TestLockAndReturn(t *testing.T) {
 	q := CreateTestQueue()
-	q.SetTestLog(t)
 	q.Clear()
 	defer q.Close()
 	defer q.Clear()

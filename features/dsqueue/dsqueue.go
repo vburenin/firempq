@@ -79,8 +79,6 @@ type DSQueue struct {
 	stats DSQueueStats
 
 	newMsgNotification chan bool
-
-	testLog *testing.T
 }
 
 func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSettings) *DSQueue {
@@ -137,14 +135,16 @@ func LoadDSQueue(database *db.DataStorage, queueName string) (common.IItemHandle
 	return dsq, nil
 }
 
-func (dsq *DSQueue) SetTestLog(testLog *testing.T) {
-	dsq.testLog = testLog
-}
-
 func (dsq *DSQueue) GetStatus() map[string]interface{} {
 	res := dsq.settings.ToMap()
 	res["TotalMessages"] = len(dsq.allMessagesMap)
 	res["InFlightSize"] = dsq.inFlightHeap.Len()
+	res["LastPushTs"] = dsq.stats.LastPushTs
+	res["LastPopTs"] = dsq.stats.LastPopTs
+	res["LastPushFrontTs"] = dsq.stats.LastPushFrontTs
+	res["LastPopFrontTs"] = dsq.stats.LastPopFrontTs
+	res["LastPushBackTs"] = dsq.stats.LastPushBackTs
+	res["LastPopBackTs"] = dsq.stats.LastPopBackTs
 	return res
 }
 
@@ -233,14 +233,17 @@ func (dsq *DSQueue) PopBack(params map[string]string) *common.ReturnData {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, true)
 }
 
+// Return already locked message to the front of the queue
 func (dsq *DSQueue) ReturnFront(params map[string]string) *common.ReturnData {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_FRONT)
 }
 
+// Return already locked message to the back of the queue
 func (dsq *DSQueue) ReturnBack(params map[string]string) *common.ReturnData {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_BACK)
 }
 
+// Delete non-locked message from the queue by message's ID
 func (dsq *DSQueue) DeleteById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
@@ -267,6 +270,7 @@ func (dsq *DSQueue) DeleteById(params map[string]string) *common.ReturnData {
 	return common.RETDATA_201OK
 }
 
+// Delete message locked or unlocked from the queue by message's ID
 func (dsq *DSQueue) ForceDelete(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
@@ -334,6 +338,8 @@ func (dsq *DSQueue) DeleteLockedById(params map[string]string) *common.ReturnDat
 	return common.RETDATA_201OK
 }
 
+// Unlock locked message by id.
+// Message will be returned to the front/back of the queue based on Pop operation type (pop front/back)
 func (dsq *DSQueue) UnlockMessageById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
