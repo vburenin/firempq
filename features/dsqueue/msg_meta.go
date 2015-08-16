@@ -30,7 +30,7 @@ func NewDSQMessageWithId(id string) *DSQMessage {
 		PopCount:   0,
 		UnlockTs:   0,
 		DeliveryTs: 0,
-		ListId:  0,
+		ListId:     0,
 	}
 	return &m
 }

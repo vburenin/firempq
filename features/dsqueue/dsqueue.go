@@ -8,9 +8,9 @@ import (
 	"firempq/structs"
 	"firempq/util"
 	"github.com/op/go-logging"
+	"sort"
 	"strconv"
 	"sync"
-	"sort"
 	"time"
 )
 
@@ -35,15 +35,15 @@ const (
 )
 
 const (
-	QUEUE_DIRECTION_NONE  = 0
-	QUEUE_DIRECTION_FRONT = 1
-	QUEUE_DIRECTION_BACK  = 2
+	QUEUE_DIRECTION_NONE           = 0
+	QUEUE_DIRECTION_FRONT          = 1
+	QUEUE_DIRECTION_BACK           = 2
 	QUEUE_DIRECTION_FRONT_UNLOCKED = 3
 	QUEUE_DIRECTION_BACK_UNLOCKED  = 4
 )
 
 const (
-	TIMEOUT_MSG_DELIVERY = 1
+	TIMEOUT_MSG_DELIVERY   = 1
 	TIMEOUT_MSG_EXPIRATION = 2
 )
 
@@ -56,7 +56,7 @@ type DSQueue struct {
 
 	// Returned messages front/back. PopFront/PopBack first should pop elements from this lists
 	highPriorityFrontMsgs *structs.IndexList
-	highPriorityBackMsgs *structs.IndexList
+	highPriorityBackMsgs  *structs.IndexList
 
 	// All messages with the ticking counters except those which are inFlight.
 	expireHeap *structs.IndexHeap
@@ -82,17 +82,17 @@ type DSQueue struct {
 
 func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSettings) *DSQueue {
 	dsq := DSQueue{
-		allMessagesMap:     	make(map[string]*DSQMessage),
-		availableMsgs:      	structs.NewListQueue(),
-		highPriorityFrontMsgs: 	structs.NewListQueue(),
-		highPriorityBackMsgs: 	structs.NewListQueue(),
-		database:           	database,
-		expireHeap:         	structs.NewIndexHeap(),
-		inFlightHeap:       	structs.NewIndexHeap(),
-		queueName:          	queueName,
-		settings:           	settings,
-		workDone:           	false,
-		newMsgNotification: 	make(chan bool),
+		allMessagesMap:        make(map[string]*DSQMessage),
+		availableMsgs:         structs.NewListQueue(),
+		highPriorityFrontMsgs: structs.NewListQueue(),
+		highPriorityBackMsgs:  structs.NewListQueue(),
+		database:              database,
+		expireHeap:            structs.NewIndexHeap(),
+		inFlightHeap:          structs.NewIndexHeap(),
+		queueName:             queueName,
+		settings:              settings,
+		workDone:              false,
+		newMsgNotification:    make(chan bool),
 	}
 
 	dsq.actionHandlers = map[string](common.CallFuncType){
@@ -486,7 +486,7 @@ func (dsq *DSQueue) popMetaMessage(popFrom uint8, permanentPop bool) *DSQMessage
 	if !ok {
 		return nil
 	}
-	msg.ListId = 0;
+	msg.ListId = 0
 	if !permanentPop {
 		msg.pushAt = uint8(returnTo)
 		dsq.lockMessage(msg)
@@ -635,7 +635,7 @@ func (dsq *DSQueue) releaseInFlight() (int, int) {
 	cur_ts := util.Uts()
 	ifHeap := dsq.inFlightHeap
 
-	returned :=0
+	returned := 0
 	delivered := 0
 	iteration := 0
 	for !(ifHeap.Empty()) && ifHeap.MinElement() <= cur_ts {
@@ -736,8 +736,8 @@ func (dsq *DSQueue) loadAllMessages() {
 
 	msgs := MessageSlice{}
 	unlockedFrontMsgs := MessageSlice{}
- 	unlockedBackMsgs := MessageSlice{}
- 	delIds := []string{}
+	unlockedBackMsgs := MessageSlice{}
+	delIds := []string{}
 
 	s := dsq.settings
 	for iter.Valid() {
@@ -760,7 +760,7 @@ func (dsq *DSQueue) loadAllMessages() {
 		iter.Next()
 	}
 	log.Debug("Loaded %d messages for %s queue",
-		len(msgs) + len(unlockedFrontMsgs) + len(unlockedBackMsgs), dsq.queueName)
+		len(msgs)+len(unlockedFrontMsgs)+len(unlockedBackMsgs), dsq.queueName)
 	if len(delIds) > 0 {
 		log.Debug("%d messages will be removed because of expiration", len(delIds))
 		for _, msgId := range delIds {
@@ -786,7 +786,7 @@ func (dsq *DSQueue) loadAllMessages() {
 		if msg.UnlockTs > nowTs {
 			dsq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
-			if 	msg.DeliveryTs > 0 {
+			if msg.DeliveryTs > 0 {
 				dsq.inFlightHeap.PushItem(msg.Id, msg.DeliveryTs)
 				inDelivery += 1
 			} else {

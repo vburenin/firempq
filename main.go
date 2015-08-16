@@ -80,7 +80,7 @@ func main() {
 		qid := "tst_queue_" + strconv.Itoa(i)
 		err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
-			log.Notice(err.Error())
+			log.Notice("%s: %s", err.Error(), qid)
 		}
 	}
 	for i := 0; i < 4; i++ {
