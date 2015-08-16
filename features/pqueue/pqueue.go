@@ -5,7 +5,6 @@ import (
 	"firempq/db"
 	"firempq/defs"
 	"firempq/qerrors"
-	"firempq/queues/priority_first"
 	"firempq/structs"
 	"firempq/util"
 	"github.com/op/go-logging"
@@ -32,7 +31,7 @@ const (
 type PQueue struct {
 	queueName string
 	// Messages which are waiting to be picked up
-	availableMsgs *priority_first.PriorityFirstQueue
+	availableMsgs *structs.PriorityFirstQueue
 
 	// All messages with the ticking counters except those which are inFlight.
 	expireHeap *structs.IndexHeap
@@ -57,7 +56,7 @@ type PQueue struct {
 func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
 	pq := PQueue{
 		allMessagesMap:     make(map[string]*PQMessage),
-		availableMsgs:      priority_first.NewActiveQueues(settings.MaxPriority),
+		availableMsgs:      structs.NewActiveQueues(settings.MaxPriority),
 		database:           database,
 		expireHeap:         structs.NewIndexHeap(),
 		inFlightHeap:       structs.NewIndexHeap(),
