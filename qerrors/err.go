@@ -29,8 +29,10 @@ var ERR_ITEM_ALREADY_EXISTS = &ServerError{"Message exists already", 400}
 var ERR_UNEXPECTED_PRIORITY = &ServerError{"Incrorrect priority", 400}
 var ERR_MSG_NOT_LOCKED = &ServerError{"Message is not locked", 400}
 var ERR_MSG_NOT_EXIST = &ServerError{"Message doesn't exist", 400}
+var ERR_MSG_NOT_DELIVERED = &ServerError{"Message doesn't delivered to the queue", 400}
 var ERR_MSG_IS_LOCKED = &ServerError{"Message is locked", 400}
 var ERR_MSG_POP_ATTEMPTS_EXCEEDED = &ServerError{"Message is locked", 400}
+var ERR_QUEUE_INTERNAL_ERROR = &ServerError{"Internal error/data integrity failure", 400}
 
 // Param errors
 var ERR_MSG_ID_NOT_DEFINED = &ServerError{"Message ID is not defined", 400}
