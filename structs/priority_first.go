@@ -1,31 +1,30 @@
-package priority_first
+package structs
 
 // Items with higher priority always go first.
 
-import "firempq/structs"
 import "firempq/qerrors"
 
 type PriorityFirstQueue struct {
 	// The highest priority queue used for the returned items.
-	frontQueue *structs.IndexList
+	frontQueue *IndexList
 	// The slice of all available sub queues.
-	queues []*structs.IndexList
+	queues []*IndexList
 
 	// Heap of indexes of not empty ListQueues.
-	withItems   *structs.IntHeap
+	withItems   *IntHeap
 	maxPriority int64
 }
 
 func NewActiveQueues(size int64) *PriorityFirstQueue {
-	queues := make([]*structs.IndexList, size, size)
+	queues := make([]*IndexList, size, size)
 	maxPriority := size
 	for size > 0 {
 		size--
-		queues[size] = structs.NewListQueue()
+		queues[size] = NewListQueue()
 	}
-	frontQueue := structs.NewListQueue()
+	frontQueue := NewListQueue()
 	return &PriorityFirstQueue{queues: queues,
-		withItems:   structs.NewIntHeap(),
+		withItems:   NewIntHeap(),
 		maxPriority: maxPriority,
 		frontQueue:  frontQueue}
 }

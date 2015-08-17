@@ -81,7 +81,7 @@ func main() {
 		err := fc.CreateQueue(common.QTYPE_DOUBLE_SIDED_QUEUE, qid, nil)
 		// err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
-			log.Notice(err.Error())
+			log.Notice("%s: %s", err.Error(), qid)
 		}
 	}
 	for i := 0; i < 4; i++ {

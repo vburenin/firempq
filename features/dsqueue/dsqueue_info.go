@@ -8,7 +8,7 @@ const (
 	DEFAULT_TTL             = 10000 // In milliseconds
 	DEFAULT_DELIVERY_DELAY  = 0
 	DEFAULT_LOCK_TIMEOUT    = 1000 // In milliseconds
-	DEFAULT_POP_COUNT_LIMIT = 0 // 0 means Unlimited.
+	DEFAULT_POP_COUNT_LIMIT = 0    // 0 means Unlimited.
 )
 
 type DSQueueSettings struct {
@@ -27,8 +27,8 @@ type DSQueueStats struct {
 	LastPopTs       int64 // Last pop time.
 	LastPushFrontTs int64 // Last time item has been pushed front into queue.
 	LastPopFrontTs  int64 // Last front pop time.
-	LastPushBackTs int64  // Last time item has been pushed back into queue.
-	LastPopBackTs  int64  // Last back pop time.
+	LastPushBackTs  int64 // Last time item has been pushed back into queue.
+	LastPopBackTs   int64 // Last back pop time.
 }
 
 func NewDSQueueSettings(size int64) *DSQueueSettings {

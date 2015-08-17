@@ -1,4 +1,4 @@
-package priority_first
+package structs
 
 import (
 	"math/rand"
