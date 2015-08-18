@@ -405,8 +405,8 @@ func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) *common.Return
 			default: // allows non blocking channel usage if there are no users awaiting for the message
 			}
 		}
-		dsq.database.StoreItemWithPayload(dsq.queueName, msg, payload)
 	}
+	dsq.database.StoreItemWithPayload(dsq.queueName, msg, payload)
 	return common.RETDATA_201OK
 }
 
@@ -719,6 +719,7 @@ func (dsq *DSQueue) periodicCleanUp() {
 			time.Sleep(sleepTime)
 		}
 	}
+	log.Info("periodic cleanup is done for queue: %s", dsq.queueName)
 }
 
 // Database related data management.
@@ -742,7 +743,6 @@ func (dsq *DSQueue) loadAllMessages() {
 	s := dsq.settings
 	for iter.Valid() {
 		pqmsg := PQMessageFromBinary(string(iter.Key), iter.Value)
-
 		// Store list if message IDs that should be removed.
 		if pqmsg.CreatedTs+s.MsgTTL < nowTs ||
 			(pqmsg.PopCount >= s.PopCountLimit && s.PopCountLimit > 0) {
@@ -750,9 +750,9 @@ func (dsq *DSQueue) loadAllMessages() {
 		} else {
 			switch pqmsg.pushAt {
 			case QUEUE_DIRECTION_FRONT_UNLOCKED:
-				unlockedFrontMsgs = append(msgs, pqmsg)
+				unlockedFrontMsgs = append(unlockedFrontMsgs, pqmsg)
 			case QUEUE_DIRECTION_BACK_UNLOCKED:
-				unlockedBackMsgs = append(msgs, pqmsg)
+				unlockedBackMsgs = append(unlockedBackMsgs, pqmsg)
 			default:
 				msgs = append(msgs, pqmsg)
 			}
@@ -773,6 +773,7 @@ func (dsq *DSQueue) loadAllMessages() {
 	for _, msg := range unlockedFrontMsgs {
 		dsq.allMessagesMap[msg.Id] = msg
 		dsq.highPriorityFrontMsgs.PushBack(msg.Id)
+		log.Debug("--- message to front priority: %s", msg.GetId())
 	}
 	sort.Sort(unlockedBackMsgs)
 	for _, msg := range unlockedBackMsgs {
@@ -798,7 +799,7 @@ func (dsq *DSQueue) loadAllMessages() {
 
 	log.Debug("Messages available: %d", dsq.expireHeap.Len())
 	log.Debug("Messages in flight: %d", dsq.inFlightHeap.Len())
-	log.Debug("Messages in delivery: %d", inDelivery)
+	log.Debug("Messages in delivery (part of in flight): %d", inDelivery)
 	log.Debug("Messages in high prioity/unlocked front: %d", dsq.highPriorityFrontMsgs.Len())
 	log.Debug("Messages in high prioity/unlocked back: %d", dsq.highPriorityBackMsgs.Len())
 }

@@ -10,7 +10,7 @@ import (
 func CreateTestQueue() *DSQueue {
 	ldb := db.GetDatabase()
 	ldb.FlushCache()
-	return NewDSQueue(ldb, "", 1000)
+	return NewDSQueue(ldb, "dsqueue-test", 1000)
 }
 
 func TestDelete(t *testing.T) {
@@ -215,3 +215,74 @@ func TestLockAndReturn(t *testing.T) {
 
 func TestDeleteById(t *testing.T) {
 }
+
+func TestLoadFromDb(t *testing.T) {
+
+	q := CreateTestQueue()
+	q.Clear()
+	defer q.Close()
+	defer q.Clear()
+
+	q.PushBack(map[string]string{
+		defs.PRM_ID:      "b1",
+		defs.PRM_PAYLOAD: "p1"})
+	q.PushFront(map[string]string{
+		defs.PRM_ID:      "f1",
+		defs.PRM_DELIVERY_INTERVAL: "500",
+		defs.PRM_PAYLOAD: "p1"})
+	q.PushBack(map[string]string{
+		defs.PRM_ID:                "b2",
+		defs.PRM_DELIVERY_INTERVAL: "500",
+		defs.PRM_PAYLOAD:           "p2"})
+	q.PushFront(map[string]string{
+		defs.PRM_ID:      "f2",
+		defs.PRM_PAYLOAD: "p1"})
+	q.PushFront(map[string]string{
+		defs.PRM_ID:      "f3",
+		defs.PRM_PAYLOAD: "p1"})
+	q.PopLockFront(nil)
+	q.SetLockTimeout(map[string]string{
+		defs.PRM_ID:      "f3",
+		defs.PRM_TIMEOUT: "100"})
+	// Wait till f3 will be unlocked and returned to the queue (priority front)
+	time.Sleep(200 * time.Millisecond)
+	defer q.Close()
+	time.Sleep(100 * time.Millisecond)
+
+	// Now reload queue from db as a new instance (should contain f3, f2, b1)
+	ql := CreateTestQueue()
+	defer ql.Close()
+	defer ql.Clear()
+	if ql.availableMsgs.Len() + ql.highPriorityFrontMsgs.Len()  != 3 {
+		t.Error("Messages map should contain 4 messages instead of", ql.availableMsgs.Len() +
+			ql.highPriorityFrontMsgs.Len() )
+	}
+	time.Sleep(300 * time.Millisecond)
+	// Now f1 and b2 delivered and queue should contain 5 messages)
+	if ql.availableMsgs.Len() + ql.highPriorityFrontMsgs.Len() != 5 {
+		t.Error("Messages map should contain 4 messages instead of ", ql.availableMsgs.Len())
+	}
+	// Check order of loaded messages (front)
+	msg := q.PopLockFront(nil).Items[0]
+	if msg == nil || msg.GetId() != "f3" {
+		t.Error("Messages order is wrong!")
+	}
+	msg = q.PopLockFront(nil).Items[0]
+	if msg == nil || msg.GetId() != "f1" {
+		t.Error("Messages order is wrong!")
+	}
+	msg = q.PopLockFront(nil).Items[0]
+	if msg == nil || msg.GetId() != "f2" {
+		t.Error("Messages order is wrong!")
+	}
+	// Check order of loaded messages (back)
+	msg = q.PopLockBack(nil).Items[0]
+	if msg == nil || msg.GetId() != "b2" {
+		t.Error("Messages order is wrong!")
+	}
+	msg = q.PopLockBack(nil).Items[0]
+	if msg == nil || msg.GetId() != "b1" {
+		t.Error("Messages order is wrong!")
+	}
+}
+
