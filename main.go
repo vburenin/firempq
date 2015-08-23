@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strconv"
-	"time"
+	//	"time"
 )
 
 var log = logging.MustGetLogger("firempq")
@@ -26,16 +26,16 @@ func init_logging() {
 	logging.SetLevel(logging.DEBUG, "firempq")
 }
 
-func main1() {
+func main() {
 
 	srv, err := server.GetServer(server.SIMPLE_SERVER, ":9033")
 	if err != nil {
 		log.Critical("Error: %s", err.Error())
 	}
 
-	go srv.Start()
-	time.Sleep(1E9)
-	srv.Stop()
+	srv.Start()
+	//time.Sleep(1E9)
+	//srv.Stop()
 }
 
 func addMessages(pq common.IItemHandler) {
@@ -48,11 +48,11 @@ func addMessages(pq common.IItemHandler) {
 	//	payload += payload
 	//time.Sleep(60 * 1000000000)
 	//pq.DeleteAll()
-	for i := 0; i < 1000; i++ {
-		v := map[string]string{
-			defs.PRM_PRIORITY: "1",
-			defs.PRM_PAYLOAD:  payload,
-		}
+	v := map[string]string{
+		defs.PRM_PRIORITY: "1",
+		defs.PRM_PAYLOAD:  payload,
+	}
+	for i := 0; i < 1000000; i++ {
 		pq.Call(pqueue.ACTION_PUSH, v)
 	}
 	//end_t := time.Now().UnixNano()
@@ -66,7 +66,7 @@ func addSpeedTest(q common.IItemHandler) {
 
 }
 
-func main() {
+func main1() {
 	init_logging()
 	f, _ := os.Create("pp.dat")
 	pprof.StartCPUProfile(f)
@@ -76,18 +76,20 @@ func main() {
 
 	fc := facade.CreateFacade()
 	defer fc.Close()
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
-		err := fc.CreateQueue(common.QTYPE_DOUBLE_SIDED_QUEUE, qid, nil)
+		err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		// err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
 			log.Notice("%s: %s", err.Error(), qid)
 		}
 	}
-	for i := 0; i < 4; i++ {
+	log.Notice("Started")
+	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
 		q, _ := fc.GetQueue(qid)
 		addSpeedTest(q)
 	}
+	log.Notice("Finished")
 
 }
