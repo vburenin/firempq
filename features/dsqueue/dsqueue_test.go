@@ -227,9 +227,9 @@ func TestLoadFromDb(t *testing.T) {
 		defs.PRM_ID:      "b1",
 		defs.PRM_PAYLOAD: "p1"})
 	q.PushFront(map[string]string{
-		defs.PRM_ID:      "f1",
+		defs.PRM_ID:                "f1",
 		defs.PRM_DELIVERY_INTERVAL: "500",
-		defs.PRM_PAYLOAD: "p1"})
+		defs.PRM_PAYLOAD:           "p1"})
 	q.PushBack(map[string]string{
 		defs.PRM_ID:                "b2",
 		defs.PRM_DELIVERY_INTERVAL: "500",
@@ -253,13 +253,13 @@ func TestLoadFromDb(t *testing.T) {
 	ql := CreateTestQueue()
 	defer ql.Close()
 	defer ql.Clear()
-	if ql.availableMsgs.Len() + ql.highPriorityFrontMsgs.Len()  != 3 {
-		t.Error("Messages map should contain 4 messages instead of", ql.availableMsgs.Len() +
-			ql.highPriorityFrontMsgs.Len() )
+	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 3 {
+		t.Error("Messages map should contain 4 messages instead of", ql.availableMsgs.Len()+
+			ql.highPriorityFrontMsgs.Len())
 	}
 	time.Sleep(300 * time.Millisecond)
 	// Now f1 and b2 delivered and queue should contain 5 messages)
-	if ql.availableMsgs.Len() + ql.highPriorityFrontMsgs.Len() != 5 {
+	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 5 {
 		t.Error("Messages map should contain 4 messages instead of ", ql.availableMsgs.Len())
 	}
 	// Check order of loaded messages (front)
@@ -285,4 +285,3 @@ func TestLoadFromDb(t *testing.T) {
 		t.Error("Messages order is wrong!")
 	}
 }
-

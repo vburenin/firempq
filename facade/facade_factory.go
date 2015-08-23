@@ -3,8 +3,8 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
-	"firempq/features/pqueue"
 	"firempq/features/dsqueue"
+	"firempq/features/pqueue"
 	"sync"
 )
 
@@ -12,7 +12,7 @@ type CreateFactoryFunc func(string, map[string]string) common.IItemHandler
 type DataLoaderFunc func(*db.DataStorage, string) (common.IItemHandler, error)
 
 var QUEUE_CREATER = map[string](CreateFactoryFunc){
-	common.QTYPE_PRIORITY_QUEUE: pqueue.CreatePQueue,
+	common.QTYPE_PRIORITY_QUEUE:     pqueue.CreatePQueue,
 	common.QTYPE_DOUBLE_SIDED_QUEUE: dsqueue.CreateDSQueue,
 }
 
