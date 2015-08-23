@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"firempq/common"
 	"firempq/defs"
-	"firempq/qerrors"
+	"firempq/svcerr"
 	"firempq/util"
 	"strconv"
 )
@@ -45,16 +45,16 @@ func MessageFromMap(params map[string]string) (*PQMessage, error) {
 	if !ok {
 		msgId = util.GenRandMsgId()
 	} else if len(msgId) > MAX_MESSAGE_ID_LENGTH {
-		return nil, qerrors.ERR_MSG_ID_TOO_LARGE
+		return nil, svcerr.ERR_MSG_ID_TOO_LARGE
 	}
 
 	strValue, ok = params[defs.PRM_PRIORITY]
 	if !ok {
-		return nil, qerrors.ERR_MSG_NO_PRIORITY
+		return nil, svcerr.ERR_MSG_NO_PRIORITY
 	}
 	priority, err = strconv.ParseInt(strValue, 10, 0)
 	if err != nil {
-		return nil, qerrors.ERR_MSG_WRONG_PRIORITY
+		return nil, svcerr.ERR_MSG_WRONG_PRIORITY
 	}
 
 	return NewPQMessageWithId(msgId, priority), nil

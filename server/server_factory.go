@@ -5,7 +5,7 @@ import (
 	"firempq/common"
 )
 
-func GetServer(serverClass string, serverAddress string) (common.IQueueServer, error) {
+func GetServer(serverClass string, serverAddress string) (common.IServer, error) {
 
 	if serverClass == SIMPLE_SERVER {
 		return NewSimpleServer(serverAddress), nil

@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"firempq/common"
 	"firempq/defs"
-	"firempq/qerrors"
+	"firempq/svcerr"
 	"firempq/util"
 )
 
@@ -44,7 +44,7 @@ func MessageFromMap(params map[string]string) (*DSQMessage, error) {
 	if !ok {
 		msgId = util.GenRandMsgId()
 	} else if len(msgId) > MAX_MESSAGE_ID_LENGTH {
-		return nil, qerrors.ERR_MSG_ID_TOO_LARGE
+		return nil, svcerr.ERR_MSG_ID_TOO_LARGE
 	}
 
 	return NewDSQMessageWithId(msgId), nil

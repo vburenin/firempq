@@ -19,12 +19,12 @@ type QueueOpFunc func(req []string) error
 
 type SimpleServer struct {
 	address  string
-	facade   *facade.QFacade
+	facade   *facade.ServiceFacade
 	listener net.Listener
 	quitChan chan bool
 }
 
-func NewSimpleServer(address string) common.IQueueServer {
+func NewSimpleServer(address string) common.IServer {
 	return &SimpleServer{address: address,
 		facade:   facade.CreateFacade(),
 		listener: nil,
@@ -73,7 +73,7 @@ func (this *SimpleServer) handleConnection(conn net.Conn) {
 	w := bufio.NewWriter(conn)
 
 	rw_conn := bufio.NewReadWriter(r, w)
-	session_handler := proto.NewSessionHandler(rw_conn)
+	session_handler := proto.NewSessionHandler(rw_conn, this.facade)
 	session_handler.DispatchConn()
 	conn.Close()
 }

@@ -38,7 +38,7 @@ func main() {
 	//srv.Stop()
 }
 
-func addMessages(pq common.IItemHandler) {
+func addMessages(pq common.ISvc) {
 	//	ts := time.Now().UnixNano()
 	payload := "0000"
 	//payload += payload
@@ -60,7 +60,7 @@ func addMessages(pq common.IItemHandler) {
 	//fmt.Println((end_t - ts) / 1000000)
 }
 
-func addSpeedTest(q common.IItemHandler) {
+func addSpeedTest(q common.ISvc) {
 
 	addMessages(q)
 
@@ -78,7 +78,7 @@ func main1() {
 	defer fc.Close()
 	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
-		err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
+		err := fc.CreateService(common.STYPE_PRIORITY_QUEUE, qid, nil)
 		// err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
 			log.Notice("%s: %s", err.Error(), qid)
@@ -87,7 +87,7 @@ func main1() {
 	log.Notice("Started")
 	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
-		q, _ := fc.GetQueue(qid)
+		q, _ := fc.GetService(qid)
 		addSpeedTest(q)
 	}
 	log.Notice("Finished")

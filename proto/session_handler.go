@@ -3,7 +3,8 @@ package proto
 import (
 	"bufio"
 	"firempq/common"
-	"firempq/qerrors"
+	"firempq/facade"
+	"firempq/svcerr"
 	"firempq/util"
 	"github.com/op/go-logging"
 	"io"
@@ -25,9 +26,11 @@ type SessionHandler struct {
 	conn         *bufio.ReadWriter
 	mainHandlers map[string]FuncHandler
 	active       bool
+	ctx          common.ISvc
+	svcs         *facade.ServiceFacade
 }
 
-func NewSessionHandler(conn *bufio.ReadWriter) *SessionHandler {
+func NewSessionHandler(conn *bufio.ReadWriter, services *facade.ServiceFacade) *SessionHandler {
 	handlerMap := map[string]FuncHandler{
 		CMD_PING:    pingHandler,
 		CMD_UNIX_TS: tsHandler,
@@ -35,13 +38,17 @@ func NewSessionHandler(conn *bufio.ReadWriter) *SessionHandler {
 	sh := &SessionHandler{
 		conn:         conn,
 		mainHandlers: handlerMap,
-		active:       true}
+		ctx:          nil,
+		active:       true,
+		svcs:         services,
+	}
 	sh.mainHandlers[CMD_QUIT] = sh.quitHandler
+	sh.mainHandlers[CMD_SETCTX] = sh.setCtxHandler
 	return sh
 }
 
 func (s *SessionHandler) DispatchConn() {
-	s.writeResponse(common.NewStrResponse("HELLO"))
+	s.writeResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.readCommand()
 		if err != nil {
@@ -83,7 +90,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	tokens := cmdTokens[1:]
 	handler, ok := s.mainHandlers[cmd]
 	if !ok {
-		resp = qerrors.ERR_UNKNOW_CMD
+		resp = svcerr.ERR_UNKNOW_CMD
 	} else {
 		resp, err = handler(tokens)
 	}
@@ -105,9 +112,25 @@ func (s *SessionHandler) writeResponse(resp common.IResponse) error {
 	return nil
 }
 
+func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error) {
+	if len(tokens) > 1 {
+		return svcerr.InvalidRequest("SETCTX accept only service name to be provided"), nil
+	}
+	if len(tokens) == 0 {
+		return svcerr.InvalidRequest("Service name must be provided"), nil
+	}
+	svcName := tokens[0]
+	svc, exists := s.svcs.GetService(svcName)
+	if !exists {
+		return svcerr.ERR_NO_SVC, nil
+	}
+	s.ctx = svc
+	return common.NewStrResponse("OK"), nil
+}
+
 func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
-		return qerrors.ERR_CMD_WITH_NO_PARAMS, nil
+		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
 	}
 	s.active = false
 	return common.NewStrResponse("OK"), nil
@@ -115,14 +138,14 @@ func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) 
 
 func pingHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
-		return qerrors.ERR_CMD_WITH_NO_PARAMS, nil
+		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
 	}
 	return common.NewStrResponse("PONG"), nil
 }
 
 func tsHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
-		return qerrors.ERR_CMD_WITH_NO_PARAMS, nil
+		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
 	}
 	return common.NewIntResponse(util.Uts()), nil
 }

@@ -5,25 +5,25 @@ import (
 )
 
 const (
-	QTYPE_PRIORITY_QUEUE      = "priority_queue" // Highest priority goes first.
-	QTYPE_FIFO_QUEUE          = "fifo_queue"     // Standard FIFO
-	QTYPE_DOUBLE_SIDED_QUEUE  = "ds_queue"       // Double sided queue
-	QTYPE_FAIR_PRIORITY_QUEUE = "fair_queue"     // POPs are fairly distributed across all priorities.
-	QTYPE_COUNTERS            = "counters"       // Atomic counters.
-	QTYPE_SEQUENCE_READ       = "seqreader"      // Data to read in sequential order.
+	STYPE_PRIORITY_QUEUE      = "priority_queue" // Highest priority goes first.
+	STYPE_FIFO_QUEUE          = "fifo_queue"     // Standard FIFO
+	STYPE_DOUBLE_SIDED_QUEUE  = "ds_queue"       // Double sided queue
+	STYPE_FAIR_PRIORITY_QUEUE = "fair_queue"     // POPs are fairly distributed across all priorities.
+	STYPE_COUNTERS            = "counters"       // Atomic counters.
+	STYPE_SEQUENCE_READ       = "seqreader"      // Data to read in sequential order.
 )
 
-type QueueMetaInfo struct {
-	Qtype    string
+type ServiceMetaInfo struct {
+	Stype    string
 	Id       int32
 	Name     string
 	CreateTs int64
 	Disabled bool
 }
 
-func NewQueueMetaInfo(qtype string, id int32, name string) *QueueMetaInfo {
-	return &QueueMetaInfo{
-		Qtype:    qtype,
+func NewServiceMetaInfo(stype string, id int32, name string) *ServiceMetaInfo {
+	return &ServiceMetaInfo{
+		Stype:    stype,
 		Id:       id,
 		Name:     name,
 		CreateTs: util.Uts(),
@@ -31,15 +31,15 @@ func NewQueueMetaInfo(qtype string, id int32, name string) *QueueMetaInfo {
 	}
 }
 
-func QueueInfoFromBinary(data []byte) (*QueueMetaInfo, error) {
-	qmi := QueueMetaInfo{}
-	err := util.StructFromBinary(&qmi, data)
+func ServiceInfoFromBinary(data []byte) (*ServiceMetaInfo, error) {
+	smi := ServiceMetaInfo{}
+	err := util.StructFromBinary(&smi, data)
 	if err != nil {
 		return nil, err
 	}
-	return &qmi, nil
+	return &smi, nil
 }
 
-func (q *QueueMetaInfo) ToBinary() []byte {
+func (q *ServiceMetaInfo) ToBinary() []byte {
 	return util.StructToBinary(q)
 }

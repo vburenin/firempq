@@ -15,15 +15,15 @@ type IItem interface {
 	GetStatus() map[string]interface{}
 }
 
-type IItemHandler interface {
+type ISvc interface {
 	GetStatus() map[string]interface{}
-	GetType() defs.ItemHandlerType
+	GetType() defs.ServiceType
 	Call(action string, params map[string]string) *ReturnData
 	Clear()
 	Close()
 }
 
-type IQueueServer interface {
+type IServer interface {
 	Start()
 	Stop()
 }

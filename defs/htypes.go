@@ -1,11 +1,11 @@
 package defs
 
-type ItemHandlerType int
+type ServiceType int
 
 const (
-	HT_PRIORITY_QUEUE     ItemHandlerType = 1
-	HT_COUNTERS           ItemHandlerType = 2
-	HT_DOUBLE_SIDED_QUEUE ItemHandlerType = 3
+	HT_PRIORITY_QUEUE     ServiceType = 1
+	HT_COUNTERS           ServiceType = 2
+	HT_DOUBLE_SIDED_QUEUE ServiceType = 3
 )
 
 type DataType int

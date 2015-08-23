@@ -1,7 +1,7 @@
 package db
 
-// Level DB wrapper over multiple queue data store.
-// Each key has a prefix that combines queue name as well as type of stored data.
+// Level DB wrapper over multiple service data store.
+// Each key has a prefix that combines service name as well as type of stored data.
 // The following format is used for item keys:
 // somename:m:itemid
 // This format is used for payload keys:
@@ -10,7 +10,7 @@ package db
 import (
 	"bytes"
 	"firempq/common"
-	"firempq/qerrors"
+	"firempq/svcerr"
 	"firempq/util"
 	"github.com/jmhodges/levigo"
 	"github.com/op/go-logging"
@@ -21,7 +21,7 @@ import (
 var log = logging.MustGetLogger("ldb")
 
 // Item iterator built on top of LevelDB.
-// It takes into account queue name to limit the amount of selected data.
+// It takes into account service name to limit the amount of selected data.
 type ItemIterator struct {
 	iter   *levigo.Iterator
 	prefix []byte // Prefix for look ups.
@@ -114,19 +114,19 @@ func (ds *DataStorage) periodicCacheFlush() {
 }
 
 // Item payload Id.
-func makePayloadId(queueName, id string) string {
-	return "p:" + queueName + ":" + id
+func makePayloadId(svcName, id string) string {
+	return "p:" + svcName + ":" + id
 }
 
 // Item Id.
-func makeItemId(queueName, id string) string {
-	return "m:" + queueName + ":" + id
+func makeItemId(svcName, id string) string {
+	return "m:" + svcName + ":" + id
 }
 
 // Item will be stored into cache including payload.
-func (ds *DataStorage) StoreItemWithPayload(queueName string, item common.IItemMetaData, payload string) {
-	itemId := makeItemId(queueName, item.GetId())
-	payloadId := makePayloadId(queueName, item.GetId())
+func (ds *DataStorage) StoreItemWithPayload(svcName string, item common.IItemMetaData, payload string) {
+	itemId := makeItemId(svcName, item.GetId())
+	payloadId := makePayloadId(svcName, item.GetId())
 
 	itemBody := item.ToBinary()
 
@@ -136,8 +136,8 @@ func (ds *DataStorage) StoreItemWithPayload(queueName string, item common.IItemM
 	ds.cacheLock.Unlock()
 }
 
-func (ds *DataStorage) StoreItem(queueName string, item common.IItemMetaData) {
-	itemId := makeItemId(queueName, item.GetId())
+func (ds *DataStorage) StoreItem(svcName string, item common.IItemMetaData) {
+	itemId := makeItemId(svcName, item.GetId())
 
 	itemBody := item.ToBinary()
 
@@ -147,8 +147,8 @@ func (ds *DataStorage) StoreItem(queueName string, item common.IItemMetaData) {
 }
 
 // Updates item metadata, affects cache only until flushed.
-func (ds *DataStorage) UpdateItem(queueName string, item common.IItemMetaData) {
-	itemId := makeItemId(queueName, item.GetId())
+func (ds *DataStorage) UpdateItem(svcName string, item common.IItemMetaData) {
+	itemId := makeItemId(svcName, item.GetId())
 	itemBody := item.ToBinary()
 	ds.cacheLock.Lock()
 	ds.itemCache[itemId] = itemBody
@@ -156,9 +156,9 @@ func (ds *DataStorage) UpdateItem(queueName string, item common.IItemMetaData) {
 }
 
 // Deletes item metadata and payload, affects cache only until flushed.
-func (ds *DataStorage) DeleteItem(queueName string, itemId string) {
-	id := makeItemId(queueName, itemId)
-	payloadId := makePayloadId(queueName, itemId)
+func (ds *DataStorage) DeleteItem(svcName string, itemId string) {
+	id := makeItemId(svcName, itemId)
+	payloadId := makePayloadId(svcName, itemId)
 	ds.cacheLock.Lock()
 	ds.itemCache[id] = nil
 	ds.payloadCache[payloadId] = ""
@@ -169,8 +169,8 @@ func (ds *DataStorage) DeleteItem(queueName string, itemId string) {
 // 1. Top level cache.
 // 2. Temp cache while data is getting flushed into db.
 // 3. If not found in cache, will do actually DB lookup.
-func (ds *DataStorage) GetPayload(queueName string, itemId string) string {
-	payloadId := makePayloadId(queueName, itemId)
+func (ds *DataStorage) GetPayload(svcName string, itemId string) string {
+	payloadId := makePayloadId(svcName, itemId)
 	ds.cacheLock.Lock()
 	payload, ok := ds.payloadCache[itemId]
 	if ok {
@@ -228,72 +228,72 @@ func (ds *DataStorage) FlushCache() {
 }
 
 // Returns new Iterator that must be closed!
-// Queue name used as a prefix to iterate over all item metadata that belongs to the specific queue.
-func (ds *DataStorage) IterQueue(queueName string) *ItemIterator {
+// Service name used as a prefix to iterate over all item metadata that belongs to the specific service.
+func (ds *DataStorage) IterService(svcName string) *ItemIterator {
 	ropts := levigo.NewReadOptions()
 	iter := ds.db.NewIterator(ropts)
-	prefix := []byte(makeItemId(queueName, ""))
+	prefix := []byte(makeItemId(svcName, ""))
 	return NewIter(iter, prefix)
 }
 
-const QUEUE_META_PREFIX = "qmeta:"
-const QUEUE_SETTINGS_PREFIX = "qsettings:"
+const SVC_META_PREFIX = "qmeta:"
+const SVC_SETTINGS_PREFIX = "qsettings:"
 
-// Read all available queues.
-func (ds *DataStorage) GetAllQueueMeta() []*common.QueueMetaInfo {
-	qmiList := make([]*common.QueueMetaInfo, 0, 1000)
-	qtPrefix := []byte(QUEUE_META_PREFIX)
+// Read all available services.
+func (ds *DataStorage) GetAllServiceMeta() []*common.ServiceMetaInfo {
+	qmiList := make([]*common.ServiceMetaInfo, 0, 1000)
+	qtPrefix := []byte(SVC_META_PREFIX)
 	ropts := levigo.NewReadOptions()
 	iter := ds.db.NewIterator(ropts)
 	iter.Seek(qtPrefix)
 	for iter.Valid() {
-		queueKey := iter.Key()
-		queueName := bytes.TrimPrefix(queueKey, qtPrefix)
+		svcKey := iter.Key()
+		svcName := bytes.TrimPrefix(svcKey, qtPrefix)
 
-		if len(queueKey) == len(queueName) {
+		if len(svcKey) == len(svcName) {
 			break
 		}
-		qmi, err := common.QueueInfoFromBinary(iter.Value())
+		smi, err := common.ServiceInfoFromBinary(iter.Value())
 		if err != nil {
-			log.Error("Coudn't read queue meta data because of: %s", err.Error())
+			log.Error("Coudn't read service meta data because of: %s", err.Error())
 			iter.Next()
 			continue
 		}
-		if qmi.Disabled {
-			log.Error("Qeueue is disabled. Skipping: %s", qmi.Name)
+		if smi.Disabled {
+			log.Error("Service is disabled. Skipping: %s", smi.Name)
 			iter.Next()
 			continue
 		}
-		qmiList = append(qmiList, qmi)
+		qmiList = append(qmiList, smi)
 		iter.Next()
 	}
 	return qmiList
 }
 
-func (ds *DataStorage) SaveQueueMeta(qmi *common.QueueMetaInfo) {
-	key := QUEUE_META_PREFIX + qmi.Name
+func (ds *DataStorage) SaveServiceMeta(qmi *common.ServiceMetaInfo) {
+	key := SVC_META_PREFIX + qmi.Name
 	wopts := levigo.NewWriteOptions()
 	ds.db.Put(wopts, []byte(key), qmi.ToBinary())
 }
 
-func makeSettingsKey(queueName string) []byte {
-	return []byte(QUEUE_SETTINGS_PREFIX + queueName)
+func makeSettingsKey(svcName string) []byte {
+	return []byte(SVC_SETTINGS_PREFIX + svcName)
 }
 
-// Read queue settings bases on queue name. Caller should profide correct settings structure to read binary data.
-func (ds *DataStorage) GetQueueSettings(settings interface{}, queueName string) error {
-	key := makeSettingsKey(queueName)
+// Read service settings bases on service name. Caller should profide correct settings structure to read binary data.
+func (ds *DataStorage) GetServiceSettings(settings interface{}, svcName string) error {
+	key := makeSettingsKey(svcName)
 	ropts := levigo.NewReadOptions()
 	data, _ := ds.db.Get(ropts, key)
 	if data == nil {
-		return qerrors.InvalidRequest("No queue settings found: " + queueName)
+		return svcerr.InvalidRequest("No service settings found: " + svcName)
 	}
 	err := util.StructFromBinary(settings, data)
 	return err
 }
 
-func (ds *DataStorage) SaveQueueSettings(queueName string, settings interface{}) {
-	key := makeSettingsKey(queueName)
+func (ds *DataStorage) SaveServiceSettings(svcName string, settings interface{}) {
+	key := makeSettingsKey(svcName)
 	wopts := levigo.NewWriteOptions()
 	data := util.StructToBinary(settings)
 	err := ds.db.Put(wopts, key, data)

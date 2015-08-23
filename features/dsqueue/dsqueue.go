@@ -4,8 +4,8 @@ import (
 	"firempq/common"
 	"firempq/db"
 	"firempq/defs"
-	"firempq/qerrors"
 	"firempq/structs"
+	"firempq/svcerr"
 	"firempq/util"
 	"github.com/op/go-logging"
 	"sort"
@@ -120,13 +120,13 @@ func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSe
 func NewDSQueue(database *db.DataStorage, queueName string, size int64) *DSQueue {
 	settings := NewDSQueueSettings(size)
 	queue := initDSQueue(database, queueName, settings)
-	queue.database.SaveQueueSettings(queueName, settings)
+	queue.database.SaveServiceSettings(queueName, settings)
 	return queue
 }
 
-func LoadDSQueue(database *db.DataStorage, queueName string) (common.IItemHandler, error) {
+func LoadDSQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
 	settings := new(DSQueueSettings)
-	err := database.GetQueueSettings(settings, queueName)
+	err := database.GetServiceSettings(settings, queueName)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (dsq *DSQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-func (dsq *DSQueue) GetType() defs.ItemHandlerType {
+func (dsq *DSQueue) GetType() defs.ServiceType {
 	return defs.HT_DOUBLE_SIDED_QUEUE
 }
 
@@ -155,7 +155,7 @@ func (dsq *DSQueue) GetType() defs.ItemHandlerType {
 func (dsq *DSQueue) Call(action string, params map[string]string) *common.ReturnData {
 	handler, ok := dsq.actionHandlers[action]
 	if !ok {
-		return common.NewRetDataError(qerrors.InvalidRequest("Unknown action: " + action))
+		return common.NewRetDataError(svcerr.InvalidRequest("Unknown action: " + action))
 	}
 	return handler(params)
 }
@@ -246,21 +246,21 @@ func (dsq *DSQueue) ReturnBack(params map[string]string) *common.ReturnData {
 func (dsq *DSQueue) DeleteById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_NOT_EXIST)
+		return common.NewRetDataError(svcerr.ERR_MSG_NOT_EXIST)
 	}
 
 	if dsq.inFlightHeap.ContainsId(msgId) {
 		if msg.DeliveryTs > 0 {
-			return common.NewRetDataError(qerrors.ERR_MSG_NOT_DELIVERED)
+			return common.NewRetDataError(svcerr.ERR_MSG_NOT_DELIVERED)
 		} else {
-			return common.NewRetDataError(qerrors.ERR_MSG_IS_LOCKED)
+			return common.NewRetDataError(svcerr.ERR_MSG_IS_LOCKED)
 		}
 	}
 
@@ -273,13 +273,13 @@ func (dsq *DSQueue) DeleteById(params map[string]string) *common.ReturnData {
 func (dsq *DSQueue) ForceDelete(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
 	if !dsq.deleteMessageById(msgId) {
-		return common.NewRetDataError(qerrors.ERR_MSG_NOT_EXIST)
+		return common.NewRetDataError(svcerr.ERR_MSG_NOT_EXIST)
 	}
 
 	return common.RETDATA_201OK
@@ -289,18 +289,18 @@ func (dsq *DSQueue) ForceDelete(params map[string]string) *common.ReturnData {
 func (dsq *DSQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	timeoutStr, ok := params[defs.PRM_TIMEOUT]
 
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_TIMEOUT_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_NOT_DEFINED)
 	}
 
 	timeout, terr := strconv.Atoi(timeoutStr)
 	if terr != nil || timeout < 0 || time.Duration(timeout) > defs.TIMEOUT_MAX_LOCK {
-		return common.NewRetDataError(qerrors.ERR_MSG_TIMEOUT_IS_WRONG)
+		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_IS_WRONG)
 	}
 
 	dsq.lock.Lock()
@@ -323,7 +323,7 @@ func (dsq *DSQueue) SetLockTimeout(params map[string]string) *common.ReturnData 
 func (dsq *DSQueue) DeleteLockedById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	dsq.lock.Lock()
@@ -342,7 +342,7 @@ func (dsq *DSQueue) DeleteLockedById(params map[string]string) *common.ReturnDat
 func (dsq *DSQueue) UnlockMessageById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	dsq.lock.Lock()
@@ -382,7 +382,7 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 		dsq.highPriorityBackMsgs.PushFront(msg.Id)
 	default:
 		log.Error("Error! Wrong pushAt value %d for message %s", msg.pushAt, msg.Id)
-		return qerrors.ERR_QUEUE_INTERNAL_ERROR
+		return svcerr.ERR_QUEUE_INTERNAL_ERROR
 	}
 	msg.DeliveryTs = 0
 	return nil
@@ -390,7 +390,7 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 
 func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) *common.ReturnData {
 	if _, ok := dsq.allMessagesMap[msg.Id]; ok {
-		return common.NewRetDataError(qerrors.ERR_ITEM_ALREADY_EXISTS)
+		return common.NewRetDataError(svcerr.ERR_ITEM_ALREADY_EXISTS)
 	}
 	queueLen := dsq.availableMsgs.Len()
 	dsq.allMessagesMap[msg.Id] = msg
@@ -426,12 +426,12 @@ func (dsq *DSQueue) push(msgData map[string]string, direction uint8) *common.Ret
 		var terr error = nil
 		deliveryInterval, terr = strconv.ParseInt(deliveryIntervalStr, 10, 0)
 		if terr != nil {
-			return common.NewRetDataError(qerrors.ERR_MSG_DELIVERY_INTERVAL_NOT_DEFINED)
+			return common.NewRetDataError(svcerr.ERR_MSG_DELIVERY_INTERVAL_NOT_DEFINED)
 		}
 	}
 	if deliveryInterval < 0 || deliveryInterval > int64(defs.TIMEOUT_MAX_DELIVERY) ||
 		dsq.settings.MsgTTL < int64(deliveryInterval) {
-		return common.NewRetDataError(qerrors.ERR_MSG_BAD_DELIVERY_TIMEOUT)
+		return common.NewRetDataError(svcerr.ERR_MSG_BAD_DELIVERY_TIMEOUT)
 	}
 	if deliveryInterval > 0 {
 		msg.DeliveryTs = util.Uts() + deliveryInterval
@@ -507,7 +507,7 @@ func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) *common.Retur
 
 	msg := dsq.popMetaMessage(direction, permanentPop)
 	if msg == nil {
-		return common.NewRetDataError(qerrors.ERR_QUEUE_EMPTY)
+		return common.NewRetDataError(svcerr.ERR_QUEUE_EMPTY)
 	}
 	retMsg := NewMsgItem(msg, dsq.getPayload(msg.Id))
 	if permanentPop {
@@ -519,7 +519,7 @@ func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) *common.Retur
 func (dsq *DSQueue) returnMessageTo(params map[string]string, place uint8) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	dsq.lock.Lock()
@@ -557,14 +557,14 @@ func (dsq *DSQueue) lockMessage(msg *DSQMessage) {
 func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMessage, error) {
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
-		return nil, qerrors.ERR_MSG_NOT_EXIST
+		return nil, svcerr.ERR_MSG_NOT_EXIST
 	} else if msg.DeliveryTs > 0 {
-		return nil, qerrors.ERR_MSG_NOT_DELIVERED
+		return nil, svcerr.ERR_MSG_NOT_DELIVERED
 	}
 
 	hi := dsq.inFlightHeap.PopById(msgId)
 	if hi == structs.EMPTY_HEAP_ITEM {
-		return nil, qerrors.ERR_MSG_NOT_LOCKED
+		return nil, svcerr.ERR_MSG_NOT_LOCKED
 	}
 
 	return msg, nil
@@ -613,7 +613,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMessage, place uint8) error {
 	if lim > 0 {
 		if lim <= msg.PopCount {
 			dsq.deleteMessageById(msg.Id)
-			return qerrors.ERR_MSG_POP_ATTEMPTS_EXCEEDED
+			return svcerr.ERR_MSG_POP_ATTEMPTS_EXCEEDED
 		}
 	}
 	msg.pushAt = place
@@ -732,7 +732,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (dsq *DSQueue) loadAllMessages() {
 	nowTs := util.Uts()
 	log.Info("Initializing queue: %s", dsq.queueName)
-	iter := dsq.database.IterQueue(dsq.queueName)
+	iter := dsq.database.IterService(dsq.queueName)
 	defer iter.Close()
 
 	msgs := MessageSlice{}
@@ -804,4 +804,4 @@ func (dsq *DSQueue) loadAllMessages() {
 	log.Debug("Messages in high prioity/unlocked back: %d", dsq.highPriorityBackMsgs.Len())
 }
 
-var _ common.IItemHandler = &DSQueue{}
+var _ common.ISvc = &DSQueue{}

@@ -4,8 +4,8 @@ import (
 	"firempq/common"
 	"firempq/db"
 	"firempq/defs"
-	"firempq/qerrors"
 	"firempq/structs"
+	"firempq/svcerr"
 	"firempq/util"
 	"github.com/op/go-logging"
 	"sort"
@@ -85,13 +85,13 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 func NewPQueue(database *db.DataStorage, queueName string, priorities int64, size int64) *PQueue {
 	settings := NewPQueueSettings(priorities, size)
 	queue := initPQueue(database, queueName, settings)
-	queue.database.SaveQueueSettings(queueName, settings)
+	queue.database.SaveServiceSettings(queueName, settings)
 	return queue
 }
 
-func LoadPQueue(database *db.DataStorage, queueName string) (common.IItemHandler, error) {
+func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
 	settings := new(PQueueSettings)
-	err := database.GetQueueSettings(settings, queueName)
+	err := database.GetServiceSettings(settings, queueName)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-func (pq *PQueue) GetType() defs.ItemHandlerType {
+func (pq *PQueue) GetType() defs.ServiceType {
 	return defs.HT_PRIORITY_QUEUE
 }
 
@@ -114,7 +114,7 @@ func (pq *PQueue) GetType() defs.ItemHandlerType {
 func (pq *PQueue) Call(action string, params map[string]string) *common.ReturnData {
 	handler, ok := pq.actionHandlers[action]
 	if !ok {
-		return common.NewRetDataError(qerrors.InvalidRequest("Unknown action: " + action))
+		return common.NewRetDataError(svcerr.InvalidRequest("Unknown action: " + action))
 	}
 	return handler(params)
 }
@@ -173,7 +173,7 @@ func (pq *PQueue) Push(msgData map[string]string) *common.ReturnData {
 
 func (pq *PQueue) storeMessage(msg *PQMessage, payload string) *common.ReturnData {
 	if _, ok := pq.allMessagesMap[msg.Id]; ok {
-		return common.NewRetDataError(qerrors.ERR_ITEM_ALREADY_EXISTS)
+		return common.NewRetDataError(svcerr.ERR_ITEM_ALREADY_EXISTS)
 	}
 	queueLen := pq.availableMsgs.Len()
 	pq.allMessagesMap[msg.Id] = msg
@@ -217,7 +217,7 @@ func (pq *PQueue) Pop(params map[string]string) *common.ReturnData {
 	pq.lock.Unlock()
 
 	if msg == nil {
-		return common.NewRetDataError(qerrors.ERR_QUEUE_EMPTY)
+		return common.NewRetDataError(svcerr.ERR_QUEUE_EMPTY)
 	}
 
 	retMsg := NewMsgItem(msg, pq.getPayload(msg.Id))
@@ -243,7 +243,7 @@ func (pq *PQueue) PopWait(params map[string]string) *common.ReturnData {
 			return common.NewRetDataError(err)
 		}
 		if timeout < 0 || timeout > 20000 {
-			return common.NewRetDataError(qerrors.ERR_MSG_TIMEOUT_IS_WRONG)
+			return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_IS_WRONG)
 		}
 	}
 
@@ -254,12 +254,12 @@ func (pq *PQueue) PopWait(params map[string]string) *common.ReturnData {
 			return common.NewRetDataError(err)
 		}
 		if limit < 1 || limit > MESSAGES_BATCH_SIZE_LIMIT {
-			return common.NewRetDataError(qerrors.ERR_MSG_LIMIT_IS_WRONG)
+			return common.NewRetDataError(svcerr.ERR_MSG_LIMIT_IS_WRONG)
 		}
 	}
 	msgItems := pq.popWaitItems(timeout, limit)
 	if len(msgItems) == 0 {
-		return common.NewRetDataError(qerrors.ERR_QUEUE_EMPTY)
+		return common.NewRetDataError(svcerr.ERR_QUEUE_EMPTY)
 	}
 
 	return common.NewRetData("OK", defs.CODE_200_OK, msgItems)
@@ -331,12 +331,12 @@ func (pq *PQueue) lockMessage(msg *PQMessage) {
 func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, error) {
 	msg, ok := pq.allMessagesMap[msgId]
 	if !ok {
-		return nil, qerrors.ERR_MSG_NOT_EXIST
+		return nil, svcerr.ERR_MSG_NOT_EXIST
 	}
 
 	hi := pq.inFlightHeap.PopById(msgId)
 	if hi == structs.EMPTY_HEAP_ITEM {
-		return nil, qerrors.ERR_MSG_NOT_LOCKED
+		return nil, svcerr.ERR_MSG_NOT_LOCKED
 	}
 
 	return msg, nil
@@ -345,17 +345,17 @@ func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, error) {
 func (pq *PQueue) DeleteById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 
 	if pq.inFlightHeap.ContainsId(msgId) {
-		return common.NewRetDataError(qerrors.ERR_MSG_IS_LOCKED)
+		return common.NewRetDataError(svcerr.ERR_MSG_IS_LOCKED)
 	}
 
 	if !pq.deleteMessage(msgId) {
-		return common.NewRetDataError(qerrors.ERR_MSG_NOT_EXIST)
+		return common.NewRetDataError(svcerr.ERR_MSG_NOT_EXIST)
 	}
 
 	return common.RETDATA_201OK
@@ -365,18 +365,18 @@ func (pq *PQueue) DeleteById(params map[string]string) *common.ReturnData {
 func (pq *PQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	timeoutStr, ok := params[defs.PRM_TIMEOUT]
 
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_TIMEOUT_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_NOT_DEFINED)
 	}
 
 	timeout, terr := strconv.Atoi(timeoutStr)
 	if terr != nil || timeout < 0 || timeout > defs.TIMEOUT_MAX_LOCK {
-		return common.NewRetDataError(qerrors.ERR_MSG_TIMEOUT_IS_WRONG)
+		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_IS_WRONG)
 	}
 
 	pq.lock.Lock()
@@ -399,7 +399,7 @@ func (pq *PQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
 func (pq *PQueue) DeleteLockedById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	pq.lock.Lock()
@@ -416,7 +416,7 @@ func (pq *PQueue) DeleteLockedById(params map[string]string) *common.ReturnData 
 func (pq *PQueue) UnlockMessageById(params map[string]string) *common.ReturnData {
 	msgId, ok := params[defs.PRM_ID]
 	if !ok {
-		return common.NewRetDataError(qerrors.ERR_MSG_ID_NOT_DEFINED)
+		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	pq.lock.Lock()
@@ -461,7 +461,7 @@ func (pq *PQueue) returnToFront(msg *PQMessage) error {
 	if lim > 0 {
 		if lim <= msg.PopCount {
 			pq.deleteMessage(msg.Id)
-			return qerrors.ERR_MSG_POP_ATTEMPTS_EXCEEDED
+			return svcerr.ERR_MSG_POP_ATTEMPTS_EXCEEDED
 		}
 	}
 	msg.UnlockTs = 0
@@ -560,7 +560,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (pq *PQueue) loadAllMessages() {
 	nowTs := util.Uts()
 	log.Info("Initializing queue: %s", pq.queueName)
-	iter := pq.database.IterQueue(pq.queueName)
+	iter := pq.database.IterService(pq.queueName)
 	defer iter.Close()
 
 	msgs := MessageSlice{}
@@ -605,4 +605,4 @@ func (pq *PQueue) loadAllMessages() {
 	log.Debug("Messages in flight: %d", pq.inFlightHeap.Len())
 }
 
-var _ common.IItemHandler = &PQueue{}
+var _ common.ISvc = &PQueue{}

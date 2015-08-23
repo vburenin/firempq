@@ -8,5 +8,5 @@ const (
 	CMD_QUIT       = "QUIT"
 	CMD_UNIX_TS    = "TS"
 	CMD_SHOW_ALL   = "LISTALL"
-	CMD_SET        = "SET"
+	CMD_SETCTX     = "SETCTX"
 )
