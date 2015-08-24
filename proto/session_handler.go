@@ -44,6 +44,9 @@ func NewSessionHandler(conn *bufio.ReadWriter, services *facade.ServiceFacade) *
 	}
 	sh.mainHandlers[CMD_QUIT] = sh.quitHandler
 	sh.mainHandlers[CMD_SETCTX] = sh.setCtxHandler
+	sh.mainHandlers[CMD_CREATE_SVC] = sh.createServiceHandler
+	sh.mainHandlers[CMD_DROP_SVC] = sh.dropServiceHandler
+	sh.mainHandlers[CMD_LIST] = sh.listServicesHandler
 	return sh
 }
 
@@ -86,6 +89,9 @@ func (s *SessionHandler) readCommand() ([]string, error) {
 func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	var resp common.IResponse
 	var err error
+	if len(cmdTokens) == 0 {
+		return s.writeResponse(common.RESP_OK)
+	}
 	cmd := cmdTokens[0]
 	tokens := cmdTokens[1:]
 	handler, ok := s.mainHandlers[cmd]
@@ -112,9 +118,37 @@ func (s *SessionHandler) writeResponse(resp common.IResponse) error {
 	return nil
 }
 
+func (s *SessionHandler) createServiceHandler(tokens []string) (common.IResponse, error) {
+	if len(tokens) < 2 {
+		return svcerr.InvalidRequest("At least service type and name should be provided"), nil
+	}
+	svcName := tokens[0]
+	svcType := tokens[1]
+
+	_, exists := s.svcs.GetService(svcName)
+	if exists {
+		return svcerr.ConflictRequest("Service exists already"), nil
+	}
+
+	resp := s.svcs.CreateService(svcType, svcName, make(map[string]string))
+	return common.TranslateError(resp), nil
+}
+
+func (s *SessionHandler) dropServiceHandler(tokens []string) (common.IResponse, error) {
+	if len(tokens) == 0 {
+		return svcerr.InvalidRequest("Service name must be provided"), nil
+	}
+	if len(tokens) > 1 {
+		return svcerr.InvalidRequest("DROP accept service name only"), nil
+	}
+	svcName := tokens[0]
+	res := s.svcs.DropService(svcName)
+	return common.TranslateError(res), nil
+}
+
 func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 1 {
-		return svcerr.InvalidRequest("SETCTX accept only service name to be provided"), nil
+		return svcerr.InvalidRequest("SETCTX accept service name only"), nil
 	}
 	if len(tokens) == 0 {
 		return svcerr.InvalidRequest("Service name must be provided"), nil
@@ -125,7 +159,7 @@ func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error
 		return svcerr.ERR_NO_SVC, nil
 	}
 	s.ctx = svc
-	return common.NewStrResponse("OK"), nil
+	return common.RESP_OK, nil
 }
 
 func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) {
@@ -133,14 +167,33 @@ func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) 
 		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
 	}
 	s.active = false
-	return common.NewStrResponse("OK"), nil
+	return common.RESP_OK, nil
+}
+
+func (s *SessionHandler) listServicesHandler(tokens []string) (common.IResponse, error) {
+	svcPrefix := ""
+	svcType := ""
+	if len(tokens) == 1 {
+		svcPrefix = tokens[0]
+	} else if len(tokens) == 2 {
+		svcType = tokens[1]
+	} else if len(tokens) > 2 {
+		return svcerr.InvalidRequest("LIST accept service name prefix and service type only"), nil
+	}
+
+	list, err := s.svcs.ListServices(svcPrefix, svcType)
+	if err != nil {
+		return common.TranslateError(err), nil
+	}
+	resp := common.NewStrArrayResponse(list)
+	return resp, nil
 }
 
 func pingHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
 		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
 	}
-	return common.NewStrResponse("PONG"), nil
+	return common.RESP_PONG, nil
 }
 
 func tsHandler(tokens []string) (common.IResponse, error) {
