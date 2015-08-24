@@ -3,6 +3,8 @@ package svcerr
 import "strconv"
 
 var CODE_INVALID_REQ int64 = 400
+var CODE_CONFLICT_REQ int64 = 409
+var CODE_SERVER_ERR int64 = 500
 
 type ServerError struct {
 	ErrorText string
@@ -15,6 +17,14 @@ func NewError(errorText string, errorCode int64) *ServerError {
 
 func InvalidRequest(errorText string) *ServerError {
 	return &ServerError{ErrorText: errorText, ErrorCode: CODE_INVALID_REQ}
+}
+
+func ConflictRequest(errorText string) *ServerError {
+	return &ServerError{ErrorText: errorText, ErrorCode: CODE_CONFLICT_REQ}
+}
+
+func ServerSideError(errorText string) *ServerError {
+	return &ServerError{ErrorText: errorText, ErrorCode: CODE_SERVER_ERR}
 }
 
 func (e *ServerError) Error() string {
@@ -31,8 +41,8 @@ var ERR_LARGE_REQ = &ServerError{"Too large request!", CODE_INVALID_REQ}
 var ERR_UNKNOW_CMD = &ServerError{"Unknown CMD", CODE_INVALID_REQ}
 
 var ERR_NO_SVC = &ServerError{"Service is not created", CODE_INVALID_REQ}
-var ERR_SVC_UNKNOWN_TYPE = &ServerError{"Unknown queue type", CODE_INVALID_REQ}
-var ERR_SVC_ALREADY_EXISTS = &ServerError{"Queue exists already", CODE_INVALID_REQ}
+var ERR_SVC_UNKNOWN_TYPE = &ServerError{"Unknown service type", CODE_INVALID_REQ}
+var ERR_SVC_ALREADY_EXISTS = &ServerError{"Service exists already", CODE_CONFLICT_REQ}
 var ERR_QUEUE_EMPTY = &ServerError{"Queue is empty", CODE_INVALID_REQ}
 var ERR_ITEM_ALREADY_EXISTS = &ServerError{"Message exists already", CODE_INVALID_REQ}
 var ERR_UNEXPECTED_PRIORITY = &ServerError{"Incrorrect priority", CODE_INVALID_REQ}
