@@ -69,6 +69,7 @@ func (s *ServiceFacade) DropService(svcName string) error {
 		return svcerr.ERR_NO_SVC
 	}
 	delete(s.allSvcs, svcName)
+	s.database.DeleteServiceData(svcName)
 	return nil
 }
 
