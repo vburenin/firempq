@@ -110,6 +110,10 @@ func (pq *PQueue) GetType() defs.ServiceType {
 	return defs.HT_PRIORITY_QUEUE
 }
 
+func (pq *PQueue) GetTypeName() string {
+	return common.STYPE_PRIORITY_QUEUE
+}
+
 // Queue custom specific handler for the queue type specific features.
 func (pq *PQueue) Call(action string, params map[string]string) *common.ReturnData {
 	handler, ok := pq.actionHandlers[action]
@@ -560,7 +564,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (pq *PQueue) loadAllMessages() {
 	nowTs := util.Uts()
 	log.Info("Initializing queue: %s", pq.queueName)
-	iter := pq.database.IterService(pq.queueName)
+	iter := pq.database.IterServiceItems(pq.queueName)
 	defer iter.Close()
 
 	msgs := MessageSlice{}

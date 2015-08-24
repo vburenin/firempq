@@ -151,6 +151,10 @@ func (dsq *DSQueue) GetType() defs.ServiceType {
 	return defs.HT_DOUBLE_SIDED_QUEUE
 }
 
+func (dsq *DSQueue) GetTypeName() string {
+	return common.STYPE_DOUBLE_SIDED_QUEUE
+}
+
 // Queue custom specific handler for the queue type specific features.
 func (dsq *DSQueue) Call(action string, params map[string]string) *common.ReturnData {
 	handler, ok := dsq.actionHandlers[action]
@@ -732,7 +736,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (dsq *DSQueue) loadAllMessages() {
 	nowTs := util.Uts()
 	log.Info("Initializing queue: %s", dsq.queueName)
-	iter := dsq.database.IterService(dsq.queueName)
+	iter := dsq.database.IterServiceItems(dsq.queueName)
 	defer iter.Close()
 
 	msgs := MessageSlice{}

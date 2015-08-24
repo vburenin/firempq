@@ -18,6 +18,7 @@ type IItem interface {
 type ISvc interface {
 	GetStatus() map[string]interface{}
 	GetType() defs.ServiceType
+	GetTypeName() string
 	Call(action string, params map[string]string) *ReturnData
 	Clear()
 	Close()
