@@ -18,6 +18,9 @@ import (
 	"time"
 )
 
+var READ_OPTS = levigo.NewReadOptions()
+var WRITE_OPTS = levigo.NewWriteOptions()
+
 var log = logging.MustGetLogger("ldb")
 
 // Item iterator built on top of LevelDB.
@@ -72,7 +75,6 @@ type DataStorage struct {
 	dbName          string            // LevelDB database name.
 	itemCache       map[string][]byte // Active cache for item metadata.
 	payloadCache    map[string]string // Active cache for item payload.
-	tmpItemCache    map[string][]byte // Temporary map of cached data while it is in process of flushing into DB.
 	tmpPayloadCache map[string]string // Temporary map of cached payloads while it is in process of flushing into DB.
 	cacheLock       sync.Mutex        // Used for caches access.
 	flushLock       sync.Mutex        // Used to prevent double flush.
@@ -84,7 +86,6 @@ func NewDataStorage(dbName string) *DataStorage {
 		dbName:          dbName,
 		itemCache:       make(map[string][]byte),
 		payloadCache:    make(map[string]string),
-		tmpItemCache:    make(map[string][]byte),
 		tmpPayloadCache: make(map[string]string),
 		closed:          false,
 	}
@@ -115,12 +116,12 @@ func (ds *DataStorage) periodicCacheFlush() {
 
 // Item payload Id.
 func makePayloadId(svcName, id string) string {
-	return "p:" + svcName + ":" + id
+	return svcName + ":p:" + id
 }
 
 // Item Id.
 func makeItemId(svcName, id string) string {
-	return "m:" + svcName + ":" + id
+	return svcName + ":m:" + id
 }
 
 // Item will be stored into cache including payload.
@@ -165,6 +166,28 @@ func (ds *DataStorage) DeleteItem(svcName string, itemId string) {
 	ds.cacheLock.Unlock()
 }
 
+func (ds *DataStorage) DeleteServiceData(svcName string) {
+
+	counter := 0
+	iter := ds.IterServiceItems(svcName)
+	wb := levigo.NewWriteBatch()
+
+	for iter.Valid() {
+		if counter < 1000 {
+			wb.Delete(iter.Key)
+			counter++
+		} else {
+			counter = 0
+			ds.db.Write(WRITE_OPTS, wb)
+		}
+	}
+
+	wb.Delete([]byte(SVC_META_PREFIX + svcName))
+	wb.Delete([]byte(SVC_SETTINGS_PREFIX + svcName))
+
+	ds.db.Write(WRITE_OPTS, wb)
+}
+
 // Returns item payload. Three places are checked:
 // 1. Top level cache.
 // 2. Temp cache while data is getting flushed into db.
@@ -183,8 +206,7 @@ func (ds *DataStorage) GetPayload(svcName string, itemId string) string {
 		return payload
 	}
 	ds.cacheLock.Unlock()
-	ropts := levigo.NewReadOptions()
-	value, _ := ds.db.Get(ropts, []byte(payloadId))
+	value, _ := ds.db.Get(READ_OPTS, []byte(payloadId))
 	return string(value)
 }
 
@@ -193,14 +215,14 @@ func (ds *DataStorage) FlushCache() {
 		return
 	}
 	ds.cacheLock.Lock()
-	ds.tmpItemCache = ds.itemCache
+	tmpItemCache := ds.itemCache
 	ds.tmpPayloadCache = ds.payloadCache
 	ds.itemCache = make(map[string][]byte)
 	ds.payloadCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
 	wb := levigo.NewWriteBatch()
-	for k, v := range ds.tmpItemCache {
+	for k, v := range tmpItemCache {
 		key := []byte(k)
 		if v == nil {
 			wb.Delete(key)
@@ -218,33 +240,29 @@ func (ds *DataStorage) FlushCache() {
 		}
 	}
 
-	wopts := levigo.NewWriteOptions()
-	ds.db.Write(wopts, wb)
+	ds.db.Write(WRITE_OPTS, wb)
 
 	ds.cacheLock.Lock()
-	ds.tmpItemCache = make(map[string][]byte)
 	ds.tmpPayloadCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 }
 
 // Returns new Iterator that must be closed!
 // Service name used as a prefix to iterate over all item metadata that belongs to the specific service.
-func (ds *DataStorage) IterService(svcName string) *ItemIterator {
-	ropts := levigo.NewReadOptions()
-	iter := ds.db.NewIterator(ropts)
+func (ds *DataStorage) IterServiceItems(svcName string) *ItemIterator {
+	iter := ds.db.NewIterator(READ_OPTS)
 	prefix := []byte(makeItemId(svcName, ""))
 	return NewIter(iter, prefix)
 }
 
-const SVC_META_PREFIX = "qmeta:"
-const SVC_SETTINGS_PREFIX = "qsettings:"
+const SVC_META_PREFIX = ":meta:"
+const SVC_SETTINGS_PREFIX = ":conf:"
 
 // Read all available services.
 func (ds *DataStorage) GetAllServiceMeta() []*common.ServiceMetaInfo {
 	qmiList := make([]*common.ServiceMetaInfo, 0, 1000)
 	qtPrefix := []byte(SVC_META_PREFIX)
-	ropts := levigo.NewReadOptions()
-	iter := ds.db.NewIterator(ropts)
+	iter := ds.db.NewIterator(READ_OPTS)
 	iter.Seek(qtPrefix)
 	for iter.Valid() {
 		svcKey := iter.Key()
@@ -272,8 +290,7 @@ func (ds *DataStorage) GetAllServiceMeta() []*common.ServiceMetaInfo {
 
 func (ds *DataStorage) SaveServiceMeta(qmi *common.ServiceMetaInfo) {
 	key := SVC_META_PREFIX + qmi.Name
-	wopts := levigo.NewWriteOptions()
-	ds.db.Put(wopts, []byte(key), qmi.ToBinary())
+	ds.db.Put(WRITE_OPTS, []byte(key), qmi.ToBinary())
 }
 
 func makeSettingsKey(svcName string) []byte {
@@ -283,8 +300,7 @@ func makeSettingsKey(svcName string) []byte {
 // Read service settings bases on service name. Caller should profide correct settings structure to read binary data.
 func (ds *DataStorage) GetServiceSettings(settings interface{}, svcName string) error {
 	key := makeSettingsKey(svcName)
-	ropts := levigo.NewReadOptions()
-	data, _ := ds.db.Get(ropts, key)
+	data, _ := ds.db.Get(READ_OPTS, key)
 	if data == nil {
 		return svcerr.InvalidRequest("No service settings found: " + svcName)
 	}
@@ -294,9 +310,8 @@ func (ds *DataStorage) GetServiceSettings(settings interface{}, svcName string) 
 
 func (ds *DataStorage) SaveServiceSettings(svcName string, settings interface{}) {
 	key := makeSettingsKey(svcName)
-	wopts := levigo.NewWriteOptions()
 	data := util.StructToBinary(settings)
-	err := ds.db.Put(wopts, key, data)
+	err := ds.db.Put(WRITE_OPTS, key, data)
 	if err != nil {
 		log.Error("Failed to save settings: %s", err.Error())
 	}
