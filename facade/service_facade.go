@@ -5,6 +5,7 @@ import (
 	"firempq/db"
 	"firempq/svcerr"
 	"github.com/op/go-logging"
+	"strings"
 	"sync"
 )
 
@@ -71,6 +72,27 @@ func (s *ServiceFacade) DropService(svcName string) error {
 	delete(s.allSvcs, svcName)
 	s.database.DeleteServiceData(svcName)
 	return nil
+}
+
+func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) ([]string, error) {
+
+	if svcType != "" {
+		_, ok := SVC_CREATOR[svcType]
+		if !ok {
+			return nil, svcerr.ERR_SVC_UNKNOWN_TYPE
+		}
+	}
+
+	services := make([]string, 0)
+	for svcName, svc := range s.allSvcs {
+		if svcType != "" && svcType != svc.GetTypeName() {
+			continue
+		}
+		if svcPrefix == "?" || strings.HasPrefix(svcName, svcPrefix) {
+			services = append(services, svcName+" "+svc.GetTypeName())
+		}
+	}
+	return services, nil
 }
 
 func (s *ServiceFacade) GetService(name string) (common.ISvc, bool) {
