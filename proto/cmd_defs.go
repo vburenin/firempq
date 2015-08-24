@@ -7,6 +7,6 @@ const (
 	CMD_SVC_STATS  = "STATS"
 	CMD_QUIT       = "QUIT"
 	CMD_UNIX_TS    = "TS"
-	CMD_SHOW_ALL   = "LISTALL"
+	CMD_LIST       = "LIST"
 	CMD_SETCTX     = "SETCTX"
 )
