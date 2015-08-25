@@ -54,8 +54,9 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params map
 	if !ok {
 		return svcerr.ERR_SVC_UNKNOWN_TYPE
 	}
-	smeta := common.NewServiceMetaInfo(svcType, 0, svcName)
-	s.database.SaveServiceMeta(smeta)
+
+	metaInfo := common.NewServiceMetaInfo(svcType, 0, svcName)
+	s.database.SaveServiceMeta(metaInfo)
 
 	s.allSvcs[svcName] = svcCrt(svcName, params)
 
@@ -65,10 +66,11 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params map
 func (s *ServiceFacade) DropService(svcName string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	_, ok := s.allSvcs[svcName]
+	svc, ok := s.allSvcs[svcName]
 	if !ok {
 		return svcerr.ERR_NO_SVC
 	}
+	svc.Close()
 	delete(s.allSvcs, svcName)
 	s.database.DeleteServiceData(svcName)
 	return nil
