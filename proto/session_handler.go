@@ -50,6 +50,7 @@ func NewSessionHandler(conn *bufio.ReadWriter, services *facade.ServiceFacade) *
 	return sh
 }
 
+// Connection dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
 	s.writeResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
@@ -66,6 +67,7 @@ func (s *SessionHandler) DispatchConn() {
 	s.conn.Flush()
 }
 
+// Command reader and tokenization.
 func (s *SessionHandler) readCommand() ([]string, error) {
 	data, err := s.conn.ReadString(ENDL_BYTE)
 
@@ -86,6 +88,9 @@ func (s *SessionHandler) readCommand() ([]string, error) {
 	return tokens, nil
 }
 
+// Basic token processing that looks for global commands,
+// if there is no token match it will look into current context
+// to see if there is a processor for the rest of the tokens.
 func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	var resp common.IResponse
 	var err error
@@ -106,6 +111,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	return s.writeResponse(resp)
 }
 
+// Writes IResponse into connection.
 func (s *SessionHandler) writeResponse(resp common.IResponse) error {
 
 	if _, err := s.conn.WriteString(resp.GetResponse()); err != nil {
@@ -118,6 +124,7 @@ func (s *SessionHandler) writeResponse(resp common.IResponse) error {
 	return nil
 }
 
+// Handler that creates a service.
 func (s *SessionHandler) createServiceHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) < 2 {
 		return svcerr.InvalidRequest("At least service type and name should be provided"), nil
@@ -134,6 +141,7 @@ func (s *SessionHandler) createServiceHandler(tokens []string) (common.IResponse
 	return common.TranslateError(resp), nil
 }
 
+// Drop service.
 func (s *SessionHandler) dropServiceHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) == 0 {
 		return svcerr.InvalidRequest("Service name must be provided"), nil
@@ -146,6 +154,7 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) (common.IResponse, 
 	return common.TranslateError(res), nil
 }
 
+// Context changer.
 func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 1 {
 		return svcerr.InvalidRequest("SETCTX accept service name only"), nil
@@ -162,6 +171,7 @@ func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error
 	return common.RESP_OK, nil
 }
 
+// Stops the main loop on QUIT.
 func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
 		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
@@ -170,6 +180,7 @@ func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) 
 	return common.RESP_OK, nil
 }
 
+// List all active services.
 func (s *SessionHandler) listServicesHandler(tokens []string) (common.IResponse, error) {
 	svcPrefix := ""
 	svcType := ""
@@ -189,6 +200,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) (common.IResponse,
 	return resp, nil
 }
 
+// Ping responder.
 func pingHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
 		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
@@ -196,6 +208,7 @@ func pingHandler(tokens []string) (common.IResponse, error) {
 	return common.RESP_PONG, nil
 }
 
+// Returns current server unix time stamp in milliseconds.
 func tsHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
 		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
