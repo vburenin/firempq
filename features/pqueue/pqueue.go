@@ -150,11 +150,17 @@ func (pq *PQueue) Clear() {
 
 func (pq *PQueue) Close() {
 	pq.lock.Lock()
+	defer pq.lock.Unlock()
 	if pq.workDone {
 		return
 	}
 	pq.workDone = true
-	pq.lock.Unlock()
+}
+
+func (pq *PQueue) IsClosed() bool {
+	pq.lock.Lock()
+	defer pq.lock.Unlock()
+	return pq.workDone
 }
 
 // Push message to the queue.

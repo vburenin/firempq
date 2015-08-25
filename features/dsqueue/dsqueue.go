@@ -191,11 +191,17 @@ func (dsq *DSQueue) Clear() {
 
 func (dsq *DSQueue) Close() {
 	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
 	if dsq.workDone {
 		return
 	}
 	dsq.workDone = true
-	dsq.lock.Unlock()
+}
+
+func (dsq *DSQueue) IsClosed() bool {
+	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
+	return dsq.workDone
 }
 
 // Push message to the queue.

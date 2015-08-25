@@ -16,6 +16,7 @@ type IItem interface {
 }
 
 type ISvc interface {
+	IsClosed() bool
 	GetStatus() map[string]interface{}
 	GetType() defs.ServiceType
 	GetTypeName() string
