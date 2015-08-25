@@ -75,6 +75,8 @@ func (s *ServiceFacade) DropService(svcName string) error {
 }
 
 func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) ([]string, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if svcType != "" {
 		_, ok := SVC_CREATOR[svcType]
