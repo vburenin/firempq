@@ -5,12 +5,12 @@ import (
 )
 
 const (
-	STYPE_PRIORITY_QUEUE      = "priority_queue" // Highest priority goes first.
-	STYPE_FIFO_QUEUE          = "fifo_queue"     // Standard FIFO
-	STYPE_DOUBLE_SIDED_QUEUE  = "ds_queue"       // Double sided queue
-	STYPE_FAIR_PRIORITY_QUEUE = "fair_queue"     // POPs are fairly distributed across all priorities.
-	STYPE_COUNTERS            = "counters"       // Atomic counters.
-	STYPE_SEQUENCE_READ       = "seqreader"      // Data to read in sequential order.
+	STYPE_PRIORITY_QUEUE      = "pqueue"    // Highest priority goes first.
+	STYPE_DOUBLE_SIDED_QUEUE  = "dsqueue"   // Double sided queue
+	STYPE_FIFO_QUEUE          = "fifoqueue" // Standard FIFO
+	STYPE_FAIR_PRIORITY_QUEUE = "fairqueue" // POPs are fairly distributed across all priorities.
+	STYPE_COUNTERS            = "counters"  // Atomic counters.
+	STYPE_SEQUENCE_READ       = "seqreader" // Data to read in sequential order.
 )
 
 type ServiceMetaInfo struct {
