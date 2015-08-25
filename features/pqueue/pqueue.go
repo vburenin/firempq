@@ -85,13 +85,13 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 func NewPQueue(database *db.DataStorage, queueName string, priorities int64, size int64) *PQueue {
 	settings := NewPQueueSettings(priorities, size)
 	queue := initPQueue(database, queueName, settings)
-	queue.database.SaveServiceSettings(queueName, settings)
+	queue.database.SaveServiceConfig(queueName, settings)
 	return queue
 }
 
 func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
 	settings := new(PQueueSettings)
-	err := database.GetServiceSettings(settings, queueName)
+	err := database.GetServiceConfig(settings, queueName)
 	if err != nil {
 		return nil, err
 	}

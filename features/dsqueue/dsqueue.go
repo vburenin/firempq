@@ -120,13 +120,13 @@ func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSe
 func NewDSQueue(database *db.DataStorage, queueName string, size int64) *DSQueue {
 	settings := NewDSQueueSettings(size)
 	queue := initDSQueue(database, queueName, settings)
-	queue.database.SaveServiceSettings(queueName, settings)
+	queue.database.SaveServiceConfig(queueName, settings)
 	return queue
 }
 
 func LoadDSQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
 	settings := new(DSQueueSettings)
-	err := database.GetServiceSettings(settings, queueName)
+	err := database.GetServiceConfig(settings, queueName)
 	if err != nil {
 		return nil, err
 	}

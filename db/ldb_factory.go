@@ -4,9 +4,10 @@ import (
 	"sync"
 )
 
-var database *DataStorage = nil
+var database *DataStorage
 var lock sync.Mutex
 
+// GetDatabase returns DataStorage singleton.
 func GetDatabase() *DataStorage {
 	lock.Lock()
 	defer lock.Unlock()
