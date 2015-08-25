@@ -171,12 +171,17 @@ func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error
 	return common.RESP_OK, nil
 }
 
+// Set stop active flag to false that will case an exit from the processing loop.
+func (s *SessionHandler) Stop() {
+	s.active = false
+}
+
 // Stops the main loop on QUIT.
 func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
 		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
 	}
-	s.active = false
+	s.Stop()
 	return common.RESP_OK, nil
 }
 
