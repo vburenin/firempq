@@ -17,7 +17,8 @@ var SVC_CREATOR = map[string](CreateFactoryFunc){
 }
 
 var SVC_LOADER = map[string](DataLoaderFunc){
-	common.STYPE_PRIORITY_QUEUE: pqueue.LoadPQueue,
+	common.STYPE_PRIORITY_QUEUE:     pqueue.LoadPQueue,
+	common.STYPE_DOUBLE_SIDED_QUEUE: dsqueue.LoadDSQueue,
 }
 
 var facade *ServiceFacade
