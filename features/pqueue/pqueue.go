@@ -174,6 +174,28 @@ func makeUnknownParamResponse(paramName string) *common.ReturnData {
 	return common.NewRetDataError(err)
 }
 
+func getMessageIdOnly(params []string) (string, *common.ReturnData) {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return "", makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return "", common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
+		return "", common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
+	}
+	return msgId, nil
+}
+
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
 func (pq *PQueue) Push(params []string) *common.ReturnData {
@@ -384,23 +406,9 @@ func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, error) {
 }
 
 func (pq *PQueue) DeleteById(params []string) *common.ReturnData {
-	var err error
-	var msgId string
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = util.ParseStringParam(params, 1, 128)
-		default:
-			return makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return common.NewRetDataError(err)
-		}
-	}
-
-	if len(msgId) == 0 {
-		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
+	msgId, retData := getMessageIdOnly(params)
+	if retData != nil {
+		return retData
 	}
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
@@ -462,29 +470,15 @@ func (pq *PQueue) SetLockTimeout(params []string) *common.ReturnData {
 
 // Delete locked message by id.
 func (pq *PQueue) DeleteLockedById(params []string) *common.ReturnData {
-	var err error
-	var msgId string
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = util.ParseStringParam(params, 1, 128)
-		default:
-			return makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return common.NewRetDataError(err)
-		}
-	}
-
-	if len(msgId) == 0 {
-		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
+	msgId, retData := getMessageIdOnly(params)
+	if retData != nil {
+		return retData
 	}
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 
-	_, err = pq.unflightMessage(msgId)
+	_, err := pq.unflightMessage(msgId)
 	if err != nil {
 		return common.NewRetDataError(err)
 	}
@@ -493,31 +487,17 @@ func (pq *PQueue) DeleteLockedById(params []string) *common.ReturnData {
 }
 
 func (pq *PQueue) UnlockMessageById(params []string) *common.ReturnData {
-	var err error
-	var msgId string
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = util.ParseStringParam(params, 1, 128)
-		default:
-			return makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return common.NewRetDataError(err)
-		}
-	}
-
-	if len(msgId) == 0 {
-		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
+	msgId, retData := getMessageIdOnly(params)
+	if retData != nil {
+		return retData
 	}
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 
 	// Make sure message exists.
-	msg, e := pq.unflightMessage(msgId)
-	if e != nil {
+	msg, err := pq.unflightMessage(msgId)
+	if err != nil {
 		return common.NewRetDataError(err)
 	}
 	// Message exists, push it into the front of the queue.
