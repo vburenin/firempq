@@ -2,7 +2,6 @@ package dsqueue
 
 import (
 	"firempq/db"
-	"firempq/defs"
 	"testing"
 	"time"
 )
@@ -19,26 +18,22 @@ func TestDelete(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "data1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "data2",
-		defs.PRM_PAYLOAD: "p2"})
+	q.PushFront([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
+	q.PushFront([]string{PRM_ID, "data2", PRM_PAYLOAD, "p2"})
 
-	q.DeleteById(map[string]string{defs.PRM_ID: "data1"})
+	q.DeleteById([]string{PRM_ID, "data1"})
 
 	pop_msg1 := q.PopLockFront(nil).Items[0]
 	if pop_msg1.GetId() != "data2" {
 		t.Error("Unexpected id. Expected 'data2' got: " + pop_msg1.GetId())
 	}
 
-	err := q.DeleteById(map[string]string{defs.PRM_ID: "data1"})
+	err := q.DeleteById([]string{PRM_ID, "data1"})
 	if err.Err == nil {
 		t.Error("Locked message war deleted by 'DeleteById'")
 	}
 
-	err = q.DeleteLockedById(map[string]string{defs.PRM_ID: pop_msg1.GetId()})
+	err = q.DeleteLockedById([]string{PRM_ID, pop_msg1.GetId()})
 	if err.Err != nil {
 		t.Error("Failed to delete Locked message")
 	}
@@ -50,12 +45,8 @@ func TestPushFront(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "data1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "data2",
-		defs.PRM_PAYLOAD: "p2"})
+	q.PushFront([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
+	q.PushFront([]string{PRM_ID, "data2", PRM_PAYLOAD, "p2"})
 
 	pop_msg1 := q.PopFront(nil).Items[0]
 	pop_msg2 := q.PopFront(nil).Items[0]
@@ -74,13 +65,8 @@ func TestPushFrontDelayed(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "data1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushFront(map[string]string{
-		defs.PRM_ID:                "data2",
-		defs.PRM_DELIVERY_INTERVAL: "100",
-		defs.PRM_PAYLOAD:           "p2"})
+	q.PushFront([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
+	q.PushFront([]string{PRM_ID, "data2", PRM_DELIVERY_DELAY, "100", PRM_PAYLOAD, "p2"})
 
 	time.Sleep(50 * time.Millisecond)
 	pop_msg1 := q.PopFront(nil).Items[0]
@@ -101,12 +87,8 @@ func TestPushBack(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushBack(map[string]string{
-		defs.PRM_ID:      "data1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushBack(map[string]string{
-		defs.PRM_ID:      "data2",
-		defs.PRM_PAYLOAD: "p2"})
+	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
+	q.PushBack([]string{PRM_ID, "data2", PRM_PAYLOAD, "p2"})
 
 	pop_msg1 := q.PopBack(nil).Items[0]
 	pop_msg2 := q.PopBack(nil).Items[0]
@@ -127,13 +109,8 @@ func TestPushBackDelayed(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushBack(map[string]string{
-		defs.PRM_ID:      "data1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushBack(map[string]string{
-		defs.PRM_ID:                "data2",
-		defs.PRM_DELIVERY_INTERVAL: "100",
-		defs.PRM_PAYLOAD:           "p2"})
+	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
+	q.PushBack([]string{PRM_ID, "data2", PRM_DELIVERY_DELAY, "100", PRM_PAYLOAD, "p2"})
 
 	time.Sleep(50 * time.Millisecond)
 	pop_msg1 := q.PopFront(nil).Items[0]
@@ -155,8 +132,8 @@ func TestAutoExpiration(t *testing.T) {
 	defer q.Clear()
 
 	q.settings.MsgTTL = 10
-	q.PushFront(map[string]string{defs.PRM_ID: "dd1", defs.PRM_PRIORITY: "12", defs.PRM_PAYLOAD: "p1"})
-	q.PushBack(map[string]string{defs.PRM_ID: "dd2", defs.PRM_PRIORITY: "12", defs.PRM_PAYLOAD: "p2"})
+	q.PushFront([]string{PRM_ID, "dd1", PRM_PAYLOAD, "p1"})
+	q.PushBack([]string{PRM_ID, "dd2", PRM_PAYLOAD, "p2"})
 
 	// Wait for auto expiration.
 	time.Sleep(2000 * time.Millisecond)
@@ -179,13 +156,8 @@ func TestLockAndReturn(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushBack(map[string]string{
-		defs.PRM_ID:      "data1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushBack(map[string]string{
-		defs.PRM_ID:                "data2",
-		defs.PRM_DELIVERY_INTERVAL: "10",
-		defs.PRM_PAYLOAD:           "p2"})
+	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
+	q.PushBack([]string{PRM_ID, "data2", PRM_DELIVERY_DELAY, "10", PRM_PAYLOAD, "p2"})
 
 	time.Sleep(50 * time.Millisecond)
 	if q.availableMsgs.Len() != 2 {
@@ -223,31 +195,17 @@ func TestLoadFromDb(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.PushBack(map[string]string{
-		defs.PRM_ID:      "b1",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushFront(map[string]string{
-		defs.PRM_ID:                "f1",
-		defs.PRM_DELIVERY_INTERVAL: "500",
-		defs.PRM_PAYLOAD:           "p1"})
-	q.PushBack(map[string]string{
-		defs.PRM_ID:                "b2",
-		defs.PRM_DELIVERY_INTERVAL: "500",
-		defs.PRM_PAYLOAD:           "p2"})
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "f2",
-		defs.PRM_PAYLOAD: "p1"})
-	q.PushFront(map[string]string{
-		defs.PRM_ID:      "f3",
-		defs.PRM_PAYLOAD: "p1"})
+	q.PushBack([]string{PRM_ID, "b1", PRM_PAYLOAD, "p1"})
+	q.PushFront([]string{PRM_ID, "f1", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p1"})
+	q.PushBack([]string{PRM_ID, "b2", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p2"})
+	q.PushFront([]string{PRM_ID, "f2", PRM_PAYLOAD, "p1"})
+	q.PushFront([]string{PRM_ID, "f3", PRM_PAYLOAD, "p1"})
 	q.PopLockFront(nil)
-	q.SetLockTimeout(map[string]string{
-		defs.PRM_ID:      "f3",
-		defs.PRM_TIMEOUT: "100"})
+	q.SetLockTimeout([]string{PRM_ID, "f3", PRM_POP_WAIT_TIMEOUT, "100"})
 	// Wait till f3 will be unlocked and returned to the queue (priority front)
 	time.Sleep(200 * time.Millisecond)
-	defer q.Close()
 	time.Sleep(100 * time.Millisecond)
+	q.Clear()
 
 	// Now reload queue from db as a new instance (should contain f3, f2, b1)
 	ql := CreateTestQueue()
@@ -271,6 +229,7 @@ func TestLoadFromDb(t *testing.T) {
 	if msg == nil || msg.GetId() != "f1" {
 		t.Error("Messages order is wrong!")
 	}
+
 	msg = q.PopLockFront(nil).Items[0]
 	if msg == nil || msg.GetId() != "f2" {
 		t.Error("Messages order is wrong!")

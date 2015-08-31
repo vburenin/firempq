@@ -3,10 +3,7 @@ package pqueue
 import (
 	"encoding/binary"
 	"firempq/common"
-	"firempq/defs"
-	"firempq/svcerr"
 	"firempq/util"
-	"strconv"
 )
 
 const (
@@ -31,38 +28,6 @@ func NewPQMessageWithId(id string, priority int64) *PQMessage {
 		UnlockTs:  0,
 	}
 	return &pqm
-}
-
-func MessageFromMap(params map[string]string) (*PQMessage, error) {
-	// Get and check message id.
-	var msgId string
-	var ok bool
-	var strValue string
-	var priority int64
-	var err error
-
-	msgId, ok = params[defs.PRM_ID]
-	if !ok {
-		msgId = util.GenRandMsgId()
-	} else if len(msgId) > MAX_MESSAGE_ID_LENGTH {
-		return nil, svcerr.ERR_MSG_ID_TOO_LARGE
-	}
-
-	strValue, ok = params[defs.PRM_PRIORITY]
-	if !ok {
-		return nil, svcerr.ERR_MSG_NO_PRIORITY
-	}
-	priority, err = strconv.ParseInt(strValue, 10, 0)
-	if err != nil {
-		return nil, svcerr.ERR_MSG_WRONG_PRIORITY
-	}
-
-	return NewPQMessageWithId(msgId, priority), nil
-}
-
-func NewPQMessage(payload string, priority int64) *PQMessage {
-	id := util.GenRandMsgId()
-	return NewPQMessageWithId(id, priority)
 }
 
 func PQMessageFromBinary(msgId string, buf []byte) *PQMessage {

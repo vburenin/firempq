@@ -20,7 +20,7 @@ type ISvc interface {
 	GetStatus() map[string]interface{}
 	GetType() defs.ServiceType
 	GetTypeName() string
-	Call(action string, params map[string]string) *ReturnData
+	Call(string, []string) *ReturnData
 	Clear()
 	Close()
 }
@@ -30,24 +30,24 @@ type IServer interface {
 	Stop()
 }
 
-type CallFuncType func(map[string]string) *ReturnData
+type CallFuncType func([]string) *ReturnData
 
 type ReturnData struct {
-	Items []IItem       // Optional array of returned items.
-	Code  defs.RespCode // response code if needed.
-	Msg   string        // Text message that may be returned to the caller.
-	Err   error         // Optional error.
+	Items []IItem // Optional array of returned items.
+	Code  int64   // response code if needed.
+	Msg   string  // Text message that may be returned to the caller.
+	Err   error   // Optional error.
 }
 
 func NewRetDataError(err error) *ReturnData {
 	return &ReturnData{Err: err}
 }
 
-func NewRetDataMessage(msg string, code defs.RespCode) *ReturnData {
+func NewRetDataMessage(msg string, code int64) *ReturnData {
 	return &ReturnData{Msg: msg, Code: code}
 }
 
-func NewRetData(msg string, code defs.RespCode, items []IItem) *ReturnData {
+func NewRetData(msg string, code int64, items []IItem) *ReturnData {
 	return &ReturnData{Msg: msg, Code: code, Items: items}
 }
 

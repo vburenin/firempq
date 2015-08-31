@@ -3,8 +3,6 @@ package dsqueue
 import (
 	"encoding/binary"
 	"firempq/common"
-	"firempq/defs"
-	"firempq/svcerr"
 	"firempq/util"
 )
 
@@ -33,21 +31,6 @@ func NewDSQMessageWithId(id string) *DSQMessage {
 		ListId:     0,
 	}
 	return &m
-}
-
-func MessageFromMap(params map[string]string) (*DSQMessage, error) {
-	// Get and check message id.
-	var msgId string
-	var ok bool
-
-	msgId, ok = params[defs.PRM_ID]
-	if !ok {
-		msgId = util.GenRandMsgId()
-	} else if len(msgId) > MAX_MESSAGE_ID_LENGTH {
-		return nil, svcerr.ERR_MSG_ID_TOO_LARGE
-	}
-
-	return NewDSQMessageWithId(msgId), nil
 }
 
 func PQMessageFromBinary(msgId string, buf []byte) *DSQMessage {

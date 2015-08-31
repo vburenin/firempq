@@ -7,14 +7,18 @@ import (
 	"firempq/structs"
 	"firempq/svcerr"
 	"firempq/util"
+	"fmt"
 	"github.com/op/go-logging"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 )
 
 var log = logging.MustGetLogger("firempq")
+
+// Size of one batch of messages for popMessageBatch function
+const MESSAGES_BATCH_SIZE_LIMIT = 20
+const MAX_POP_WAIT_TIMEOUT = 30000
 
 const (
 	ACTION_UNLOCK_BY_ID        = "UNLOCK"
@@ -66,16 +70,6 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 		newMsgNotification: make(chan bool),
 	}
 
-	pq.actionHandlers = map[string](common.CallFuncType){
-		ACTION_DELETE_LOCKED_BY_ID: pq.DeleteLockedById,
-		ACTION_SET_LOCK_TIMEOUT:    pq.SetLockTimeout,
-		ACTION_UNLOCK_BY_ID:        pq.UnlockMessageById,
-		ACTION_PUSH:                pq.Push,
-		ACTION_POP:                 pq.Pop,
-		ACTION_DELETE_BY_ID:        pq.DeleteById,
-		ACTION_POP_WAIT:            pq.PopWait,
-	}
-
 	pq.loadAllMessages()
 	go pq.periodicCleanUp()
 
@@ -114,13 +108,25 @@ func (pq *PQueue) GetTypeName() string {
 	return common.STYPE_PRIORITY_QUEUE
 }
 
-// Queue custom specific handler for the queue type specific features.
-func (pq *PQueue) Call(action string, params map[string]string) *common.ReturnData {
-	handler, ok := pq.actionHandlers[action]
-	if !ok {
-		return common.NewRetDataError(svcerr.InvalidRequest("Unknown action: " + action))
+// Call dispatches processing of the command to the appropriate command parser.
+func (pq *PQueue) Call(cmd string, params []string) *common.ReturnData {
+	switch cmd {
+	case ACTION_POP_WAIT:
+		return pq.PopWait(params)
+	case ACTION_DELETE_LOCKED_BY_ID:
+		return pq.DeleteLockedById(params)
+	case ACTION_DELETE_BY_ID:
+		return pq.DeleteById(params)
+	case ACTION_POP:
+		return pq.Pop(params)
+	case ACTION_PUSH:
+		return pq.Push(params)
+	case ACTION_SET_LOCK_TIMEOUT:
+		return pq.SetLockTimeout(params)
+	case ACTION_UNLOCK_BY_ID:
+		return pq.UnlockMessageById(params)
 	}
-	return handler(params)
+	return common.NewRetDataError(svcerr.InvalidRequest("Unknown action: " + cmd))
 }
 
 // Delete all messages in the queue. It includes all type of messages
@@ -163,17 +169,40 @@ func (pq *PQueue) IsClosed() bool {
 	return pq.workDone
 }
 
+func makeUnknownParamResponse(paramName string) *common.ReturnData {
+	err := svcerr.InvalidRequest(fmt.Sprintf("Unknown parameter: %s", paramName))
+	return common.NewRetDataError(err)
+}
+
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (pq *PQueue) Push(msgData map[string]string) *common.ReturnData {
-	msg, err := MessageFromMap(msgData)
-	if err != nil {
-		return common.NewRetDataError(err)
+func (pq *PQueue) Push(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+	var priority int64 = pq.settings.MaxPriority - 1
+	var payload string = ""
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		case PRM_PRIORITY:
+			params, priority, err = util.ParseInt64Params(params, 0, pq.settings.MaxPriority-1)
+		case PRM_PAYLOAD:
+			params, payload, err = util.ParseStringParam(params, 1, 512*1024)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
 	}
-	payload, ok := msgData[defs.PRM_PAYLOAD]
-	if !ok {
-		payload = ""
+	if len(msgId) == 0 {
+		msgId = util.GenRandMsgId()
 	}
+
+	msg := NewPQMessageWithId(msgId, priority)
+
 	pq.settings.LastPushTs = util.Uts()
 
 	pq.lock.Lock()
@@ -200,7 +229,58 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) *common.ReturnDat
 	return common.RETDATA_201OK
 }
 
-func (pq *PQueue) popMetaMessage() *PQMessage {
+// Pop first available messages.
+// Will return nil if there are no messages available.
+func (pq *PQueue) Pop(params []string) *common.ReturnData {
+	var err error
+	var limit int64 = 1
+	lockTimeout := pq.settings.PopLockTimeout
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = util.ParseInt64Params(params, 0, 24*1000*3600)
+		case PRM_LIMIT:
+			params, limit, err = util.ParseInt64Params(params, 1, MESSAGES_BATCH_SIZE_LIMIT)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+	return pq.popMessages(lockTimeout, limit)
+}
+
+// PopWait pops up to specified number of messages, if there are no available messages.
+// It will wait until either new message is pushed or wait time exceeded.
+func (pq *PQueue) PopWait(params []string) *common.ReturnData {
+
+	var err error
+	var limit int64 = 1
+	var popWaitTimeout int64 = 1000
+	var lockTimeout int64 = pq.settings.PopLockTimeout
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = util.ParseInt64Params(params, 0, 24*1000*3600)
+		case PRM_LIMIT:
+			params, limit, err = util.ParseInt64Params(params, 1, MESSAGES_BATCH_SIZE_LIMIT)
+		case PRM_POP_WAIT_TIMEOUT:
+			params, popWaitTimeout, err = util.ParseInt64Params(params, 1, MAX_POP_WAIT_TIMEOUT)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	return pq.popWaitItems(lockTimeout, popWaitTimeout, limit)
+}
+
+func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
 	if pq.availableMsgs.Empty() {
 		return nil
 	}
@@ -212,112 +292,63 @@ func (pq *PQueue) popMetaMessage() *PQMessage {
 		return nil
 	}
 	msg.PopCount += 1
-	pq.lockMessage(msg)
+	pq.lockMessage(msg, lockTimeout)
 	pq.database.UpdateItem(pq.queueName, msg)
 
 	return msg
 }
 
-// Pop first available message.
-// Will return nil if there are no messages available.
-func (pq *PQueue) Pop(params map[string]string) *common.ReturnData {
-
+func (pq *PQueue) popMessages(lockTimeout int64, limit int64) *common.ReturnData {
+	var msgsMeta []*PQMessage
 	pq.lock.Lock()
-	msg := pq.popMetaMessage()
+	for int64(len(msgsMeta)) < limit {
+		mm := pq.popMetaMessage(lockTimeout)
+		if mm == nil {
+			break
+		} else {
+			msgsMeta = append(msgsMeta, mm)
+		}
+	}
 	pq.lock.Unlock()
 
-	if msg == nil {
-		return common.NewRetDataError(svcerr.ERR_QUEUE_EMPTY)
+	var msgs []common.IItem
+	for _, mm := range msgsMeta {
+		msgs = append(msgs, NewMsgItem(mm, pq.getPayload(mm.Id)))
 	}
 
-	retMsg := NewMsgItem(msg, pq.getPayload(msg.Id))
-
-	return common.NewRetData("Ok", defs.CODE_200_OK, []common.IItem{retMsg})
-}
-
-// Size of one batch of messages for popMessageBatch function
-const MESSAGES_BATCH_SIZE_LIMIT = 20
-
-func (pq *PQueue) PopWait(params map[string]string) *common.ReturnData {
-	var timeout int = 10
-	var limit int = 0
-	var err error
-	var ok bool
-	var timeoutStr string
-	var limitStr string
-
-	timeoutStr, ok = params[defs.PRM_TIMEOUT]
-	if ok {
-		timeout, err = strconv.Atoi(timeoutStr)
-		if err != nil {
-			return common.NewRetDataError(err)
-		}
-		if timeout < 0 || timeout > 20000 {
-			return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_IS_WRONG)
-		}
-	}
-
-	limitStr, ok = params[defs.PRM_POP_LIMIT]
-	if ok {
-		limit, err = strconv.Atoi(limitStr)
-		if err != nil {
-			return common.NewRetDataError(err)
-		}
-		if limit < 1 || limit > MESSAGES_BATCH_SIZE_LIMIT {
-			return common.NewRetDataError(svcerr.ERR_MSG_LIMIT_IS_WRONG)
-		}
-	}
-	msgItems := pq.popWaitItems(timeout, limit)
-	if len(msgItems) == 0 {
-		return common.NewRetDataError(svcerr.ERR_QUEUE_EMPTY)
-	}
-
-	return common.NewRetData("OK", defs.CODE_200_OK, msgItems)
+	return common.NewRetData("Ok", defs.CODE_200_OK, msgs)
 }
 
 // Will pop 'limit' messages within 'timeout'(milliseconds) time interval.
-func (pq *PQueue) popWaitItems(timeout, limit int) []common.IItem {
-	msgItems := make([]common.IItem, 0, limit)
-
-	popLimitItems := func() {
-		for len(msgItems) < limit {
-			pq.lock.Lock()
-			msg := pq.popMetaMessage()
-			pq.lock.Unlock()
-			if msg == nil {
-				break
-			}
-			msgItem := NewMsgItem(msg, pq.getPayload(msg.Id))
-			msgItems = append(msgItems, msgItem)
-		}
-	}
+func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) *common.ReturnData {
 	// Try to pop items first time and return them if number of popped items is greater than 0.
-	popLimitItems()
-	if len(msgItems) > 0 {
-		common.NewRetData("OK", defs.CODE_200_OK, msgItems)
+	msgItems := pq.popMessages(lockTimeout, limit)
+	if len(msgItems.Items) > 0 {
 		return msgItems
 	}
+
 	// If items not founds lets wait for any incoming.
 	timeoutChan := make(chan bool)
 	defer close(timeoutChan)
 
 	go func() {
-		time.Sleep(time.Duration(timeout) * time.Millisecond)
+		time.Sleep(time.Duration(popWaitTimeout) * time.Millisecond)
 		timeoutChan <- true
 	}()
 
-	needExit := false
-	for !needExit && len(msgItems) == 0 {
+	for {
 		select {
 		case t := <-pq.newMsgNotification:
-			popLimitItems()
-			needExit = len(msgItems) == 0 && t
+			msgItems := pq.popMessages(lockTimeout, limit)
+			if len(msgItems.Items) > 0 && t {
+				return msgItems
+			}
 		case t := <-timeoutChan:
-			needExit = true || t
-			popLimitItems()
+			if t {
+				return pq.popMessages(lockTimeout, limit)
+			}
 		}
 	}
-
 	return msgItems
 }
 
@@ -327,12 +358,12 @@ func (pq *PQueue) getPayload(msgId string) string {
 	return pq.database.GetPayload(pq.queueName, msgId)
 }
 
-func (pq *PQueue) lockMessage(msg *PQMessage) {
+func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
 	nowTs := util.Uts()
 	pq.settings.LastPopTs = nowTs
 	// Increase number of pop attempts.
 
-	msg.UnlockTs = nowTs + pq.settings.PopLockTimeout
+	msg.UnlockTs = nowTs + lockTimeout
 	pq.expireHeap.PopById(msg.Id)
 	pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 }
@@ -352,9 +383,23 @@ func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, error) {
 	return msg, nil
 }
 
-func (pq *PQueue) DeleteById(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (pq *PQueue) DeleteById(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 	pq.lock.Lock()
@@ -372,21 +417,31 @@ func (pq *PQueue) DeleteById(params map[string]string) *common.ReturnData {
 }
 
 // Set a user defined message lock timeout. Only locked message timeout can be set.
-func (pq *PQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (pq *PQueue) SetLockTimeout(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+	var lockTimeout int64 = -1
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		case PRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = util.ParseInt64Params(params, 0, 24*1000*3600)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
-	timeoutStr, ok := params[defs.PRM_TIMEOUT]
-
-	if !ok {
+	if lockTimeout < 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_NOT_DEFINED)
-	}
-
-	timeout, terr := strconv.Atoi(timeoutStr)
-	if terr != nil || timeout < 0 || timeout > defs.TIMEOUT_MAX_LOCK {
-		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_IS_WRONG)
 	}
 
 	pq.lock.Lock()
@@ -397,7 +452,7 @@ func (pq *PQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
 		return common.NewRetDataError(err)
 	}
 
-	msg.UnlockTs = util.Uts() + int64(timeout)
+	msg.UnlockTs = util.Uts() + int64(lockTimeout)
 
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
 	pq.database.UpdateItem(pq.queueName, msg)
@@ -406,16 +461,30 @@ func (pq *PQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
 }
 
 // Delete locked message by id.
-func (pq *PQueue) DeleteLockedById(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (pq *PQueue) DeleteLockedById(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 
-	_, err := pq.unflightMessage(msgId)
+	_, err = pq.unflightMessage(msgId)
 	if err != nil {
 		return common.NewRetDataError(err)
 	}
@@ -423,9 +492,23 @@ func (pq *PQueue) DeleteLockedById(params map[string]string) *common.ReturnData 
 	return common.RETDATA_201OK
 }
 
-func (pq *PQueue) UnlockMessageById(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (pq *PQueue) UnlockMessageById(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
@@ -433,8 +516,8 @@ func (pq *PQueue) UnlockMessageById(params map[string]string) *common.ReturnData
 	defer pq.lock.Unlock()
 
 	// Make sure message exists.
-	msg, err := pq.unflightMessage(msgId)
-	if err != nil {
+	msg, e := pq.unflightMessage(msgId)
+	if e != nil {
 		return common.NewRetDataError(err)
 	}
 	// Message exists, push it into the front of the queue.

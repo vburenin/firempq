@@ -7,9 +7,9 @@ import (
 	"firempq/structs"
 	"firempq/svcerr"
 	"firempq/util"
+	"fmt"
 	"github.com/op/go-logging"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -156,7 +156,7 @@ func (dsq *DSQueue) GetTypeName() string {
 }
 
 // Queue custom specific handler for the queue type specific features.
-func (dsq *DSQueue) Call(action string, params map[string]string) *common.ReturnData {
+func (dsq *DSQueue) Call(action string, params []string) *common.ReturnData {
 	handler, ok := dsq.actionHandlers[action]
 	if !ok {
 		return common.NewRetDataError(svcerr.InvalidRequest("Unknown action: " + action))
@@ -204,62 +204,77 @@ func (dsq *DSQueue) IsClosed() bool {
 	return dsq.workDone
 }
 
+func makeUnknownParamResponse(paramName string) *common.ReturnData {
+	err := svcerr.InvalidRequest(fmt.Sprintf("Unknown parameter: %s", paramName))
+	return common.NewRetDataError(err)
+}
+
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) PushFront(params map[string]string) *common.ReturnData {
+func (dsq *DSQueue) PushFront(params []string) *common.ReturnData {
 	return dsq.push(params, QUEUE_DIRECTION_FRONT)
 }
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) PushBack(msgData map[string]string) *common.ReturnData {
-	return dsq.push(msgData, QUEUE_DIRECTION_BACK)
+func (dsq *DSQueue) PushBack(params []string) *common.ReturnData {
+	return dsq.push(params, QUEUE_DIRECTION_BACK)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopLockFront(params map[string]string) *common.ReturnData {
-
+func (dsq *DSQueue) PopLockFront(params []string) *common.ReturnData {
 	return dsq.popMessage(QUEUE_DIRECTION_FRONT, false)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopLockBack(params map[string]string) *common.ReturnData {
+func (dsq *DSQueue) PopLockBack(params []string) *common.ReturnData {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, false)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopFront(params map[string]string) *common.ReturnData {
-
+func (dsq *DSQueue) PopFront(params []string) *common.ReturnData {
 	return dsq.popMessage(QUEUE_DIRECTION_FRONT, true)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopBack(params map[string]string) *common.ReturnData {
+func (dsq *DSQueue) PopBack(params []string) *common.ReturnData {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, true)
 }
 
 // Return already locked message to the front of the queue
-func (dsq *DSQueue) ReturnFront(params map[string]string) *common.ReturnData {
+func (dsq *DSQueue) ReturnFront(params []string) *common.ReturnData {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_FRONT)
 }
 
 // Return already locked message to the back of the queue
-func (dsq *DSQueue) ReturnBack(params map[string]string) *common.ReturnData {
+func (dsq *DSQueue) ReturnBack(params []string) *common.ReturnData {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_BACK)
 }
 
 // Delete non-locked message from the queue by message's ID
-func (dsq *DSQueue) DeleteById(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (dsq *DSQueue) DeleteById(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
-	dsq.lock.Lock()
-	defer dsq.lock.Unlock()
 
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
@@ -280,11 +295,26 @@ func (dsq *DSQueue) DeleteById(params map[string]string) *common.ReturnData {
 }
 
 // Delete message locked or unlocked from the queue by message's ID
-func (dsq *DSQueue) ForceDelete(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (dsq *DSQueue) ForceDelete(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
+
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
@@ -296,21 +326,31 @@ func (dsq *DSQueue) ForceDelete(params map[string]string) *common.ReturnData {
 }
 
 // Set a user defined message lock timeout. Only locked message timeout can be set.
-func (dsq *DSQueue) SetLockTimeout(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (dsq *DSQueue) SetLockTimeout(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+	var lockTimeout int64 = -1
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		case PRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = util.ParseInt64Params(params, 0, 24*1000*3600)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
-	timeoutStr, ok := params[defs.PRM_TIMEOUT]
-
-	if !ok {
+	if lockTimeout < 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_NOT_DEFINED)
-	}
-
-	timeout, terr := strconv.Atoi(timeoutStr)
-	if terr != nil || timeout < 0 || time.Duration(timeout) > defs.TIMEOUT_MAX_LOCK {
-		return common.NewRetDataError(svcerr.ERR_MSG_TIMEOUT_IS_WRONG)
 	}
 
 	dsq.lock.Lock()
@@ -321,7 +361,7 @@ func (dsq *DSQueue) SetLockTimeout(params map[string]string) *common.ReturnData 
 		return common.NewRetDataError(err)
 	}
 
-	msg.UnlockTs = util.Uts() + int64(timeout)
+	msg.UnlockTs = util.Uts() + int64(lockTimeout)
 
 	dsq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
 	dsq.database.UpdateItem(dsq.queueName, msg)
@@ -330,9 +370,23 @@ func (dsq *DSQueue) SetLockTimeout(params map[string]string) *common.ReturnData 
 }
 
 // Delete locked message by id.
-func (dsq *DSQueue) DeleteLockedById(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (dsq *DSQueue) DeleteLockedById(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
@@ -349,9 +403,23 @@ func (dsq *DSQueue) DeleteLockedById(params map[string]string) *common.ReturnDat
 
 // Unlock locked message by id.
 // Message will be returned to the front/back of the queue based on Pop operation type (pop front/back)
-func (dsq *DSQueue) UnlockMessageById(params map[string]string) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (dsq *DSQueue) UnlockMessageById(params []string) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
@@ -422,35 +490,45 @@ func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) *common.Return
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) push(msgData map[string]string, direction uint8) *common.ReturnData {
+func (dsq *DSQueue) push(params []string, direction uint8) *common.ReturnData {
+	var err error
+	var msgId string
+	var payload string = ""
+	var deliveryDelay = dsq.settings.DeliveryDelay
 
-	msg, err := MessageFromMap(msgData)
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		case PRM_PAYLOAD:
+			params, payload, err = util.ParseStringParam(params, 1, 512*1024)
+		case PRM_DELIVERY_DELAY:
+			params, deliveryDelay, err = util.ParseInt64Params(params, 0, 3600*1000)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+	if len(msgId) == 0 {
+		msgId = util.GenRandMsgId()
+	}
+
+	msg := NewDSQMessageWithId(msgId)
+
 	if err != nil {
 		return common.NewRetDataError(err)
 	}
 
-	deliveryInterval := dsq.settings.DeliveryDelay
-	// Optional delivery interval
-	deliveryIntervalStr, ok := msgData[defs.PRM_DELIVERY_INTERVAL]
-	if ok {
-		var terr error = nil
-		deliveryInterval, terr = strconv.ParseInt(deliveryIntervalStr, 10, 0)
-		if terr != nil {
-			return common.NewRetDataError(svcerr.ERR_MSG_DELIVERY_INTERVAL_NOT_DEFINED)
-		}
-	}
-	if deliveryInterval < 0 || deliveryInterval > int64(defs.TIMEOUT_MAX_DELIVERY) ||
-		dsq.settings.MsgTTL < int64(deliveryInterval) {
+	if deliveryDelay < 0 || deliveryDelay > int64(defs.TIMEOUT_MAX_DELIVERY) ||
+		dsq.settings.MsgTTL < deliveryDelay {
 		return common.NewRetDataError(svcerr.ERR_MSG_BAD_DELIVERY_TIMEOUT)
 	}
-	if deliveryInterval > 0 {
-		msg.DeliveryTs = util.Uts() + deliveryInterval
+	if deliveryDelay > 0 {
+		msg.DeliveryTs = util.Uts() + deliveryDelay
 	}
 
-	payload, ok := msgData[defs.PRM_PAYLOAD]
-	if !ok {
-		payload = ""
-	}
 	msg.pushAt = direction
 
 	dsq.lock.Lock()
@@ -517,7 +595,7 @@ func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) *common.Retur
 
 	msg := dsq.popMetaMessage(direction, permanentPop)
 	if msg == nil {
-		return common.NewRetDataError(svcerr.ERR_QUEUE_EMPTY)
+		common.NewRetData("Ok", defs.CODE_200_OK, []common.IItem{})
 	}
 	retMsg := NewMsgItem(msg, dsq.getPayload(msg.Id))
 	if permanentPop {
@@ -526,9 +604,23 @@ func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) *common.Retur
 	return common.NewRetData("Ok", defs.CODE_200_OK, []common.IItem{retMsg})
 }
 
-func (dsq *DSQueue) returnMessageTo(params map[string]string, place uint8) *common.ReturnData {
-	msgId, ok := params[defs.PRM_ID]
-	if !ok {
+func (dsq *DSQueue) returnMessageTo(params []string, place uint8) *common.ReturnData {
+	var err error
+	var msgId string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_ID:
+			params, msgId, err = util.ParseStringParam(params, 1, 128)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return common.NewRetDataError(err)
+		}
+	}
+
+	if len(msgId) == 0 {
 		return common.NewRetDataError(svcerr.ERR_MSG_ID_NOT_DEFINED)
 	}
 
