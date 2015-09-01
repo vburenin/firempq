@@ -26,7 +26,6 @@ const (
 	END_ASCII_RANGE = 0x7E
 )
 
-
 const (
 	ERR_TOK_OK = 0
 	ERR_TOK_TOO_MANY_TOKENS = 1
@@ -50,7 +49,7 @@ func UnsafeBytesToString(b []byte) *string {
 	return (*string)(unsafe.Pointer(&b))
 }
 
-func initTokenizer(netReader* bufio.Reader) *Tokenizer {
+func CreateTokenizer(netReader* bufio.Reader) *Tokenizer {
 	tok := Tokenizer {
 		state: STATE_NONE,
 		buffer: make([]byte, MAX_RECV_BUFFER_SIZE),
@@ -74,28 +73,6 @@ func (tok *Tokenizer) resetTokenizer() {
 	tok.currToken = nil
 }
 
-func (tok *Tokenizer) checkForSpecialToken() int {
-	if tok.currToken == nil {
-		return ERR_TOK_OK
-	}
-	switch tok.currToken[0] {
-	case '$':
-		// Binary data marker
-		str := string(tok.currToken[1:tok.tokenCursorPos])
-		if len, err := strconv.Atoi(str); err == nil {
-			if len > 0 {
-				tok.state = STATE_PARSE_BINARY_PAYLOAD
-				tok.binaryDataLen = len
-			} else {
-				return ERR_TOK_PARSING_ERROR
-			}
-		} else {
-			return ERR_TOK_PARSING_ERROR
-		}
-	}
-	return ERR_TOK_OK
-}
-
 func (tok *Tokenizer) acceptToken(result *[]*string) int {
 	tok.state = STATE_NONE
 	*result = append(*result, UnsafeBytesToString(tok.currToken[:tok.tokenCursorPos]))
@@ -103,10 +80,10 @@ func (tok *Tokenizer) acceptToken(result *[]*string) int {
 	if tok.state == STATE_PARSE_TEXT_TOKEN {
 		switch tok.currToken[0] {
 		case '$':
-			if len(*result) > MAX_TOKENS_PER_MSG {
+			// Binary data marker
+			if len(*result) >= MAX_TOKENS_PER_MSG {
 				return ERR_TOK_TOO_MANY_TOKENS
 			}
-			// Binary data marker
 			str := string(tok.currToken[1:tok.tokenCursorPos])
 			if len, err := strconv.Atoi(str); err == nil {
 				if len > 0 {
@@ -127,6 +104,19 @@ func (tok *Tokenizer) acceptToken(result *[]*string) int {
 	}
 	tok.tokenCursorPos = 0
 	return ERR_TOK_OK
+}
+
+func (tok* Tokenizer) messageProcessed() {
+	tok.state = STATE_NONE
+	tok.binaryDataLen = 0
+	tok.tokenCursorPos = 0
+	tok.currToken = nil
+	tok.bufferCursorPos += 1
+	if tok.bufferCursorPos >= tok.bufferDataLen {
+		tok.buffer = nil
+		tok.bufferCursorPos = 0
+		tok.bufferDataLen = 0
+	}
 }
 
 func (tok *Tokenizer) Tokenize() ([]*string, int) {
@@ -169,10 +159,11 @@ func (tok *Tokenizer) Tokenize() ([]*string, int) {
 				tok.bufferCursorPos += availableBytes
 				break
 			case STATE_LOOKING_FOR_LF:
-				tok.resetTokenizer()
 				if SYMBOL_LF == val {
+					tok.messageProcessed()
 					return result, ERR_TOK_OK
 				} else {
+					tok.resetTokenizer()
 					return nil, ERR_TOK_PARSING_ERROR
 				}
 				break
@@ -201,17 +192,17 @@ func (tok *Tokenizer) Tokenize() ([]*string, int) {
 						// specific for this token
 						if err := tok.acceptToken(&result); err != ERR_TOK_OK {
 							tok.resetTokenizer()
-							return nil, ERR_TOK_PARSING_ERROR
+							return nil, err
 						}
 					}
 					if SYMBOL_CR == val {
+						// Wait for LF symbol following current CR symbol
 						tok.state = STATE_LOOKING_FOR_LF
 					}
 				}
 			}
 		}
 	}
-	return result, ERR_TOK_OK
+	return nil, ERR_TOK_OK
 }
-
 
