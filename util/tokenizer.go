@@ -107,7 +107,6 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 		}
 		// Tokenize content of the buffer
 		for tok.bufPos < tok.bufLen {
-
 			if tok.state == STATE_PARSE_BINARY_PAYLOAD {
 				availableBytes := tok.bufLen - tok.bufPos
 				if availableBytes > tok.binDataLeft {
@@ -124,8 +123,8 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 						return nil, err
 					}
 				}
-
 				tok.bufPos += availableBytes
+				continue
 			}
 
 			val := tok.buffer[tok.bufPos]
