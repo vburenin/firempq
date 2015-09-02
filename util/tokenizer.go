@@ -55,7 +55,7 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 	var err error
 	var token []byte = make([]byte, 0, 64)
 	var binTokenLen int
-	var state uint8 = STATE_PARSE_TEXT_TOKEN
+	var state int = STATE_PARSE_TEXT_TOKEN
 
 	for {
 		if tok.bufPos >= tok.bufLen {
@@ -66,8 +66,8 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 				return nil, err
 			}
 		}
-		// Tokenize content of the buffer
 
+		// Tokenize content of the buffer
 		for tok.bufPos < tok.bufLen {
 			if state == STATE_PARSE_BINARY_PAYLOAD {
 				availableBytes := tok.bufLen - tok.bufPos
@@ -77,41 +77,50 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 				token = append(token, tok.buffer[tok.bufPos:tok.bufPos+availableBytes]...)
 				binTokenLen -= availableBytes
 
+				tok.bufPos += availableBytes
+
 				if binTokenLen <= 0 {
 					// Binary token complete
-					result = append(result, UnsafeBytesToString(token))
-					token = make([]byte, 0, 64)
 					state = STATE_PARSE_TEXT_TOKEN
+					result = append(result, UnsafeBytesToString(token))
+					if len(result) > MAX_TOKENS_PER_MSG {
+						return nil, ERR_TOK_TOO_MANY_TOKENS
+					}
+					token = make([]byte, 0, 64)
 				}
-				tok.bufPos += availableBytes
 				continue
 			}
 
 			val := tok.buffer[tok.bufPos]
 			tok.bufPos += 1
 
-			if state == STATE_PARSE_TEXT_TOKEN {
-				if val >= START_ASCII_RANGE && val <= END_ASCII_RANGE {
-					token = append(token, val)
-				} else {
-					if len(token) > 0 {
-						if token[0] == '$' {
-							str := UnsafeBytesToString(token[1:])
-							binTokenLen, err = strconv.Atoi(str)
-							if err == nil && (binTokenLen < 1 || binTokenLen > MAX_BINARY_TOKEN_LEN) {
-								return nil, ERR_TOK_PARSING_ERROR
-							}
-							token = make([]byte, 0, binTokenLen)
-							state = STATE_PARSE_BINARY_PAYLOAD
-						} else {
-							result = append(result, UnsafeBytesToString(token))
-							if val == SYMBOL_CR {
-								return result, nil
-							}
-							token = make([]byte, 0, 64)
-						}
+			if val >= START_ASCII_RANGE && val <= END_ASCII_RANGE {
+				token = append(token, val)
+			} else if len(token) > 0 {
+				if token[0] == '$' {
+					binTokenLen, err = strconv.Atoi(UnsafeBytesToString(token[1:]))
+					if err == nil && (binTokenLen < 1 || binTokenLen > MAX_BINARY_TOKEN_LEN) {
+						return nil, ERR_TOK_PARSING_ERROR
 					}
+					state = STATE_PARSE_BINARY_PAYLOAD
+					token = make([]byte, 0, binTokenLen)
+				} else {
+					result = append(result, UnsafeBytesToString(token))
+					if len(result) > MAX_TOKENS_PER_MSG {
+						return nil, ERR_TOK_TOO_MANY_TOKENS
+					}
+					if val == SYMBOL_CR {
+						return result, nil
+					}
+					token = make([]byte, 0, 64)
 				}
+			} else {
+				if val == SYMBOL_CR {
+					return result, nil
+				}
+			}
+			if len(token) > MAX_TEXT_TOKEN_LEN {
+				return nil, ERR_TOK_TOKEN_TOO_LONG
 			}
 		}
 	}

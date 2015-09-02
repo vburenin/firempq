@@ -49,6 +49,7 @@ package util_test
 import "testing"
 import (
 	"firempq/util"
+	//"fmt"
 	"io"
 )
 
@@ -56,7 +57,7 @@ type TestDataReader struct {
 	pos int
 }
 
-var TXT = "123123 12312312312 12312312312 12312312312 12312312312 asdasdasdas $10 0123456789\n"
+var TXT = "123123 12312312312 12312312312 12312312312 12312312312 asdasdasdas $10 0123456789 \n"
 
 func (td *TestDataReader) Read(data []byte) (int, error) {
 	if td.pos > 1000000 {
@@ -75,6 +76,7 @@ func TestReadTokens(t *testing.T) {
 	tok := util.NewTokenizer(r)
 	for {
 		_, err := tok.ReadTokens()
+		//fmt.Println(val, err)
 		if err == io.EOF {
 			break
 		}
