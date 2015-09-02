@@ -17,12 +17,13 @@ const (
 )
 
 const (
-	MAX_TOKENS_PER_MSG   = 128
-	MAX_RECV_BUFFER_SIZE = 4096
-	MAX_TEXT_TOKEN_LEN   = 256
-	MAX_BINARY_TOKEN_LEN = 0x80000
-	START_ASCII_RANGE    = 0x21
-	END_ASCII_RANGE      = 0x7E
+	MAX_TOKENS_PER_MSG    = 32
+	MAX_RECV_BUFFER_SIZE  = 4096
+	MAX_TEXT_TOKEN_LEN    = 256
+	MAX_BINARY_TOKEN_LEN  = 0x80000
+	START_ASCII_RANGE     = 0x21
+	END_ASCII_RANGE       = 0x7E
+	INIT_TOKEN_BUFFER_LEN = 48
 )
 
 var ERR_TOK_TOO_MANY_TOKENS = errors.New("Too many tokens")
@@ -53,7 +54,7 @@ func NewTokenizer(reader io.Reader) *Tokenizer {
 func (tok *Tokenizer) ReadTokens() ([]string, error) {
 	result := make([]string, 0, MAX_TOKENS_PER_MSG)
 	var err error
-	var token []byte = make([]byte, 0, 64)
+	var token []byte = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
 	var binTokenLen int
 	var state int = STATE_PARSE_TEXT_TOKEN
 
@@ -86,7 +87,7 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 					if len(result) > MAX_TOKENS_PER_MSG {
 						return nil, ERR_TOK_TOO_MANY_TOKENS
 					}
-					token = make([]byte, 0, 64)
+					token = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
 				}
 				continue
 			}
@@ -112,7 +113,7 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 					if val == SYMBOL_CR {
 						return result, nil
 					}
-					token = make([]byte, 0, 64)
+					token = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
 				}
 			} else {
 				if val == SYMBOL_CR {
