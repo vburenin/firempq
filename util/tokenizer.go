@@ -13,14 +13,13 @@ const (
 	STATE_PARSE_BINARY_HEADER  = 3
 	STATE_PARSE_BINARY_PAYLOAD = 4
 	STATE_LOOKING_FOR_LF       = 5
-	SYMBOL_CR                  = 0x0D
-	SYMBOL_LF                  = 0x0A
+	SYMBOL_CR                  = 0x0A
 )
 
 const (
 	MAX_TOKENS_PER_MSG   = 128
 	MAX_RECV_BUFFER_SIZE = 4096
-	MAX_TEXT_TOKEN_LEN   = 8192
+	MAX_TEXT_TOKEN_LEN   = 256
 	MAX_BINARY_TOKEN_LEN = 0x80000
 	START_ASCII_RANGE    = 0x21
 	END_ASCII_RANGE      = 0x7E
@@ -31,14 +30,13 @@ var ERR_TOK_TOKEN_TOO_LONG = errors.New("Token is too long")
 var ERR_TOK_PARSING_ERROR = errors.New("Error during token parsing")
 
 type Tokenizer struct {
-	state           uint8
-	buffer          []byte
-	bufferCursorPos int
-	bufferDataLen   int
-	reader          io.Reader
-	binaryDataLen   int
-	curToken        []byte
-	curTokenLen     int
+	state       uint8
+	buffer      []byte
+	bufPos      int
+	bufLen      int
+	reader      io.Reader
+	binDataLeft int
+	curToken    []byte
 }
 
 func UnsafeBytesToString(b []byte) string {
@@ -47,14 +45,13 @@ func UnsafeBytesToString(b []byte) string {
 
 func NewTokenizer(reader io.Reader) *Tokenizer {
 	tok := Tokenizer{
-		state:           STATE_NONE,
-		buffer:          make([]byte, MAX_RECV_BUFFER_SIZE),
-		bufferCursorPos: 0,
-		bufferDataLen:   0,
-		binaryDataLen:   0,
-		reader:          reader,
-		curToken:        nil,
-		curTokenLen:     0,
+		state:       STATE_NONE,
+		buffer:      make([]byte, MAX_RECV_BUFFER_SIZE),
+		bufPos:      0,
+		bufLen:      0,
+		binDataLeft: 0,
+		reader:      reader,
+		curToken:    nil,
 	}
 	return &tok
 }
@@ -64,126 +61,102 @@ func (tok *Tokenizer) appendToken(result []string) ([]string, error) {
 		return nil, ERR_TOK_TOO_MANY_TOKENS
 	}
 	// Check for special tokens to handle their payload
-	if tok.state == STATE_PARSE_TEXT_TOKEN {
-		switch tok.curToken[0] {
-		case '$':
-			// Binary data marker
-			str := UnsafeBytesToString(tok.curToken[1:tok.curTokenLen])
-			binLen, err := strconv.Atoi(str)
-			if err == nil && (binLen < 1 || binLen > MAX_BINARY_TOKEN_LEN) {
-				return result, ERR_TOK_PARSING_ERROR
-			}
-			tok.state = STATE_PARSE_BINARY_PAYLOAD
-			tok.binaryDataLen = binLen
-			tok.curToken = make([]byte, tok.binaryDataLen, tok.binaryDataLen)
-		default:
-			result = append(result, UnsafeBytesToString(tok.curToken[:tok.curTokenLen]))
-			tok.curToken = nil
+	if tok.state == STATE_PARSE_TEXT_TOKEN && tok.curToken[0] == '$' {
+		// Binary data marker
+		str := UnsafeBytesToString(tok.curToken[1:])
+		binLen, err := strconv.Atoi(str)
+		if err == nil && (binLen < 1 || binLen > MAX_BINARY_TOKEN_LEN) {
+			return result, ERR_TOK_PARSING_ERROR
 		}
+		tok.binDataLeft = binLen
+		tok.curToken = make([]byte, 0, tok.binDataLeft)
+		tok.state = STATE_PARSE_BINARY_PAYLOAD
 	} else {
-		result = append(result, UnsafeBytesToString(tok.curToken[:tok.curTokenLen]))
+		result = append(result, UnsafeBytesToString(tok.curToken))
 		tok.curToken = nil
+		tok.state = STATE_PARSE_TEXT_TOKEN
 	}
-	tok.curTokenLen = 0
 	return result, nil
 }
 
 func (tok *Tokenizer) resetTokenizer() {
 	tok.state = STATE_NONE
-	tok.bufferCursorPos = 0
-	tok.bufferDataLen = 0
-	tok.binaryDataLen = 0
-	tok.curTokenLen = 0
+	tok.bufPos = 0
+	tok.bufLen = 0
 	tok.curToken = nil
 }
 
 func (tok *Tokenizer) messageProcessed() {
 	tok.state = STATE_NONE
-	tok.binaryDataLen = 0
-	tok.curTokenLen = 0
 	tok.curToken = nil
-	tok.bufferCursorPos += 1
+	tok.bufPos += 1
 }
 
 func (tok *Tokenizer) ReadTokens() ([]string, error) {
 	result := make([]string, 0, MAX_TOKENS_PER_MSG)
-	tok.curTokenLen = 0
 	var err error
 	for {
-		if tok.bufferCursorPos >= tok.bufferDataLen {
+		if tok.bufPos >= tok.bufLen {
 			// Read more data from the network reader
-			tok.bufferDataLen, err = tok.reader.Read(tok.buffer)
-			if nil == err && tok.bufferDataLen > 0 {
-				tok.bufferCursorPos = 0
-			} else {
+			tok.bufPos = 0
+			tok.bufLen, err = tok.reader.Read(tok.buffer)
+			if nil != err {
+				tok.resetTokenizer()
 				return nil, err
 			}
 		}
 		// Tokenize content of the buffer
-		for ; tok.bufferCursorPos < tok.bufferDataLen; tok.bufferCursorPos += 1 {
-			val := tok.buffer[tok.bufferCursorPos]
+		for tok.bufPos < tok.bufLen {
 
-			switch tok.state {
-			case STATE_PARSE_BINARY_PAYLOAD:
-				availableBytes := tok.bufferDataLen - tok.bufferCursorPos
-				if availableBytes > tok.binaryDataLen {
-					availableBytes = tok.binaryDataLen
+			if tok.state == STATE_PARSE_BINARY_PAYLOAD {
+				availableBytes := tok.bufLen - tok.bufPos
+				if availableBytes > tok.binDataLeft {
+					availableBytes = tok.binDataLeft
 				}
-				// Check for max allowed binary token length
-				if tok.curTokenLen+availableBytes > MAX_BINARY_TOKEN_LEN {
-					return nil, ERR_TOK_TOKEN_TOO_LONG
-				}
-				copy(tok.curToken[tok.curTokenLen:],
-					tok.buffer[tok.bufferCursorPos:(tok.bufferCursorPos+availableBytes)])
-				tok.curTokenLen += availableBytes
-				tok.binaryDataLen -= availableBytes
+				tok.curToken = append(tok.curToken, tok.buffer[tok.bufPos:tok.bufPos+availableBytes]...)
+				tok.binDataLeft -= availableBytes
 
-				if tok.binaryDataLen <= 0 {
+				if tok.binDataLeft <= 0 {
 					// Token complete
 					result, err = tok.appendToken(result)
 					if err != nil {
+						tok.resetTokenizer()
 						return nil, err
 					}
 				}
 
-				tok.bufferCursorPos += availableBytes
-			case STATE_LOOKING_FOR_LF:
-				if SYMBOL_LF == val {
-					tok.messageProcessed()
-					return result, nil
+				tok.bufPos += availableBytes
+			}
+
+			val := tok.buffer[tok.bufPos]
+			tok.bufPos += 1
+
+			if val >= START_ASCII_RANGE && val <= END_ASCII_RANGE {
+				if tok.curToken == nil {
+					// Start parsing new text token
+					tok.state = STATE_PARSE_TEXT_TOKEN
+					tok.curToken = make([]byte, 0, 64)
+				}
+				if len(tok.curToken) < MAX_TEXT_TOKEN_LEN {
+					tok.curToken = append(tok.curToken, val)
 				} else {
 					tok.resetTokenizer()
-					return nil, ERR_TOK_PARSING_ERROR
+					return nil, ERR_TOK_TOKEN_TOO_LONG
 				}
-			default:
-				if val >= START_ASCII_RANGE && val <= END_ASCII_RANGE {
-					if nil == tok.curToken {
-						// Start parsing new text token
-						tok.state = STATE_PARSE_TEXT_TOKEN
-						tok.curToken = make([]byte, MAX_TEXT_TOKEN_LEN, MAX_TEXT_TOKEN_LEN)
-						tok.curTokenLen = 0
-					}
-					if tok.curTokenLen < MAX_TEXT_TOKEN_LEN {
-						tok.curToken[tok.curTokenLen] = val
-						tok.curTokenLen += 1
-					} else {
+			} else {
+				if tok.state == STATE_PARSE_TEXT_TOKEN && len(tok.curToken) > 0 {
+					// Current token completed. Add it to the result array and check for additional payload
+					// specific for this token
+					result, err = tok.appendToken(result)
+					if err != nil {
 						tok.resetTokenizer()
-						return nil, ERR_TOK_TOKEN_TOO_LONG
+						return nil, err
 					}
-				} else {
-					if STATE_PARSE_TEXT_TOKEN == tok.state && tok.curTokenLen > 0 {
-						// Current token completed. Add it to the result array and check for additional payload
-						// specific for this token
-						result, err = tok.appendToken(result)
-						if err != nil {
-							tok.resetTokenizer()
-							return nil, err
-						}
-					}
-					if SYMBOL_CR == val {
-						// Wait for LF symbol following current CR symbol
-						tok.state = STATE_LOOKING_FOR_LF
-					}
+				}
+				if val == SYMBOL_CR {
+					// Wait for LF symbol following current CR symbol
+					tok.messageProcessed()
+					return result, nil
 				}
 			}
 		}
