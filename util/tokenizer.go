@@ -53,9 +53,9 @@ func NewTokenizer(reader io.Reader) *Tokenizer {
 func (tok *Tokenizer) ReadTokens() ([]string, error) {
 	result := make([]string, 0, MAX_TOKENS_PER_MSG)
 	var err error
-	var token []byte
+	var token []byte = make([]byte, 0, 64)
 	var binTokenLen int
-	var state uint8 = STATE_INIT
+	var state uint8 = STATE_PARSE_TEXT_TOKEN
 
 	for {
 		if tok.bufPos >= tok.bufLen {
@@ -80,15 +80,11 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 				if binTokenLen <= 0 {
 					// Binary token complete
 					result = append(result, UnsafeBytesToString(token))
-					state = STATE_INIT
+					token = make([]byte, 0, 64)
+					state = STATE_PARSE_TEXT_TOKEN
 				}
 				tok.bufPos += availableBytes
 				continue
-			}
-
-			if state == STATE_INIT {
-				token = make([]byte, 0, 64)
-				state = STATE_PARSE_TEXT_TOKEN
 			}
 
 			val := tok.buffer[tok.bufPos]
@@ -109,10 +105,10 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 							state = STATE_PARSE_BINARY_PAYLOAD
 						} else {
 							result = append(result, UnsafeBytesToString(token))
-							state = STATE_INIT
 							if val == SYMBOL_CR {
 								return result, nil
 							}
+							token = make([]byte, 0, 64)
 						}
 					}
 				}
