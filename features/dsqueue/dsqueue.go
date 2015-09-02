@@ -560,7 +560,7 @@ func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) *common.Retur
 
 	msg := dsq.popMetaMessage(direction, permanentPop)
 	if msg == nil {
-		common.NewRetData("Ok", defs.CODE_200_OK, []common.IItem{})
+		return common.NewRetData("Ok", defs.CODE_200_OK, []common.IItem{})
 	}
 	retMsg := NewMsgItem(msg, dsq.getPayload(msg.Id))
 	if permanentPop {
@@ -721,6 +721,7 @@ func (dsq *DSQueue) cleanExpiredItems() int {
 		i++
 		hi := eh.PopItem()
 		dsq.deleteMessageById(hi.Id)
+		log.Debug("Deleting expired message: %s.", hi.Id)
 		if i >= MAX_CLEANS_PER_ATTEMPT {
 			break
 		}
@@ -749,11 +750,11 @@ func (dsq *DSQueue) periodicCleanUp() {
 		if !(dsq.workDone) {
 			unlocked, delivered := dsq.releaseInFlight()
 			if delivered > 0 {
-				log.Debug("%d messages delivered to the queue.", delivered)
+				log.Debug("%d messages delivered to the queue %s.", delivered, dsq.queueName)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 			if unlocked > 0 {
-				log.Debug("%d messages returned to the queue.", unlocked)
+				log.Debug("%d messages returned to the queue %s.", unlocked, dsq.queueName)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
@@ -821,12 +822,12 @@ func (dsq *DSQueue) loadAllMessages() {
 		}
 
 	}
-	// Sorting data guarantees that messages will be available almost in the same order as they arrived.
+	// Sorting data guarantees that messages will be available:w
+	// almost in the same order as they arrived.
 	sort.Sort(unlockedFrontMsgs)
 	for _, msg := range unlockedFrontMsgs {
 		dsq.allMessagesMap[msg.Id] = msg
 		dsq.highPriorityFrontMsgs.PushBack(msg.Id)
-		log.Debug("--- message to front priority: %s", msg.GetId())
 	}
 	sort.Sort(unlockedBackMsgs)
 	for _, msg := range unlockedBackMsgs {
@@ -845,7 +846,7 @@ func (dsq *DSQueue) loadAllMessages() {
 				inDelivery += 1
 			} else {
 				dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+s.MsgTTL)
-				dsq.availableMsgs.PushBack(msg.Id)
+				dsq.availableMsgs.PushFront(msg.Id)
 			}
 		}
 	}

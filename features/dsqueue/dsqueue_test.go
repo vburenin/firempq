@@ -138,12 +138,12 @@ func TestAutoExpiration(t *testing.T) {
 	// Wait for auto expiration.
 	time.Sleep(2000 * time.Millisecond)
 	msg := q.PopFront(nil)
-	if msg.Err == nil {
-		t.Error("Unexpected message! It should be expired!")
+	if len(msg.Items) > 0{
+		t.Error("Unexpected message It should be expired!")
 	}
 	msg = q.PopBack(nil)
-	if msg.Err == nil {
-		t.Error("Unexpected message! It should be expired!")
+	if len(msg.Items) > 0{
+		t.Error("Unexpected message It should be expired!")
 	}
 	if len(q.allMessagesMap) != 0 {
 		t.Error("Messages map must be empty!")
@@ -196,51 +196,50 @@ func TestLoadFromDb(t *testing.T) {
 	defer q.Clear()
 
 	q.PushBack([]string{PRM_ID, "b1", PRM_PAYLOAD, "p1"})
-	q.PushFront([]string{PRM_ID, "f1", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p1"})
 	q.PushBack([]string{PRM_ID, "b2", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p2"})
+	q.PushFront([]string{PRM_ID, "f1", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "f2", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "f3", PRM_PAYLOAD, "p1"})
 	q.PopLockFront(nil)
-	q.SetLockTimeout([]string{PRM_ID, "f3", PRM_POP_WAIT_TIMEOUT, "100"})
+	q.SetLockTimeout([]string{PRM_ID, "f3", PRM_LOCK_TIMEOUT, "100"})
 	// Wait till f3 will be unlocked and returned to the queue (priority front)
 	time.Sleep(200 * time.Millisecond)
+	q.Close()
 	time.Sleep(100 * time.Millisecond)
-	q.Clear()
 
 	// Now reload queue from db as a new instance (should contain f3, f2, b1)
 	ql := CreateTestQueue()
 	defer ql.Close()
 	defer ql.Clear()
 	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 3 {
-		t.Error("Messages map should contain 4 messages instead of", ql.availableMsgs.Len()+
+		t.Error("Messages map should contain 3 messages instead of", ql.availableMsgs.Len()+
 			ql.highPriorityFrontMsgs.Len())
 	}
 	time.Sleep(300 * time.Millisecond)
 	// Now f1 and b2 delivered and queue should contain 5 messages)
 	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 5 {
-		t.Error("Messages map should contain 4 messages instead of ", ql.availableMsgs.Len())
+		t.Error("Messages map should contain 5 messages instead of ", ql.availableMsgs.Len())
 	}
 	// Check order of loaded messages (front)
-	msg := q.PopLockFront(nil).Items[0]
+	msg := ql.PopLockFront(nil).Items[0]
 	if msg == nil || msg.GetId() != "f3" {
-		t.Error("Messages order is wrong!")
+		t.Error("Messages order is wrong! Got" , msg.GetId(), "instead of f3")
 	}
-	msg = q.PopLockFront(nil).Items[0]
+	msg = ql.PopLockFront(nil).Items[0]
 	if msg == nil || msg.GetId() != "f1" {
-		t.Error("Messages order is wrong!")
+		t.Error("Messages order is wrong! Got" , msg.GetId(), "instead of f1")
 	}
-
-	msg = q.PopLockFront(nil).Items[0]
+	msg = ql.PopLockFront(nil).Items[0]
 	if msg == nil || msg.GetId() != "f2" {
-		t.Error("Messages order is wrong!")
+		t.Error("Messages order is wrong! Got" , msg.GetId(), "instead of f2")
 	}
 	// Check order of loaded messages (back)
-	msg = q.PopLockBack(nil).Items[0]
+	msg = ql.PopLockBack(nil).Items[0]
 	if msg == nil || msg.GetId() != "b2" {
-		t.Error("Messages order is wrong!")
+		t.Error("Messages order is wrong! Got" , msg.GetId(), "instead of b2")
 	}
-	msg = q.PopLockBack(nil).Items[0]
+	msg = ql.PopLockBack(nil).Items[0]
 	if msg == nil || msg.GetId() != "b1" {
-		t.Error("Messages order is wrong!")
+		t.Error("Messages order is wrong! Got" , msg.GetId(), "instead of b1")
 	}
 }
