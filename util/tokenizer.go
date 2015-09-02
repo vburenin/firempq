@@ -112,11 +112,6 @@ func (tok* Tokenizer) messageProcessed() {
 	tok.tokenCursorPos = 0
 	tok.currToken = nil
 	tok.bufferCursorPos += 1
-	if tok.bufferCursorPos >= tok.bufferDataLen {
-		tok.buffer = nil
-		tok.bufferCursorPos = 0
-		tok.bufferDataLen = 0
-	}
 }
 
 func (tok *Tokenizer) Tokenize() ([]*string, int) {
