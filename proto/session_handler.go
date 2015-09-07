@@ -1,42 +1,37 @@
 package proto
 
 import (
-	"bufio"
 	"firempq/common"
 	"firempq/facade"
-	"firempq/svcerr"
-	"firempq/util"
 	"github.com/op/go-logging"
 	"io"
-	"strings"
-	"unicode"
+	"net"
 )
 
 var log = logging.MustGetLogger("firempq")
 
-const (
-	ENDL          = "\n"
-	ENDL_BYTE     = '\n'
-	SIMPLE_SERVER = "simple"
-)
+var EOM = []byte{'\n'}
 
 type FuncHandler func([]string) (common.IResponse, error)
 
 type SessionHandler struct {
-	conn         *bufio.ReadWriter
+	conn         net.Conn
+	tokenizer    *common.Tokenizer
 	mainHandlers map[string]FuncHandler
 	active       bool
 	ctx          common.ISvc
 	svcs         *facade.ServiceFacade
 }
 
-func NewSessionHandler(conn *bufio.ReadWriter, services *facade.ServiceFacade) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
+
 	handlerMap := map[string]FuncHandler{
 		CMD_PING:    pingHandler,
 		CMD_UNIX_TS: tsHandler,
 	}
 	sh := &SessionHandler{
 		conn:         conn,
+		tokenizer:    common.NewTokenizer(),
 		mainHandlers: handlerMap,
 		ctx:          nil,
 		active:       true,
@@ -52,40 +47,20 @@ func NewSessionHandler(conn *bufio.ReadWriter, services *facade.ServiceFacade) *
 
 // Connection dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
+	addr := s.conn.RemoteAddr().String()
+	log.Info("Client connected: %s", addr)
 	s.writeResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
-		cmdTokens, err := s.readCommand()
+		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
 		if err != nil {
 			if err == io.EOF {
-				log.Info("Client disconnected")
 				break
 			}
 			log.Error(err.Error())
 		}
 		err = s.processCmdTokens(cmdTokens)
 	}
-	s.conn.Flush()
-}
-
-// Command reader and tokenization.
-func (s *SessionHandler) readCommand() ([]string, error) {
-	data, err := s.conn.ReadString(ENDL_BYTE)
-
-	if err != nil {
-		return nil, err
-	}
-
-	data = strings.TrimRightFunc(data, unicode.IsSpace)
-	splits := strings.Split(data, " ")
-
-	var tokens []string
-	for _, s := range splits {
-		if len(s) > 0 {
-			tokens = append(tokens, s)
-		}
-	}
-
-	return tokens, nil
+	log.Info("Client disconnected: %s", addr)
 }
 
 // Basic token processing that looks for global commands,
@@ -95,13 +70,13 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	var resp common.IResponse
 	var err error
 	if len(cmdTokens) == 0 {
-		return s.writeResponse(common.RESP_OK)
+		return s.writeResponse(common.OK200_RESPONSE)
 	}
 	cmd := cmdTokens[0]
 	tokens := cmdTokens[1:]
 	handler, ok := s.mainHandlers[cmd]
 	if !ok {
-		resp = svcerr.ERR_UNKNOW_CMD
+		resp = common.ERR_UNKNOWN_CMD
 	} else {
 		resp, err = handler(tokens)
 	}
@@ -113,28 +88,27 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 
 // Writes IResponse into connection.
 func (s *SessionHandler) writeResponse(resp common.IResponse) error {
-
-	if _, err := s.conn.WriteString(resp.GetResponse()); err != nil {
+	unsafeData := common.UnsafeStringToBytes(resp.GetResponse())
+	if _, err := s.conn.Write(unsafeData); err != nil {
 		return err
 	}
-	if _, err := s.conn.WriteString("\n"); err != nil {
+	if _, err := s.conn.Write(EOM); err != nil {
 		return err
 	}
-	s.conn.Flush()
 	return nil
 }
 
 // Handler that creates a service.
 func (s *SessionHandler) createServiceHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) < 2 {
-		return svcerr.InvalidRequest("At least service type and name should be provided"), nil
+		return common.InvalidRequest("At least service type and name should be provided"), nil
 	}
 	svcName := tokens[0]
 	svcType := tokens[1]
 
 	_, exists := s.svcs.GetService(svcName)
 	if exists {
-		return svcerr.ConflictRequest("Service exists already"), nil
+		return common.ConflictRequest("Service exists already"), nil
 	}
 
 	resp := s.svcs.CreateService(svcType, svcName, make(map[string]string))
@@ -144,10 +118,10 @@ func (s *SessionHandler) createServiceHandler(tokens []string) (common.IResponse
 // Drop service.
 func (s *SessionHandler) dropServiceHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) == 0 {
-		return svcerr.InvalidRequest("Service name must be provided"), nil
+		return common.InvalidRequest("Service name must be provided"), nil
 	}
 	if len(tokens) > 1 {
-		return svcerr.InvalidRequest("DROP accept service name only"), nil
+		return common.InvalidRequest("DROP accept service name only"), nil
 	}
 	svcName := tokens[0]
 	res := s.svcs.DropService(svcName)
@@ -157,18 +131,18 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) (common.IResponse, 
 // Context changer.
 func (s *SessionHandler) setCtxHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 1 {
-		return svcerr.InvalidRequest("SETCTX accept service name only"), nil
+		return common.InvalidRequest("SETCTX accept service name only"), nil
 	}
 	if len(tokens) == 0 {
-		return svcerr.InvalidRequest("Service name must be provided"), nil
+		return common.InvalidRequest("Service name must be provided"), nil
 	}
 	svcName := tokens[0]
 	svc, exists := s.svcs.GetService(svcName)
 	if !exists {
-		return svcerr.ERR_NO_SVC, nil
+		return common.ERR_NO_SVC, nil
 	}
 	s.ctx = svc
-	return common.RESP_OK, nil
+	return common.OK200_RESPONSE, nil
 }
 
 // Set stop active flag to false that will case an exit from the processing loop.
@@ -179,10 +153,10 @@ func (s *SessionHandler) Stop() {
 // Stops the main loop on QUIT.
 func (s *SessionHandler) quitHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
-		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
+		return common.ERR_CMD_WITH_NO_PARAMS, nil
 	}
 	s.Stop()
-	return common.RESP_OK, nil
+	return common.OK200_RESPONSE, nil
 }
 
 // List all active services.
@@ -194,7 +168,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) (common.IResponse,
 	} else if len(tokens) == 2 {
 		svcType = tokens[1]
 	} else if len(tokens) > 2 {
-		return svcerr.InvalidRequest("LIST accept service name prefix and service type only"), nil
+		return common.InvalidRequest("LIST accept service name prefix and service type only"), nil
 	}
 
 	list, err := s.svcs.ListServices(svcPrefix, svcType)
@@ -208,7 +182,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) (common.IResponse,
 // Ping responder.
 func pingHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
-		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
+		return common.ERR_CMD_WITH_NO_PARAMS, nil
 	}
 	return common.RESP_PONG, nil
 }
@@ -216,7 +190,7 @@ func pingHandler(tokens []string) (common.IResponse, error) {
 // Returns current server unix time stamp in milliseconds.
 func tsHandler(tokens []string) (common.IResponse, error) {
 	if len(tokens) > 0 {
-		return svcerr.ERR_CMD_WITH_NO_PARAMS, nil
+		return common.ERR_CMD_WITH_NO_PARAMS, nil
 	}
-	return common.NewIntResponse(util.Uts()), nil
+	return common.NewIntResponse(common.Uts()), nil
 }

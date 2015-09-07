@@ -2,7 +2,7 @@ package structs
 
 // Items with higher priority always go first.
 
-import "firempq/svcerr"
+import "firempq/common"
 
 type PriorityFirstQueue struct {
 	// The highest priority queue used for the returned items.
@@ -71,7 +71,7 @@ func (aq *PriorityFirstQueue) Pop() string {
 
 func (aq *PriorityFirstQueue) Push(id string, priority int64) error {
 	if priority >= aq.maxPriority || priority < 0 {
-		return svcerr.ERR_UNEXPECTED_PRIORITY
+		return common.ERR_UNEXPECTED_PRIORITY
 	}
 	if aq.queues[priority].Empty() {
 		aq.withItems.PushItem(priority)

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"firempq/common"
 	"firempq/facade"
 	"firempq/proto"
@@ -68,12 +67,6 @@ func (this *SimpleServer) Stop() {
 
 func (this *SimpleServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
-
-	r := bufio.NewReader(conn)
-	w := bufio.NewWriter(conn)
-
-	rw_conn := bufio.NewReadWriter(r, w)
-	session_handler := proto.NewSessionHandler(rw_conn, this.facade)
+	session_handler := proto.NewSessionHandler(conn, this.facade)
 	session_handler.DispatchConn()
-	conn.Close()
 }

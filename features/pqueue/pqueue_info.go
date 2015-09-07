@@ -1,7 +1,7 @@
 package pqueue
 
 import (
-	"firempq/util"
+	"firempq/common"
 )
 
 const (
@@ -33,7 +33,7 @@ func NewPQueueSettings(priorities, size int64) *PQueueSettings {
 		LastPushTs:     0,
 		LastPopTs:      0,
 		MaxPriority:    priorities,
-		CreateTs:       util.Uts(),
+		CreateTs:       common.Uts(),
 	}
 }
 

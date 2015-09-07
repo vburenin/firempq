@@ -1,10 +1,9 @@
-package util
+package common
 
 import (
 	"errors"
 	"io"
 	"strconv"
-	"unsafe"
 )
 
 const (
@@ -34,24 +33,18 @@ type Tokenizer struct {
 	buffer []byte
 	bufPos int
 	bufLen int
-	reader io.Reader
 }
 
-func UnsafeBytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
-}
-
-func NewTokenizer(reader io.Reader) *Tokenizer {
+func NewTokenizer() *Tokenizer {
 	tok := Tokenizer{
 		buffer: make([]byte, MAX_RECV_BUFFER_SIZE),
 		bufPos: 0,
 		bufLen: 0,
-		reader: reader,
 	}
 	return &tok
 }
 
-func (tok *Tokenizer) ReadTokens() ([]string, error) {
+func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 	result := make([]string, 0, MAX_TOKENS_PER_MSG)
 	var err error
 	var token []byte = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
@@ -62,7 +55,7 @@ func (tok *Tokenizer) ReadTokens() ([]string, error) {
 		if tok.bufPos >= tok.bufLen {
 			// Read more data from the network reader
 			tok.bufPos = 0
-			tok.bufLen, err = tok.reader.Read(tok.buffer)
+			tok.bufLen, err = reader.Read(tok.buffer)
 			if nil != err {
 				return nil, err
 			}

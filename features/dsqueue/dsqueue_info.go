@@ -1,7 +1,7 @@
 package dsqueue
 
 import (
-	"firempq/util"
+	"firempq/common"
 )
 
 const (
@@ -38,7 +38,7 @@ func NewDSQueueSettings(size int64) *DSQueueSettings {
 		PopLockTimeout: int64(DEFAULT_LOCK_TIMEOUT),
 		PopCountLimit:  int64(DEFAULT_POP_COUNT_LIMIT),
 		MaxSize:        size,
-		CreateTs:       util.Uts(),
+		CreateTs:       common.Uts(),
 	}
 }
 

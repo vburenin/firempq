@@ -1,14 +1,13 @@
-package util
+package common
 
 import (
 	"encoding/json"
-	"log"
 )
 
 func StructToBinary(s interface{}) []byte {
 	data, err := json.Marshal(s)
 	if err != nil {
-		log.Println("Error serializing data:", err)
+		log.Error("Error serializing data: %s", err)
 		return nil
 	}
 	return data

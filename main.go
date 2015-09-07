@@ -8,8 +8,8 @@ import (
 	"firempq/server"
 	"github.com/op/go-logging"
 	"os"
-	"runtime"
-	"runtime/pprof"
+	//	"runtime"
+	//	"runtime/pprof"
 	"strconv"
 	//	"time"
 )
@@ -27,7 +27,7 @@ func init_logging() {
 }
 
 func main() {
-
+	init_logging()
 	srv, err := server.GetServer(server.SIMPLE_SERVER, ":9033")
 	if err != nil {
 		log.Critical("Error: %s", err.Error())
@@ -48,11 +48,8 @@ func addMessages(pq common.ISvc) {
 	//	payload += payload
 	//time.Sleep(60 * 1000000000)
 	//pq.DeleteAll()
-	v := map[string]string{
-		defs.PRM_PRIORITY: "1",
-		defs.PRM_PAYLOAD:  payload,
-	}
-	for i := 0; i < 1000000; i++ {
+	v := []string{defs.PRM_PRIORITY, "1", defs.PRM_PAYLOAD, payload}
+	for i := 0; i < 10000000; i++ {
 		pq.Call(pqueue.ACTION_PUSH, v)
 	}
 	//end_t := time.Now().UnixNano()
@@ -60,36 +57,29 @@ func addMessages(pq common.ISvc) {
 	//fmt.Println((end_t - ts) / 1000000)
 }
 
-func addSpeedTest(q common.ISvc) {
-
-	addMessages(q)
-
-}
-
 func main1() {
 	init_logging()
-	f, _ := os.Create("pp.dat")
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
-
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	//	f, _ := os.Create("pp.dat")
+	//	pprof.StartCPUProfile(f)
+	//	defer pprof.StopCPUProfile()
+	//
+	//	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	fc := facade.CreateFacade()
 	defer fc.Close()
 	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
 		err := fc.CreateService(common.STYPE_PRIORITY_QUEUE, qid, nil)
-		// err := fc.CreateQueue(common.QTYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
 			log.Notice("%s: %s", err.Error(), qid)
 		}
 	}
+	start_ts := common.Uts()
 	log.Notice("Started")
 	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
 		q, _ := fc.GetService(qid)
-		addSpeedTest(q)
+		addMessages(q)
 	}
-	log.Notice("Finished")
-
+	log.Notice("Finished. Elapsed: %d", common.Uts()-start_ts)
 }

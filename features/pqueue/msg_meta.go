@@ -3,7 +3,6 @@ package pqueue
 import (
 	"encoding/binary"
 	"firempq/common"
-	"firempq/util"
 )
 
 const (
@@ -23,7 +22,7 @@ func NewPQMessageWithId(id string, priority int64) *PQMessage {
 	pqm := PQMessage{
 		Id:        id,
 		Priority:  priority,
-		CreatedTs: util.Uts(),
+		CreatedTs: common.Uts(),
 		PopCount:  0,
 		UnlockTs:  0,
 	}

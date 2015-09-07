@@ -44,12 +44,10 @@
 //
 //}
 
-package util_test
+package common
 
 import "testing"
 import (
-	"firempq/util"
-	//"fmt"
 	"io"
 )
 
@@ -72,15 +70,15 @@ func (td *TestDataReader) Read(data []byte) (int, error) {
 func TestReadTokens(t *testing.T) {
 	println(len(TXT))
 	r := &TestDataReader{0}
-	startTs := util.Uts()
-	tok := util.NewTokenizer(r)
+	startTs := Uts()
+	tok := NewTokenizer()
 	for {
-		_, err := tok.ReadTokens()
+		_, err := tok.ReadTokens(r)
 		//fmt.Println(val, err)
 		if err == io.EOF {
 			break
 		}
 	}
-	println(util.Uts() - startTs)
+	println(Uts() - startTs)
 
 }

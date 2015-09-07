@@ -1,9 +1,5 @@
 package common
 
-import (
-	"firempq/util"
-)
-
 const (
 	STYPE_PRIORITY_QUEUE      = "pqueue"    // Highest priority goes first.
 	STYPE_DOUBLE_SIDED_QUEUE  = "dsqueue"   // Double sided queue
@@ -26,14 +22,14 @@ func NewServiceMetaInfo(stype string, id int32, name string) *ServiceMetaInfo {
 		Stype:    stype,
 		Id:       id,
 		Name:     name,
-		CreateTs: util.Uts(),
+		CreateTs: Uts(),
 		Disabled: false,
 	}
 }
 
 func ServiceInfoFromBinary(data []byte) (*ServiceMetaInfo, error) {
 	smi := ServiceMetaInfo{}
-	err := util.StructFromBinary(&smi, data)
+	err := StructFromBinary(&smi, data)
 	if err != nil {
 		return nil, err
 	}
@@ -41,5 +37,5 @@ func ServiceInfoFromBinary(data []byte) (*ServiceMetaInfo, error) {
 }
 
 func (q *ServiceMetaInfo) ToBinary() []byte {
-	return util.StructToBinary(q)
+	return StructToBinary(q)
 }

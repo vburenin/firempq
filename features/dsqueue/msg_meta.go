@@ -3,7 +3,6 @@ package dsqueue
 import (
 	"encoding/binary"
 	"firempq/common"
-	"firempq/util"
 )
 
 const (
@@ -24,7 +23,7 @@ func NewDSQMessageWithId(id string) *DSQMessage {
 
 	m := DSQMessage{
 		Id:         id,
-		CreatedTs:  util.Uts(),
+		CreatedTs:  common.Uts(),
 		PopCount:   0,
 		UnlockTs:   0,
 		DeliveryTs: 0,

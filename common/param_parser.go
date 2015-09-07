@@ -1,7 +1,6 @@
-package util
+package common
 
 import (
-	"firempq/svcerr"
 	"fmt"
 	"strconv"
 )
@@ -11,10 +10,10 @@ func makeIntDesc(valName string, minValue, maxValue int64) string {
 		valName, minValue, maxValue)
 }
 
-func ParseInt64Params(params []string, minValue, maxValue int64) ([]string, int64, error) {
+func ParseInt64Params(params []string, minValue, maxValue int64) ([]string, int64, *ErrorResponse) {
 	valName := params[0]
 	if len(params) < 2 {
-		return nil, 0, svcerr.InvalidRequest(makeIntDesc(valName, minValue, maxValue))
+		return nil, 0, InvalidRequest(makeIntDesc(valName, minValue, maxValue))
 	}
 	val, err := strconv.ParseInt(params[1], 10, 0)
 
@@ -22,7 +21,7 @@ func ParseInt64Params(params []string, minValue, maxValue int64) ([]string, int6
 		return params[2:], val, nil
 	}
 
-	return nil, 0, svcerr.InvalidRequest(makeIntDesc(valName, minValue, maxValue))
+	return nil, 0, InvalidRequest(makeIntDesc(valName, minValue, maxValue))
 }
 
 func makeStrDesc(valName string, minLen, maxLen int64) string {
@@ -30,14 +29,14 @@ func makeStrDesc(valName string, minLen, maxLen int64) string {
 		minLen, maxLen)
 }
 
-func ParseStringParam(params []string, minLen, maxLen int64) ([]string, string, error) {
+func ParseStringParam(params []string, minLen, maxLen int64) ([]string, string, *ErrorResponse) {
 	valName := params[0]
 	if len(params) < 2 {
-		return nil, "", svcerr.InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+		return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
 	}
 	paramLen := int64(len(params[1]))
 	if paramLen >= minLen && paramLen <= maxLen {
 		return params[2:], params[1], nil
 	}
-	return nil, "", svcerr.InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
 }

@@ -10,8 +10,6 @@ package db
 import (
 	"bytes"
 	"firempq/common"
-	"firempq/svcerr"
-	"firempq/util"
 	"github.com/jmhodges/levigo"
 	"github.com/op/go-logging"
 	"sync"
@@ -205,7 +203,7 @@ func (ds *DataStorage) DeleteServiceData(svcName string) {
 func (ds *DataStorage) GetPayload(svcName string, itemID string) string {
 	payloadID := makePayloadID(svcName, itemID)
 	ds.cacheLock.Lock()
-	payload, ok := ds.payloadCache[itemID]
+	payload, ok := ds.payloadCache[payloadID]
 	if ok {
 		ds.cacheLock.Unlock()
 		return payload
@@ -315,16 +313,16 @@ func (ds *DataStorage) GetServiceConfig(settings interface{}, svcName string) er
 	key := makeSettingsKey(svcName)
 	data, _ := ds.db.Get(defaultReadOptions, key)
 	if data == nil {
-		return svcerr.InvalidRequest("No service settings found: " + svcName)
+		return common.InvalidRequest("No service settings found: " + svcName)
 	}
-	err := util.StructFromBinary(settings, data)
+	err := common.StructFromBinary(settings, data)
 	return err
 }
 
 // SaveServiceConfig saves service config into database.
 func (ds *DataStorage) SaveServiceConfig(svcName string, settings interface{}) {
 	key := makeSettingsKey(svcName)
-	data := util.StructToBinary(settings)
+	data := common.StructToBinary(settings)
 	err := ds.db.Put(defaultWriteOptions, key, data)
 	if err != nil {
 		log.Error("Failed to save config: %s", err.Error())

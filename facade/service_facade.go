@@ -3,7 +3,6 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
-	"firempq/svcerr"
 	"github.com/op/go-logging"
 	"strings"
 	"sync"
@@ -43,16 +42,16 @@ func (s *ServiceFacade) loadAllServices() {
 	}
 }
 
-func (s *ServiceFacade) CreateService(svcType string, svcName string, params map[string]string) error {
+func (s *ServiceFacade) CreateService(svcType string, svcName string, params map[string]string) *common.ErrorResponse {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if _, ok := s.allSvcs[svcName]; ok {
-		return svcerr.ERR_SVC_ALREADY_EXISTS
+		return common.ERR_SVC_ALREADY_EXISTS
 	}
 	svcCrt, ok := SVC_CREATOR[svcType]
 	if !ok {
-		return svcerr.ERR_SVC_UNKNOWN_TYPE
+		return common.ERR_SVC_UNKNOWN_TYPE
 	}
 
 	metaInfo := common.NewServiceMetaInfo(svcType, 0, svcName)
@@ -63,12 +62,12 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params map
 	return nil
 }
 
-func (s *ServiceFacade) DropService(svcName string) error {
+func (s *ServiceFacade) DropService(svcName string) *common.ErrorResponse {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	svc, ok := s.allSvcs[svcName]
 	if !ok {
-		return svcerr.ERR_NO_SVC
+		return common.ERR_NO_SVC
 	}
 	svc.Close()
 	delete(s.allSvcs, svcName)
@@ -76,14 +75,14 @@ func (s *ServiceFacade) DropService(svcName string) error {
 	return nil
 }
 
-func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) ([]string, error) {
+func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) ([]string, *common.ErrorResponse) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if svcType != "" {
 		_, ok := SVC_CREATOR[svcType]
 		if !ok {
-			return nil, svcerr.ERR_SVC_UNKNOWN_TYPE
+			return nil, common.ERR_SVC_UNKNOWN_TYPE
 		}
 	}
 
