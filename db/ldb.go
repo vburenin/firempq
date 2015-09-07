@@ -122,12 +122,12 @@ func (ds *DataStorage) periodicCacheFlush() {
 
 // Item payload Id.
 func makePayloadID(svcName, id string) string {
-	return svcName + ":p:" + id
+	return svcName + "\x01" + id
 }
 
 // Item Id.
 func makeItemID(svcName, id string) string {
-	return svcName + ":m:" + id
+	return svcName + "\x02" + id
 }
 
 // StoreItemWithPayload stores item and provide payload.
