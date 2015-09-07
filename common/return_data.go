@@ -12,6 +12,40 @@ type ItemsResponse struct {
 	items []IItem
 }
 
+type DictResponse struct {
+	dict map[string]interface{}
+}
+
+func NewDictResponse(dict map[string]interface{}) *DictResponse {
+	return &DictResponse{dict}
+}
+
+func (self *DictResponse) GetResponse() string {
+	data := make([]string, 0, 3+9*len(self.dict))
+	data = append(data, "+DATA %")
+	data = append(data, strconv.Itoa(len(self.dict)))
+	for k, v := range self.dict {
+		data = append(data, "\n")
+		data = append(data, k)
+		data = append(data, " ")
+		switch t := v.(type) {
+		case string:
+			data = append(data, t)
+		case int:
+			data = append(data, ":")
+			data = append(data, strconv.Itoa(t))
+		case int64:
+			data = append(data, ":")
+			data = append(data, strconv.Itoa(int(t)))
+		}
+	}
+	return strings.Join(data, "")
+}
+
+func (self *DictResponse) IsError() bool {
+	return false
+}
+
 func NewItemsResponse(items []IItem) *ItemsResponse {
 	return &ItemsResponse{items}
 }
