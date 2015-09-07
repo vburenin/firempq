@@ -28,9 +28,9 @@ func NewFacade(database *db.DataStorage) *ServiceFacade {
 func (s *ServiceFacade) loadAllServices() {
 	for _, sm := range s.database.GetAllServiceMeta() {
 		log.Info("Loading service data for: %s", sm.Name)
-		objLoader, ok := SVC_LOADER[sm.Stype]
+		objLoader, ok := SVC_LOADER[sm.SType]
 		if !ok {
-			log.Error("Unknown service '%s' type: %s", sm.Name, sm.Stype)
+			log.Error("Unknown service '%s' type: %s", sm.Name, sm.SType)
 			continue
 		}
 		svcInstance, err := objLoader(s.database, sm.Name)

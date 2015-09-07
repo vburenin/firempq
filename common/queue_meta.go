@@ -10,16 +10,16 @@ const (
 )
 
 type ServiceMetaInfo struct {
-	Stype    string
+	SType    string
 	Id       int32
 	Name     string
 	CreateTs int64
 	Disabled bool
 }
 
-func NewServiceMetaInfo(stype string, id int32, name string) *ServiceMetaInfo {
+func NewServiceMetaInfo(sType string, id int32, name string) *ServiceMetaInfo {
 	return &ServiceMetaInfo{
-		Stype:    stype,
+		SType:    sType,
 		Id:       id,
 		Name:     name,
 		CreateTs: Uts(),
