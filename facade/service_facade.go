@@ -42,7 +42,7 @@ func (s *ServiceFacade) loadAllServices() {
 	}
 }
 
-func (s *ServiceFacade) CreateService(svcType string, svcName string, params map[string]string) *common.ErrorResponse {
+func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) common.IResponse {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -59,10 +59,10 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params map
 
 	s.allSvcs[svcName] = svcCrt(svcName, params)
 
-	return nil
+	return common.OK200_RESPONSE
 }
 
-func (s *ServiceFacade) DropService(svcName string) *common.ErrorResponse {
+func (s *ServiceFacade) DropService(svcName string) common.IResponse {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	svc, ok := s.allSvcs[svcName]
@@ -72,17 +72,17 @@ func (s *ServiceFacade) DropService(svcName string) *common.ErrorResponse {
 	svc.Close()
 	delete(s.allSvcs, svcName)
 	s.database.DeleteServiceData(svcName)
-	return nil
+	return common.OK200_RESPONSE
 }
 
-func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) ([]string, *common.ErrorResponse) {
+func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IResponse {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if svcType != "" {
 		_, ok := SVC_CREATOR[svcType]
 		if !ok {
-			return nil, common.ERR_SVC_UNKNOWN_TYPE
+			return common.ERR_SVC_UNKNOWN_TYPE
 		}
 	}
 
@@ -95,7 +95,7 @@ func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) ([]string
 			services = append(services, svcName+" "+svc.GetTypeName())
 		}
 	}
-	return services, nil
+	return common.NewStrArrayResponse(services)
 }
 
 func (s *ServiceFacade) GetService(name string) (common.ISvc, bool) {

@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-type CreateFactoryFunc func(string, map[string]string) common.ISvc
+type CreateFactoryFunc func(string, []string) common.ISvc
 type DataLoaderFunc func(*db.DataStorage, string) (common.ISvc, error)
 
 var SVC_CREATOR = map[string](CreateFactoryFunc){

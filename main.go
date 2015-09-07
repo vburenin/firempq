@@ -71,7 +71,7 @@ func main1() {
 		qid := "tst_queue_" + strconv.Itoa(i)
 		err := fc.CreateService(common.STYPE_PRIORITY_QUEUE, qid, nil)
 		if err != nil {
-			log.Notice("%s: %s", err.Error(), qid)
+			log.Notice("%s: %s", err, qid)
 		}
 	}
 	start_ts := common.Uts()
