@@ -6,6 +6,7 @@ import (
 	"github.com/op/go-logging"
 	"io"
 	"net"
+	"strings"
 )
 
 var log = logging.MustGetLogger("firempq")
@@ -21,9 +22,10 @@ type SessionHandler struct {
 	active       bool
 	ctx          common.ISvc
 	svcs         *facade.ServiceFacade
+	quitChan     chan bool
 }
 
-func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade, quitChan chan bool) *SessionHandler {
 
 	handlerMap := map[string]FuncHandler{
 		CMD_PING:    pingHandler,
@@ -36,6 +38,7 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 		ctx:          nil,
 		active:       true,
 		svcs:         services,
+		quitChan:     quitChan,
 	}
 	sh.mainHandlers[CMD_QUIT] = sh.quitHandler
 	sh.mainHandlers[CMD_SETCTX] = sh.setCtxHandler
@@ -46,22 +49,38 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 	return sh
 }
 
+func (s *SessionHandler) quitListenter() {
+	for {
+		select {
+		case <-s.quitChan:
+			s.active = false
+			s.conn.Close()
+			return
+		}
+	}
+}
+
 // Connection dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
+	go s.quitListenter()
 	addr := s.conn.RemoteAddr().String()
 	log.Info("Client connected: %s", addr)
 	s.writeResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Error(err.Error())
+		if err == nil {
+			err = s.processCmdTokens(cmdTokens)
 		}
-		err = s.processCmdTokens(cmdTokens)
+		if err != nil {
+			errTxt := err.Error()
+			if err == io.EOF || strings.Index(errTxt, "use of closed") > 0 {
+				log.Debug("Client disconnected: %s", addr)
+			} else {
+				log.Error(errTxt)
+			}
+			break
+		}
 	}
-	log.Info("Client disconnected: %s", addr)
 }
 
 // Basic token processing that looks for global commands,
