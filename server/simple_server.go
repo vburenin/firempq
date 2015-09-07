@@ -4,12 +4,13 @@ import (
 	"firempq/common"
 	"firempq/facade"
 	"firempq/proto"
-	"github.com/op/go-logging"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("firempq")

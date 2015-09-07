@@ -6,10 +6,11 @@ import (
 	"firempq/defs"
 	"firempq/structs"
 	"fmt"
-	"github.com/op/go-logging"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("firempq")

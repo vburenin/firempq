@@ -3,10 +3,11 @@ package proto
 import (
 	"firempq/common"
 	"firempq/facade"
-	"github.com/op/go-logging"
 	"io"
 	"net"
 	"strings"
+
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("firempq")

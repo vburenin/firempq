@@ -10,10 +10,11 @@ package db
 import (
 	"bytes"
 	"firempq/common"
-	"github.com/jmhodges/levigo"
-	"github.com/op/go-logging"
 	"sync"
 	"time"
+
+	"github.com/jmhodges/levigo"
+	"github.com/op/go-logging"
 )
 
 // Default LevelDB read options.

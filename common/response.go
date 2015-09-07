@@ -2,8 +2,9 @@ package common
 
 import (
 	"bytes"
-	"github.com/op/go-logging"
 	"strconv"
+
+	"github.com/op/go-logging"
 )
 
 // Error translator

@@ -3,9 +3,10 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
-	"github.com/op/go-logging"
 	"strings"
 	"sync"
+
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("firempq")
