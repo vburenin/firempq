@@ -17,7 +17,6 @@ type DSQueueSettings struct {
 	PopLockTimeout int64 // Timeout before message is getting released.
 	PopCountLimit  int64 // Pop count limit. 0 - unlimited. >0 Will be removed after this number of attempts.
 	MaxSize        int64 // Max queue size.
-	MaxPriority    int64 // Max priority.
 	CreateTs       int64 // Time when queue was created.
 }
 
@@ -44,7 +43,6 @@ func NewDSQueueSettings(size int64) *DSQueueSettings {
 
 func (p *DSQueueSettings) ToMap() map[string]interface{} {
 	res := make(map[string]interface{})
-	res["MaxPriority"] = p.MaxPriority
 	res["MaxSize"] = p.MaxSize
 	res["CreateTs"] = p.CreateTs
 	res["PopTimeOut"] = p.PopLockTimeout
