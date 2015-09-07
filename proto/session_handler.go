@@ -42,6 +42,7 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 	sh.mainHandlers[CMD_CREATE_SVC] = sh.createServiceHandler
 	sh.mainHandlers[CMD_DROP_SVC] = sh.dropServiceHandler
 	sh.mainHandlers[CMD_LIST] = sh.listServicesHandler
+	sh.mainHandlers[CMD_CTX] = sh.ctxHandler
 	return sh
 }
 
@@ -71,11 +72,17 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	if len(cmdTokens) == 0 {
 		return s.writeResponse(common.OK200_RESPONSE)
 	}
+
 	cmd := cmdTokens[0]
 	tokens := cmdTokens[1:]
 	handler, ok := s.mainHandlers[cmd]
+
 	if !ok {
-		resp = common.ERR_UNKNOWN_CMD
+		if s.ctx == nil {
+			resp = common.ERR_UNKNOWN_CMD
+		} else {
+			resp = s.ctx.Call(cmd, tokens)
+		}
 	} else {
 		resp = handler(tokens)
 	}
@@ -93,6 +100,18 @@ func (s *SessionHandler) writeResponse(resp common.IResponse) error {
 		return err
 	}
 	return nil
+}
+
+func (s *SessionHandler) ctxHandler(tokens []string) common.IResponse {
+	if len(tokens) < 2 {
+		return common.ERR_SVC_CTX
+	}
+	svcName := tokens[0]
+	svc, exists := s.svcs.GetService(svcName)
+	if !exists {
+		return common.ERR_NO_SVC
+	}
+	return svc.Call(tokens[1], tokens[2:])
 }
 
 // Handler that creates a service.
