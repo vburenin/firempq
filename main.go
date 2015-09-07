@@ -6,12 +6,10 @@ import (
 	"firempq/facade"
 	"firempq/features/pqueue"
 	"firempq/server"
-	"github.com/op/go-logging"
 	"os"
-	//	"runtime"
-	//	"runtime/pprof"
 	"strconv"
-	//	"time"
+
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("firempq")
@@ -39,22 +37,11 @@ func main() {
 }
 
 func addMessages(pq common.ISvc) {
-	//	ts := time.Now().UnixNano()
 	payload := "0000"
-	//payload += payload
-	//	payload += payload
-	//	payload += payload
-	//	payload += payload
-	//	payload += payload
-	//time.Sleep(60 * 1000000000)
-	//pq.DeleteAll()
 	v := []string{defs.PRM_PRIORITY, "1", defs.PRM_PAYLOAD, payload}
 	for i := 0; i < 10000000; i++ {
 		pq.Call(pqueue.ACTION_PUSH, v)
 	}
-	//end_t := time.Now().UnixNano()
-
-	//fmt.Println((end_t - ts) / 1000000)
 }
 
 func main1() {
