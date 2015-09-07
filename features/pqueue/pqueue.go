@@ -28,6 +28,7 @@ const (
 	ACTION_POP_WAIT            = "POPWAIT"
 	ACTION_SET_QPARAM          = "SETQP"
 	ACTION_SET_MPARAM          = "SETMP"
+	ACTION_STATUS              = "STATUS"
 )
 
 type PQueue struct {
@@ -98,6 +99,13 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
+func (pq *PQueue) GetCurrentStatus(params []string) common.IResponse {
+	if len(params) > 0 {
+		return common.ERR_CMD_WITH_NO_PARAMS
+	}
+	return common.NewDictResponse(pq.GetStatus())
+}
+
 func (pq *PQueue) GetType() defs.ServiceType {
 	return defs.HT_PRIORITY_QUEUE
 }
@@ -123,6 +131,8 @@ func (pq *PQueue) Call(cmd string, params []string) common.IResponse {
 		return pq.SetLockTimeout(params)
 	case ACTION_UNLOCK_BY_ID:
 		return pq.UnlockMessageById(params)
+	case ACTION_STATUS:
+		return pq.GetCurrentStatus(params)
 	}
 	return common.InvalidRequest("Unknown action: " + cmd)
 }

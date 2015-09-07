@@ -30,6 +30,7 @@ const (
 	ACTION_FORCE_DELETE_BY_ID  = "FORCEDELETE"
 	ACTION_SET_QPARAM          = "SETQP"
 	ACTION_SET_MPARAM          = "SETMP"
+	ACTION_STATUS              = "STATUS"
 )
 
 const (
@@ -107,6 +108,7 @@ func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSe
 		ACTION_POP_LOCK_BACK:       dsq.PopLockBack,
 		ACTION_POP_BACK:            dsq.PopBack,
 		ACTION_RETURN_BACK:         dsq.ReturnBack,
+		ACTION_STATUS:              dsq.GetCurrentStatus,
 	}
 
 	dsq.loadAllMessages()
@@ -143,6 +145,13 @@ func (dsq *DSQueue) GetStatus() map[string]interface{} {
 	res["LastPushBackTs"] = dsq.stats.LastPushBackTs
 	res["LastPopBackTs"] = dsq.stats.LastPopBackTs
 	return res
+}
+
+func (dsq *DSQueue) GetCurrentStatus(params []string) common.IResponse {
+	if len(params) > 0 {
+		return common.ERR_CMD_WITH_NO_PARAMS
+	}
+	return common.NewDictResponse(dsq.GetStatus())
 }
 
 func (dsq *DSQueue) GetType() defs.ServiceType {
