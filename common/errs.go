@@ -4,7 +4,7 @@ var CODE_INVALID_REQ int64 = 400
 var CODE_NOT_FOUND int64 = 404
 var CODE_CONFLICT_REQ int64 = 409
 var CODE_SERVER_ERR int64 = 500
-var CODE_GONE = 410
+var CODE_GONE int64 = 410
 
 func NewError(errorText string, errorCode int64) *ErrorResponse {
 	return &ErrorResponse{errorText, errorCode}
