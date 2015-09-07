@@ -18,7 +18,7 @@ func NewItemsResponse(items []IItem) *ItemsResponse {
 
 func (self *ItemsResponse) GetResponse() string {
 	data := make([]string, 0, 3+9*len(self.items))
-	data = append(data, "+DATA *")
+	data = append(data, "+DATA %")
 	data = append(data, strconv.Itoa(len(self.items)))
 	for _, item := range self.items {
 		data = append(data, " ")
