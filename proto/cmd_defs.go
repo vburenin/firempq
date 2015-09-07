@@ -9,4 +9,5 @@ const (
 	CMD_UNIX_TS    = "TS"
 	CMD_LIST       = "LIST"
 	CMD_SETCTX     = "SETCTX"
+	CMD_CTX        = "CTX"
 )
