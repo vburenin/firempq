@@ -28,7 +28,7 @@ func TestDelete(t *testing.T) {
 	}
 
 	pop_msg1 := q.PopLockFront(nil).GetResponse()
-	expected1 := "+DATA *1 $5 data2$2 p2"
+	expected1 := "+DATA %1 $5 data2$2 p2"
 	if pop_msg1 != expected1 {
 		t.Error("Unexpected data. Expected: '" + expected1 + "'received: '" + pop_msg1 + "'")
 
@@ -57,10 +57,10 @@ func TestPushFront(t *testing.T) {
 	pop_msg1 := q.PopFront(nil).GetResponse()
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
-	if pop_msg1 != "+DATA *1 $5 data2$2 p2" {
+	if pop_msg1 != "+DATA %1 $5 data2$2 p2" {
 		t.Error("Unexpected id. Expected 'data2' got: " + pop_msg1)
 	}
-	if pop_msg2 != "+DATA *1 $5 data1$2 p1" {
+	if pop_msg2 != "+DATA %1 $5 data1$2 p1" {
 		t.Error("Unexpected id. Expected 'data1' got: " + pop_msg2)
 	}
 }
@@ -72,17 +72,17 @@ func TestPushFrontDelayed(t *testing.T) {
 	defer q.Clear()
 
 	q.PushFront([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
-	q.PushFront([]string{PRM_ID, "data2", PRM_DELIVERY_DELAY, "100", PRM_PAYLOAD, "p2"})
+	q.PushFront([]string{PRM_ID, "data2", PRM_DELAY, "100", PRM_PAYLOAD, "p2"})
 
 	time.Sleep(50 * time.Millisecond)
 	pop_msg1 := q.PopFront(nil).GetResponse()
 	time.Sleep(200 * time.Millisecond)
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
-	if pop_msg1 != "+DATA *1 $5 data1$2 p1" {
+	if pop_msg1 != "+DATA %1 $5 data1$2 p1" {
 		t.Error("Unexpected id. Expected 'data1' got: " + pop_msg1)
 	}
-	if pop_msg2 != "+DATA *1 $5 data2$2 p2" {
+	if pop_msg2 != "+DATA %1 $5 data2$2 p2" {
 		t.Error("Unexpected id. Expected 'data2' got: " + pop_msg2)
 	}
 }
@@ -99,10 +99,10 @@ func TestPushBack(t *testing.T) {
 	pop_msg1 := q.PopBack(nil).GetResponse()
 	pop_msg2 := q.PopBack(nil).GetResponse()
 
-	if pop_msg1 != "+DATA *1 $5 data2$2 p2" {
+	if pop_msg1 != "+DATA %1 $5 data2$2 p2" {
 		t.Error("Unexpected id. Expected 'data2' got: " + pop_msg1)
 	}
-	if pop_msg2 != "+DATA *1 $5 data1$2 p1" {
+	if pop_msg2 != "+DATA %1 $5 data1$2 p1" {
 		t.Error("Unexpected id. Expected 'data1' got: " + pop_msg2)
 	}
 }
@@ -114,17 +114,17 @@ func TestPushBackDelayed(t *testing.T) {
 	defer q.Clear()
 
 	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
-	q.PushBack([]string{PRM_ID, "data2", PRM_DELIVERY_DELAY, "100", PRM_PAYLOAD, "p2"})
+	q.PushBack([]string{PRM_ID, "data2", PRM_DELAY, "100", PRM_PAYLOAD, "p2"})
 
 	time.Sleep(50 * time.Millisecond)
 	pop_msg1 := q.PopFront(nil).GetResponse()
 	time.Sleep(200 * time.Millisecond)
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
-	if pop_msg1 != "+DATA *1 $5 data1$2 p1" {
+	if pop_msg1 != "+DATA %1 $5 data1$2 p1" {
 		t.Error("Unexpected id. Expected 'data1' got: " + pop_msg1)
 	}
-	if pop_msg2 != "+DATA *1 $5 data2$2 p2" {
+	if pop_msg2 != "+DATA %1 $5 data2$2 p2" {
 		t.Error("Unexpected id. Expected 'data2' got: " + pop_msg1)
 	}
 }
@@ -142,11 +142,11 @@ func TestAutoExpiration(t *testing.T) {
 	// Wait for auto expiration.
 	time.Sleep(2000 * time.Millisecond)
 	msg := q.PopFront(nil).GetResponse()
-	if msg != "+DATA *0" {
+	if msg != "+DATA %0" {
 		t.Error("Unexpected message It should be expired!")
 	}
 	msg = q.PopBack(nil).GetResponse()
-	if msg != "+DATA *0" {
+	if msg != "+DATA %0" {
 		t.Error("Unexpected message It should be expired!")
 	}
 	if len(q.allMessagesMap) != 0 {
@@ -161,7 +161,7 @@ func TestLockAndReturn(t *testing.T) {
 	defer q.Clear()
 
 	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
-	q.PushBack([]string{PRM_ID, "data2", PRM_DELIVERY_DELAY, "10", PRM_PAYLOAD, "p2"})
+	q.PushBack([]string{PRM_ID, "data2", PRM_DELAY, "10", PRM_PAYLOAD, "p2"})
 
 	time.Sleep(50 * time.Millisecond)
 	if q.availableMsgs.Len() != 2 {
@@ -171,11 +171,11 @@ func TestLockAndReturn(t *testing.T) {
 	msg1 := q.PopLockFront(nil).GetResponse()
 	msg2 := q.PopLockFront(nil).GetResponse()
 
-	if msg1 != "+DATA *1 $5 data1$2 p1" {
+	if msg1 != "+DATA %1 $5 data1$2 p1" {
 		t.Error("Unexpected data: ", msg1)
 	}
 
-	if msg2 != "+DATA *1 $5 data2$2 p2" {
+	if msg2 != "+DATA %1 $5 data2$2 p2" {
 		t.Error("Unexpected data: ", msg2)
 	}
 
@@ -199,8 +199,8 @@ func TestLoadFromDb(t *testing.T) {
 	defer q.Clear()
 
 	q.PushBack([]string{PRM_ID, "b1", PRM_PAYLOAD, "p1"})
-	q.PushBack([]string{PRM_ID, "b2", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p2"})
-	q.PushFront([]string{PRM_ID, "f1", PRM_DELIVERY_DELAY, "500", PRM_PAYLOAD, "p1"})
+	q.PushBack([]string{PRM_ID, "b2", PRM_DELAY, "500", PRM_PAYLOAD, "p2"})
+	q.PushFront([]string{PRM_ID, "f1", PRM_DELAY, "500", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "f2", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "f3", PRM_PAYLOAD, "p1"})
 	q.PopLockFront(nil)

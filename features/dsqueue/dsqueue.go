@@ -6,6 +6,7 @@ import (
 	"firempq/defs"
 	"firempq/structs"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -32,6 +33,8 @@ const (
 	ACTION_SET_QPARAM          = "SETQP"
 	ACTION_SET_MPARAM          = "SETMP"
 	ACTION_STATUS              = "STATUS"
+	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
+	ACTION_EXPIRE              = "EXPIRE"
 )
 
 const (
@@ -67,7 +70,8 @@ type DSQueue struct {
 
 	lock sync.Mutex
 	// Used to stop internal goroutine.
-	workDone bool
+	workDone     bool
+	workDoneLock sync.Mutex
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
@@ -110,6 +114,8 @@ func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSe
 		ACTION_POP_BACK:            dsq.PopBack,
 		ACTION_RETURN_BACK:         dsq.ReturnBack,
 		ACTION_STATUS:              dsq.GetCurrentStatus,
+		ACTION_RELEASE_IN_FLIGHT:   dsq.ReleaseInFlight,
+		ACTION_EXPIRE:              dsq.ExpireItems,
 	}
 
 	dsq.loadAllMessages()
@@ -198,8 +204,8 @@ func (dsq *DSQueue) Clear() {
 }
 
 func (dsq *DSQueue) Close() {
-	dsq.lock.Lock()
-	defer dsq.lock.Unlock()
+	dsq.workDoneLock.Lock()
+	defer dsq.workDoneLock.Unlock()
 	if dsq.workDone {
 		return
 	}
@@ -207,8 +213,8 @@ func (dsq *DSQueue) Close() {
 }
 
 func (dsq *DSQueue) IsClosed() bool {
-	dsq.lock.Lock()
-	defer dsq.lock.Unlock()
+	dsq.workDoneLock.Lock()
+	defer dsq.workDoneLock.Unlock()
 	return dsq.workDone
 }
 
@@ -236,6 +242,40 @@ func getMessageIdOnly(params []string) (string, *common.ErrorResponse) {
 		return "", common.ERR_MSG_ID_NOT_DEFINED
 	}
 	return msgId, nil
+}
+
+func (dsq *DSQueue) tsParamFunc(params []string, f func(int64) int64) common.IResponse {
+	var err *common.ErrorResponse
+	var ts int64 = -1
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_TIMESTAMP:
+			params, ts, err = common.ParseInt64Params(params, 0, math.MaxInt64)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if ts < 0 {
+		return common.ERR_TS_PARAMETER_NEEDED
+	}
+
+	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
+	if f == nil {
+		return common.OK200_RESPONSE
+	}
+	return common.NewIntResponse(f(ts))
+}
+
+func (dsq *DSQueue) ExpireItems(params []string) common.IResponse {
+	return dsq.tsParamFunc(params, nil)
+}
+
+func (dsq *DSQueue) ReleaseInFlight(params []string) common.IResponse {
+	return dsq.tsParamFunc(params, nil)
 }
 
 // Push message to the queue.
@@ -474,7 +514,7 @@ func (dsq *DSQueue) push(params []string, direction uint8) common.IResponse {
 			params, msgId, err = common.ParseStringParam(params, 1, 128)
 		case PRM_PAYLOAD:
 			params, payload, err = common.ParseStringParam(params, 1, 512*1024)
-		case PRM_DELIVERY_DELAY:
+		case PRM_DELAY:
 			params, deliveryDelay, err = common.ParseInt64Params(params, 0, 3600*1000)
 		default:
 			return makeUnknownParamResponse(params[0])
@@ -747,10 +787,13 @@ const DEFAULT_UNLOCK_INTERVAL = (10 * time.Millisecond) // 0.01 second
 func (dsq *DSQueue) periodicCleanUp() {
 	for !(dsq.workDone) {
 		var sleepTime time.Duration = DEFAULT_UNLOCK_INTERVAL
-
-		dsq.lock.Lock()
+		dsq.workDoneLock.Lock()
 		if !(dsq.workDone) {
+
+			dsq.lock.Lock()
 			unlocked, delivered := dsq.releaseInFlight()
+			dsq.lock.Unlock()
+
 			if delivered > 0 {
 				log.Debug("%d messages delivered to the queue %s.", delivered, dsq.queueName)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
@@ -759,18 +802,17 @@ func (dsq *DSQueue) periodicCleanUp() {
 				log.Debug("%d messages returned to the queue %s.", unlocked, dsq.queueName)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
-		}
-		dsq.lock.Unlock()
 
-		dsq.lock.Lock()
-		if !(dsq.workDone) {
+			dsq.lock.Lock()
 			cleaned := dsq.cleanExpiredItems()
+			dsq.lock.Unlock()
+
 			if cleaned > 0 {
 				log.Debug("%d items expired.", cleaned)
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
-		dsq.lock.Unlock()
+		dsq.workDoneLock.Unlock()
 		if !dsq.workDone {
 			time.Sleep(sleepTime)
 		}
