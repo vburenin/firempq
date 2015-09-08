@@ -633,9 +633,6 @@ func (pq *PQueue) periodicCleanUp() {
 // Database related data management.
 type MessageSlice []*PQMessage
 
-func NewMessageSlice() *MessageSlice {
-	return &MessageSlice{}
-}
 func (p MessageSlice) Len() int           { return len(p) }
 func (p MessageSlice) Less(i, j int) bool { return p[i].CreatedTs < p[j].CreatedTs }
 func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -646,7 +643,7 @@ func (pq *PQueue) loadAllMessages() {
 	iter := pq.database.IterServiceItems(pq.queueName)
 	defer iter.Close()
 
-	msgs := NewMessageSlice()
+	msgs := MessageSlice{}
 	delIds := []string{}
 
 	s := pq.settings
