@@ -41,15 +41,15 @@ func (r *StrResponse) IsError() bool {
 
 // Int simple response.
 type IntResponse struct {
-	val int64
+	Value int64
 }
 
 func NewIntResponse(val int64) *IntResponse {
-	return &IntResponse{val: val}
+	return &IntResponse{Value: val}
 }
 
 func (r *IntResponse) GetResponse() string {
-	return ":" + strconv.FormatInt(r.val, 10)
+	return "+DATA :" + strconv.FormatInt(r.Value, 10)
 }
 
 func (r *IntResponse) IsError() bool {
