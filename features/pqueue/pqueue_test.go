@@ -30,8 +30,8 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	pop_msg1 := q.Pop([]string{}).GetResponse()
 	pop_msg2 := q.Pop([]string{}).GetResponse()
 
-	cmp(t, pop_msg1, "+DATA *1 $5 data1$2 p1")
-	cmp(t, pop_msg2, "+DATA *1 $5 data2$2 p2")
+	cmp(t, pop_msg1, "+DATA %1 $5 data1$2 p1")
+	cmp(t, pop_msg2, "+DATA %1 $5 data2$2 p2")
 
 	params := []string{PRM_ID, "data1", PRM_LOCK_TIMEOUT, "0"}
 
@@ -40,7 +40,7 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	time.Sleep(110000000)
 
 	pop_msg3 := q.Pop(nil).GetResponse()
-	cmp(t, pop_msg3, "+DATA *1 $5 data1$2 p1")
+	cmp(t, pop_msg3, "+DATA %1 $5 data1$2 p1")
 }
 
 func TestAutoExpiration(t *testing.T) {
@@ -56,7 +56,7 @@ func TestAutoExpiration(t *testing.T) {
 	// Wait for auto expiration.
 	time.Sleep(130000000)
 	msg := q.Pop([]string{}).GetResponse()
-	cmp(t, msg, "+DATA *0")
+	cmp(t, msg, "+DATA %0")
 	if len(q.allMessagesMap) != 0 {
 		t.Error("Messages map must be empty!")
 	}
@@ -79,7 +79,7 @@ func TestUnlockById(t *testing.T) {
 	q.Call(ACTION_UNLOCK_BY_ID, params)
 
 	msg := q.Pop(nil).GetResponse()
-	cmp(t, msg, "+DATA *1 $3 dd1$2 p1")
+	cmp(t, msg, "+DATA %1 $3 dd1$2 p1")
 }
 
 func TestDeleteById(t *testing.T) {
@@ -91,10 +91,10 @@ func TestDeleteById(t *testing.T) {
 
 	q.Push([]string{PRM_ID, "dd1", PRM_PRIORITY, "12", PRM_PAYLOAD, "p1"})
 
-	q.Call(ACTION_DELETE_BY_ID, []string{PRM_ID, "dd1"})
+	cmp(t, q.Call(ACTION_DELETE_BY_ID, []string{PRM_ID, "dd1"}).GetResponse(), "+OK:200")
 
 	msg := q.Pop(nil).GetResponse()
-	cmp(t, msg, "+DATA *0")
+	cmp(t, msg, "+DATA %0")
 
 	if len(q.allMessagesMap) != 0 {
 		t.Error("Messages map must be empty!")
@@ -117,13 +117,13 @@ func TestDeleteLockedById(t *testing.T) {
 	}
 
 	m := q.Pop(nil).GetResponse()
-	cmp(t, m, "+DATA *1 $3 dd1$2 p1")
+	cmp(t, m, "+DATA %1 $3 dd1$2 p1")
 
 	res = q.Call(ACTION_DELETE_LOCKED_BY_ID, params)
 	cmp(t, res.GetResponse(), "+OK:200")
 
 	msg := q.Pop(nil).GetResponse()
-	cmp(t, msg, "+DATA *0")
+	cmp(t, msg, "+DATA %0")
 	if len(q.allMessagesMap) != 0 {
 		t.Error("Messages map must be empty!")
 	}
@@ -146,10 +146,10 @@ func TestPopWaitBatch(t *testing.T) {
 	params := []string{PRM_POP_WAIT_TIMEOUT, "1", PRM_LIMIT, "10"}
 
 	m := q.Call(ACTION_POP_WAIT, params).GetResponse()
-	cmp(t, m, "+DATA *0")
+	cmp(t, m, "+DATA %0")
 
 	// It is waiting for 1000 milliseconds so by this time we should receive 1 message.
 	params = []string{PRM_POP_WAIT_TIMEOUT, "1200", PRM_LIMIT, "10"}
 	m = q.Call(ACTION_POP_WAIT, params).GetResponse()
-	cmp(t, m, "+DATA *3 $3 dd1$2 p1 $3 dd2$2 p2 $3 dd3$2 p3")
+	cmp(t, m, "+DATA %3 $3 dd1$2 p1 $3 dd2$2 p2 $3 dd3$2 p3")
 }

@@ -47,5 +47,6 @@ var ERR_MSG_TIMEOUT_NOT_DEFINED *ErrorResponse = InvalidRequest("Message timeout
 var ERR_MSG_BAD_DELIVERY_TIMEOUT *ErrorResponse = InvalidRequest("Bad delivery interval specified")
 
 var ERR_CMD_WITH_NO_PARAMS *ErrorResponse = InvalidRequest("Command doesn't accept any parameters")
-
 var ERR_UNKNOWN_ERROR *ErrorResponse = NewError("Unknown server error", 500)
+
+var ERR_TS_PARAMETER_NEEDED *ErrorResponse = InvalidRequest("TS parameters must be provided")

@@ -6,7 +6,9 @@ import (
 	"firempq/defs"
 	"firempq/structs"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -30,6 +32,8 @@ const (
 	ACTION_SET_QPARAM          = "SETQP"
 	ACTION_SET_MPARAM          = "SETMP"
 	ACTION_STATUS              = "STATUS"
+	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
+	ACTION_EXPIRE              = "EXPIRE"
 )
 
 type PQueue struct {
@@ -46,7 +50,8 @@ type PQueue struct {
 
 	lock sync.Mutex
 	// Used to stop internal goroutine.
-	workDone bool
+	workDone     bool
+	workDoneLock sync.Mutex
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
@@ -134,6 +139,10 @@ func (pq *PQueue) Call(cmd string, params []string) common.IResponse {
 		return pq.UnlockMessageById(params)
 	case ACTION_STATUS:
 		return pq.GetCurrentStatus(params)
+	case ACTION_RELEASE_IN_FLIGHT:
+		return pq.ReleaseInFlight(params)
+	case ACTION_EXPIRE:
+		return pq.ExpireItems(params)
 	}
 	return common.InvalidRequest("Unknown action: " + cmd)
 }
@@ -164,8 +173,8 @@ func (pq *PQueue) Clear() {
 }
 
 func (pq *PQueue) Close() {
-	pq.lock.Lock()
-	defer pq.lock.Unlock()
+	pq.workDoneLock.Lock()
+	defer pq.workDoneLock.Unlock()
 	if pq.workDone {
 		return
 	}
@@ -173,8 +182,8 @@ func (pq *PQueue) Close() {
 }
 
 func (pq *PQueue) IsClosed() bool {
-	pq.lock.Lock()
-	defer pq.lock.Unlock()
+	pq.workDoneLock.Lock()
+	defer pq.workDoneLock.Unlock()
 	return pq.workDone
 }
 
@@ -267,7 +276,8 @@ func (pq *PQueue) Pop(params []string) common.IResponse {
 	lockTimeout := pq.settings.PopLockTimeout
 
 	for len(params) > 0 {
-		switch params[0] {
+		p := params[0]
+		switch p {
 		case PRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = common.ParseInt64Params(params, 0, 24*1000*3600)
 		case PRM_LIMIT:
@@ -280,6 +290,37 @@ func (pq *PQueue) Pop(params []string) common.IResponse {
 		}
 	}
 	return common.NewItemsResponse(pq.popMessages(lockTimeout, limit))
+}
+
+func (pq *PQueue) tsParamFunc(params []string, f func(int64) int64) common.IResponse {
+	var err *common.ErrorResponse
+	var ts int64 = -1
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_TIMESTAMP:
+			params, ts, err = common.ParseInt64Params(params, 0, math.MaxInt64)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if ts < 0 {
+		return common.ERR_TS_PARAMETER_NEEDED
+	}
+
+	pq.lock.Lock()
+	defer pq.lock.Unlock()
+	return common.NewIntResponse(f(ts))
+}
+
+func (pq *PQueue) ExpireItems(params []string) common.IResponse {
+	return pq.tsParamFunc(params, pq.cleanExpiredItems)
+}
+
+func (pq *PQueue) ReleaseInFlight(params []string) common.IResponse {
+	return pq.tsParamFunc(params, pq.releaseInFlight)
 }
 
 // PopWait pops up to specified number of messages, if there are no available messages.
@@ -552,43 +593,47 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 }
 
 // Unlocks all items which exceeded their lock time.
-func (pq *PQueue) releaseInFlight() int {
-	cur_ts := common.Uts()
+func (pq *PQueue) releaseInFlight(ts int64) int64 {
 	ifHeap := pq.inFlightHeap
 
-	i := 0
-	for !(ifHeap.Empty()) && ifHeap.MinElement() < cur_ts {
-		i++
-		hi := ifHeap.PopItem()
-		pqmsg := pq.allMessagesMap[hi.Id]
+	var counter int64 = 0
+	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts {
+		counter++
+		unlockedItem := ifHeap.PopItem()
+		pqmsg := pq.allMessagesMap[unlockedItem.Id]
 		pq.returnToFront(pqmsg)
-		if i >= MAX_CLEANS_PER_ATTEMPT {
+		if counter >= MAX_CLEANS_PER_ATTEMPT {
 			break
 		}
 	}
-	return i
+	if counter > 0 {
+		log.Debug("'%d' item(s) returned to the front of the queue.", counter)
+	}
+	return counter
 }
 
 // Remove all items which are completely expired.
-func (pq *PQueue) cleanExpiredItems() int {
-	cur_ts := common.Uts()
-	eh := pq.expireHeap
+func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
+	var counter int64 = 0
 
-	i := 0
-	for !(eh.Empty()) && eh.MinElement() < cur_ts {
-		i++
-		hi := eh.PopItem()
+	eh := pq.expireHeap
+	for !(eh.Empty()) && eh.MinElement() < ts {
+		counter++
+		expiredItem := eh.PopItem()
 		// There are two places to remove expired item:
 		// 1. Map of all items - all items map.
 		// 2. Available message.
-		msg := pq.allMessagesMap[hi.Id]
+		msg := pq.allMessagesMap[expiredItem.Id]
 		pq.availableMsgs.RemoveItem(msg.Id, msg.Priority)
 		pq.deleteMessage(msg.Id)
-		if i >= MAX_CLEANS_PER_ATTEMPT {
+		if counter >= MAX_CLEANS_PER_ATTEMPT {
 			break
 		}
 	}
-	return i
+	if counter > 0 {
+		log.Debug("%d item(s) expired.", counter)
+	}
+	return counter
 }
 
 // 1 milliseconds.
@@ -604,26 +649,22 @@ const DEFAULT_UNLOCK_INTERVAL = 100 * 1000000 // 0.1 second
 func (pq *PQueue) periodicCleanUp() {
 	for !(pq.workDone) {
 		var sleepTime time.Duration = DEFAULT_UNLOCK_INTERVAL
-
-		pq.lock.Lock()
+		pq.workDoneLock.Lock()
 		if !(pq.workDone) {
-			cleaned := pq.releaseInFlight()
-			if cleaned > 0 {
-				log.Debug("%d messages returned to the front of the queue.", cleaned)
+			params := []string{PRM_TIMESTAMP, strconv.FormatInt(common.Uts(), 10)}
+
+			r, ok := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
+			if ok && r.Value > 0 {
+				sleepTime = SLEEP_INTERVAL_IF_ITEMS
+			}
+
+			params = []string{PRM_TIMESTAMP, strconv.FormatInt(common.Uts(), 10)}
+			r, ok = pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
+			if ok && r.Value > 0 {
 				sleepTime = SLEEP_INTERVAL_IF_ITEMS
 			}
 		}
-		pq.lock.Unlock()
-
-		pq.lock.Lock()
-		if !(pq.workDone) {
-			cleaned := pq.cleanExpiredItems()
-			if cleaned > 0 {
-				log.Debug("%d items expired.", cleaned)
-				sleepTime = SLEEP_INTERVAL_IF_ITEMS
-			}
-		}
-		pq.lock.Unlock()
+		pq.workDoneLock.Unlock()
 		if !pq.workDone {
 			time.Sleep(sleepTime)
 		}
