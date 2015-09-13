@@ -88,7 +88,7 @@ type DataStorage struct {
 }
 
 // NewDataStorage is a constructor of DataStorage.
-func NewDataStorage(dbName string) *DataStorage {
+func NewDataStorage(dbName string) (*DataStorage, error) {
 	ds := DataStorage{
 		dbName:          dbName,
 		itemCache:       make(map[string][]byte),
@@ -102,12 +102,11 @@ func NewDataStorage(dbName string) *DataStorage {
 	opts.SetCompression(levigo.SnappyCompression)
 	db, err := levigo.Open(dbName, opts)
 	if err != nil {
-		log.Critical("Could not initialize database: %s", err.Error())
-		return nil
+		return nil, err
 	}
 	ds.db = db
 	go ds.periodicCacheFlush()
-	return &ds
+	return &ds, nil
 }
 
 func (ds *DataStorage) periodicCacheFlush() {
