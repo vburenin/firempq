@@ -39,14 +39,14 @@ const (
 type PQueue struct {
 	queueName string
 	// Messages which are waiting to be picked up
-	availableMsgs *structs.PriorityFirstQueue
+	availMsgs *structs.PriorityFirstQueue
 
 	// All messages with the ticking counters except those which are inFlight.
 	expireHeap *structs.IndexHeap
 	// All locked messages
 	inFlightHeap *structs.IndexHeap
 	// Just a message map message id to the full message data.
-	allMessagesMap map[string]*PQMessage
+	msgMap map[string]*PQMessage
 
 	lock sync.Mutex
 	// Used to stop internal goroutine.
@@ -64,8 +64,8 @@ type PQueue struct {
 
 func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
 	pq := PQueue{
-		allMessagesMap:     make(map[string]*PQMessage),
-		availableMsgs:      structs.NewActiveQueues(settings.MaxPriority),
+		msgMap:             make(map[string]*PQMessage),
+		availMsgs:          structs.NewActiveQueues(settings.MaxPriority),
 		database:           database,
 		expireHeap:         structs.NewIndexHeap(),
 		inFlightHeap:       structs.NewIndexHeap(),
@@ -100,7 +100,7 @@ func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error)
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := pq.settings.ToMap()
-	res["TotalMessages"] = len(pq.allMessagesMap)
+	res["TotalMessages"] = len(pq.msgMap)
 	res["InFlightSize"] = pq.inFlightHeap.Len()
 	return res
 }
@@ -153,11 +153,11 @@ func (pq *PQueue) Clear() {
 	for {
 		ids := []string{}
 		pq.lock.Lock()
-		if len(pq.allMessagesMap) == 0 {
+		if len(pq.msgMap) == 0 {
 			pq.lock.Unlock()
 			break
 		}
-		for k, _ := range pq.allMessagesMap {
+		for k, _ := range pq.msgMap {
 			ids = append(ids, k)
 			if len(ids) > 100 {
 				break
@@ -250,13 +250,13 @@ func (pq *PQueue) Push(params []string) common.IResponse {
 }
 
 func (pq *PQueue) storeMessage(msg *PQMessage, payload string) common.IResponse {
-	if _, ok := pq.allMessagesMap[msg.Id]; ok {
+	if _, ok := pq.msgMap[msg.Id]; ok {
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
-	queueLen := pq.availableMsgs.Len()
-	pq.allMessagesMap[msg.Id] = msg
+	queueLen := pq.availMsgs.Len()
+	pq.msgMap[msg.Id] = msg
 	pq.trackExpiration(msg)
-	pq.availableMsgs.Push(msg.Id, msg.Priority)
+	pq.availMsgs.Push(msg.Id, msg.Priority)
 	if 0 == queueLen {
 		select {
 		case pq.newMsgNotification <- true:
@@ -351,12 +351,12 @@ func (pq *PQueue) PopWait(params []string) common.IResponse {
 }
 
 func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
-	if pq.availableMsgs.Empty() {
+	if pq.availMsgs.Empty() {
 		return nil
 	}
 
-	msgId := pq.availableMsgs.Pop()
-	msg, ok := pq.allMessagesMap[msgId]
+	msgId := pq.availMsgs.Pop()
+	msg, ok := pq.msgMap[msgId]
 
 	if !ok {
 		return nil
@@ -440,7 +440,7 @@ func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
 
 // Remove message id from In Flight message heap.
 func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, *common.ErrorResponse) {
-	msg, ok := pq.allMessagesMap[msgId]
+	msg, ok := pq.msgMap[msgId]
 	if !ok {
 		return nil, common.ERR_MSG_NOT_EXIST
 	}
@@ -557,9 +557,9 @@ func (pq *PQueue) UnlockMessageById(params []string) common.IResponse {
 }
 
 func (pq *PQueue) deleteMessage(msgId string) bool {
-	if msg, ok := pq.allMessagesMap[msgId]; ok {
-		delete(pq.allMessagesMap, msgId)
-		pq.availableMsgs.RemoveItem(msgId, msg.Priority)
+	if msg, ok := pq.msgMap[msgId]; ok {
+		delete(pq.msgMap, msgId)
+		pq.availMsgs.RemoveItem(msgId, msg.Priority)
 		pq.database.DeleteItem(pq.queueName, msgId)
 		pq.expireHeap.PopById(msgId)
 		return true
@@ -586,7 +586,7 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 		}
 	}
 	msg.UnlockTs = 0
-	pq.availableMsgs.PushFront(msg.Id)
+	pq.availMsgs.PushFront(msg.Id)
 	pq.trackExpiration(msg)
 	pq.database.UpdateItem(pq.queueName, msg)
 	return nil
@@ -600,7 +600,7 @@ func (pq *PQueue) releaseInFlight(ts int64) int64 {
 	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts {
 		counter++
 		unlockedItem := ifHeap.PopItem()
-		pqmsg := pq.allMessagesMap[unlockedItem.Id]
+		pqmsg := pq.msgMap[unlockedItem.Id]
 		pq.returnToFront(pqmsg)
 		if counter >= MAX_CLEANS_PER_ATTEMPT {
 			break
@@ -623,8 +623,8 @@ func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
 		// There are two places to remove expired item:
 		// 1. Map of all items - all items map.
 		// 2. Available message.
-		msg := pq.allMessagesMap[expiredItem.Id]
-		pq.availableMsgs.RemoveItem(msg.Id, msg.Priority)
+		msg := pq.msgMap[expiredItem.Id]
+		pq.availMsgs.RemoveItem(msg.Id, msg.Priority)
 		pq.deleteMessage(msg.Id)
 		if counter >= MAX_CLEANS_PER_ATTEMPT {
 			break
@@ -712,12 +712,12 @@ func (pq *PQueue) loadAllMessages() {
 	sort.Sort(msgs)
 
 	for _, msg := range msgs {
-		pq.allMessagesMap[msg.Id] = msg
+		pq.msgMap[msg.Id] = msg
 		if msg.UnlockTs > nowTs {
 			pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
 			pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+s.MsgTTL)
-			pq.availableMsgs.Push(msg.Id, msg.Priority)
+			pq.availMsgs.Push(msg.Id, msg.Priority)
 		}
 	}
 

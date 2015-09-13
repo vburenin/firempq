@@ -57,7 +57,7 @@ func TestAutoExpiration(t *testing.T) {
 	time.Sleep(130000000)
 	msg := q.Pop([]string{}).GetResponse()
 	cmp(t, msg, "+DATA %0")
-	if len(q.allMessagesMap) != 0 {
+	if len(q.msgMap) != 0 {
 		t.Error("Messages map must be empty!")
 	}
 }
@@ -96,7 +96,7 @@ func TestDeleteById(t *testing.T) {
 	msg := q.Pop(nil).GetResponse()
 	cmp(t, msg, "+DATA %0")
 
-	if len(q.allMessagesMap) != 0 {
+	if len(q.msgMap) != 0 {
 		t.Error("Messages map must be empty!")
 	}
 }
@@ -124,7 +124,7 @@ func TestDeleteLockedById(t *testing.T) {
 
 	msg := q.Pop(nil).GetResponse()
 	cmp(t, msg, "+DATA %0")
-	if len(q.allMessagesMap) != 0 {
+	if len(q.msgMap) != 0 {
 		t.Error("Messages map must be empty!")
 	}
 }
