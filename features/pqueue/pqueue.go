@@ -702,7 +702,7 @@ func (pq *PQueue) loadAllMessages() {
 	}
 	log.Debug("Loaded %d messages for %s queue", len(msgs), pq.queueName)
 	if len(delIds) > 0 {
-		log.Debug("%d messages will be removed because of expiration", len(delIds))
+		log.Debug("Deleting %d expired messages", len(delIds))
 		for _, msgId := range delIds {
 			pq.database.DeleteItem(pq.queueName, msgId)
 		}
