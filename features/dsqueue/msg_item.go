@@ -2,7 +2,6 @@ package dsqueue
 
 import (
 	"firempq/common"
-	"firempq/defs"
 )
 
 type MsgItem struct {
@@ -20,14 +19,6 @@ func (m *MsgItem) GetId() string {
 
 func (m *MsgItem) GetContent() string {
 	return m.payload
-}
-
-func (m *MsgItem) GetContentType() defs.DataType {
-	return defs.DT_STR
-}
-
-func (m *MsgItem) GetStatus() map[string]interface{} {
-	return m.msgMeta.GetStatus()
 }
 
 var _ common.IItem = &MsgItem{}

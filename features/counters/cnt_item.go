@@ -87,10 +87,6 @@ func (c *IntLinearCounter) correctLimits() {
 	}
 }
 
-func (c *IntLinearCounter) GetStatus() map[string]interface{} {
-	return nil
-}
-
 func (c *IntLinearCounter) ToBinary() []byte {
 	buf := make([]byte, 6*8+1)
 	buf[0] = byte(c.CounterType)

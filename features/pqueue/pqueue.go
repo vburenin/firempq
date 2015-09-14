@@ -419,7 +419,6 @@ func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) []commo
 			}
 		}
 	}
-	return msgItems
 }
 
 // Returns message payload.

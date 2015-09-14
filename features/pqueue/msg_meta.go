@@ -75,13 +75,4 @@ func (pqm *PQMessage) ToBinary() []byte {
 	return buf
 }
 
-func (pqm *PQMessage) GetStatus() map[string]interface{} {
-	res := make(map[string]interface{})
-	res["CreatedTs"] = pqm.CreatedTs
-	res["Priority"] = pqm.Priority
-	res["PopCount"] = pqm.PopCount
-	res["UnlockTs"] = pqm.UnlockTs
-	return res
-}
-
 var _ common.IItemMetaData = &PQMessage{}

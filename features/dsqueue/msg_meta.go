@@ -92,15 +92,4 @@ func (m *DSQMessage) ToBinary() []byte {
 	return buf
 }
 
-func (m *DSQMessage) GetStatus() map[string]interface{} {
-	res := make(map[string]interface{})
-	res["CreatedTs"] = m.CreatedTs
-	res["DeliveryTs"] = m.DeliveryTs
-	res["pushAt"] = m.pushAt
-	res["PopCount"] = m.PopCount
-	res["UnlockTs"] = m.UnlockTs
-	res["ListID"] = m.ListId
-	return res
-}
-
 var _ common.IItemMetaData = &DSQMessage{}

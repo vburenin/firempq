@@ -5,14 +5,11 @@ import "firempq/defs"
 type IItemMetaData interface {
 	GetId() string
 	ToBinary() []byte
-	GetStatus() map[string]interface{}
 }
 
 type IItem interface {
 	GetId() string
 	GetContent() string
-	GetContentType() defs.DataType
-	GetStatus() map[string]interface{}
 }
 
 // All responses returned to the client must follow this interface.
