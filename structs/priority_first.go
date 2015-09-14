@@ -23,10 +23,12 @@ func NewActiveQueues(size int64) *PriorityFirstQueue {
 		queues[size] = NewListQueue()
 	}
 	frontQueue := NewListQueue()
-	return &PriorityFirstQueue{queues: queues,
+	return &PriorityFirstQueue{
+		queues:      queues,
 		withItems:   NewIntHeap(),
 		maxPriority: maxPriority,
-		frontQueue:  frontQueue}
+		frontQueue:  frontQueue,
+	}
 }
 
 // Sometimes queue can be available in the item heaps event though it doesn't
