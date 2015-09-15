@@ -36,6 +36,13 @@ const (
 	ACTION_EXPIRE              = "EXPIRE"
 )
 
+const (
+	CONF_DEFAULT_TTL             = 12000000
+	CONF_DEFAULT_DELIVERY_DELAY  = 0
+	CONF_DEFAULT_LOCK_TIMEOUT    = 30000000
+	CONF_DEFAULT_POP_COUNT_LIMIT = 0 // 0 means Unlimited.
+)
+
 type PQueue struct {
 	queueName string
 	// Messages which are waiting to be picked up
@@ -57,12 +64,12 @@ type PQueue struct {
 	// Instance of the database.
 	database *db.DataStorage
 	// Queue settings.
-	settings *PQueueSettings
+	settings *PQConfig
 
 	newMsgNotification chan bool
 }
 
-func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSettings) *PQueue {
+func initPQueue(database *db.DataStorage, queueName string, settings *PQConfig) *PQueue {
 	pq := PQueue{
 		msgMap:             make(map[string]*PQMessage),
 		availMsgs:          structs.NewActiveQueues(settings.MaxPriority),
@@ -82,15 +89,27 @@ func initPQueue(database *db.DataStorage, queueName string, settings *PQueueSett
 }
 
 func NewPQueue(database *db.DataStorage, queueName string, priorities int64, size int64) *PQueue {
-	settings := NewPQueueSettings(priorities, size)
+	settings := &PQConfig{
+		MaxPriority:    priorities,
+		MaxSize:        size,
+		MsgTtl:         CONF_DEFAULT_TTL,
+		DeliveryDelay:  CONF_DEFAULT_DELIVERY_DELAY,
+		PopLockTimeout: CONF_DEFAULT_LOCK_TIMEOUT,
+		PopCountLimit:  CONF_DEFAULT_POP_COUNT_LIMIT,
+		LastPushTs:     common.Uts(),
+		LastPopTs:      common.Uts(),
+		CreateTs:       common.Uts(),
+		InactivityTtl:  0,
+	}
+
 	queue := initPQueue(database, queueName, settings)
 	queue.database.SaveServiceConfig(queueName, settings)
 	return queue
 }
 
 func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
-	settings := new(PQueueSettings)
-	err := database.GetServiceConfig(settings, queueName)
+	settings := new(PQConfig)
+	err := database.LoadServiceConfig(settings, queueName)
 	if err != nil {
 		return nil, err
 	}
@@ -99,9 +118,20 @@ func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error)
 }
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
-	res := pq.settings.ToMap()
+	res := make(map[string]interface{})
+	res["MaxPriority"] = pq.settings.GetMaxPriority()
+	res["MaxSize"] = pq.settings.GetMaxSize()
+	res["MsgTtl"] = pq.settings.GetMsgTtl()
+	res["DeliveryDelay"] = pq.settings.GetDeliveryDelay()
+	res["PopLockTimeout"] = pq.settings.GetPopLockTimeout()
+	res["PopCountLimit"] = pq.settings.GetPopCountLimit()
+	res["CreateTs"] = pq.settings.GetCreateTs()
+	res["LastPushTs"] = pq.settings.GetLastPushTs()
+	res["LastPopTs"] = pq.settings.GetLastPopTs()
+	res["InactivityTtl"] = pq.settings.GetInactivityTtl()
 	res["TotalMessages"] = len(pq.msgMap)
 	res["InFlightSize"] = pq.inFlightHeap.Len()
+
 	return res
 }
 
@@ -568,7 +598,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 
 // Adds message into expiration heap. Not thread safe!
 func (pq *PQueue) trackExpiration(msg *PQMessage) {
-	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.settings.MsgTTL))
+	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.settings.MsgTtl))
 	if !ok {
 		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
 	}
@@ -686,13 +716,13 @@ func (pq *PQueue) loadAllMessages() {
 	msgs := MessageSlice{}
 	delIds := []string{}
 
-	s := pq.settings
+	cfg := pq.settings
 	for iter.Valid() {
 		pqmsg := UnmarshalPQMessage(string(iter.Key), iter.Value)
 		// Store list if message IDs that should be removed.
-		if pqmsg.CreatedTs+s.MsgTTL < nowTs ||
-			(pqmsg.PopCount >= s.PopCountLimit &&
-				s.PopCountLimit > 0) {
+		if pqmsg.CreatedTs+cfg.MsgTtl < nowTs ||
+			(pqmsg.PopCount >= cfg.PopCountLimit &&
+				cfg.PopCountLimit > 0) {
 			delIds = append(delIds, pqmsg.Id)
 		} else {
 			msgs = append(msgs, pqmsg)
@@ -715,7 +745,7 @@ func (pq *PQueue) loadAllMessages() {
 		if msg.UnlockTs > nowTs {
 			pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
-			pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+s.MsgTTL)
+			pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+cfg.MsgTtl)
 			pq.availMsgs.Push(msg.Id, msg.Priority)
 		}
 	}

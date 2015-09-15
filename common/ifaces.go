@@ -2,6 +2,11 @@ package common
 
 import "firempq/defs"
 
+type Marshalable interface {
+	Marshal() (data []byte, err error)
+	Unmarshal(data []byte) error
+}
+
 type IItemMetaData interface {
 	GetId() string
 	Marshal() (data []byte, err error)

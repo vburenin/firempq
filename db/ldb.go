@@ -306,21 +306,23 @@ func makeSettingsKey(svcName string) []byte {
 
 // GetServiceConfig reads service config bases on service name.
 // Caller should provide correct settings structure to read binary data.
-func (ds *DataStorage) GetServiceConfig(settings interface{}, svcName string) error {
+func (ds *DataStorage) LoadServiceConfig(conf common.Marshalable, svcName string) error {
 	key := makeSettingsKey(svcName)
 	data, _ := ds.db.Get(defaultReadOptions, key)
 	if data == nil {
 		return common.InvalidRequest("No service settings found: " + svcName)
 	}
-	err := common.StructFromBinary(settings, data)
+	err := conf.Unmarshal(data)
 	return err
 }
 
 // SaveServiceConfig saves service config into database.
-func (ds *DataStorage) SaveServiceConfig(svcName string, settings interface{}) {
+func (ds *DataStorage) SaveServiceConfig(svcName string, conf common.Marshalable) {
 	key := makeSettingsKey(svcName)
-	data := common.StructToBinary(settings)
-	err := ds.db.Put(defaultWriteOptions, key, data)
+	data, err := conf.Marshal()
+	if err == nil {
+		err = ds.db.Put(defaultWriteOptions, key, data)
+	}
 	if err != nil {
 		log.Error("Failed to save config: %s", err.Error())
 	}

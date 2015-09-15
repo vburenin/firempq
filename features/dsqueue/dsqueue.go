@@ -46,6 +46,13 @@ const (
 )
 
 const (
+	CONF_DEFAULT_TTL             = 10000 // In milliseconds
+	CONF_DEFAULT_DELIVERY_DELAY  = 0
+	CONF_DEFAULT_LOCK_TIMEOUT    = 1000 // In milliseconds
+	CONF_DEFAULT_POP_COUNT_LIMIT = 0    // 0 means Unlimited.
+)
+
+const (
 	TIMEOUT_MSG_DELIVERY   = 1
 	TIMEOUT_MSG_EXPIRATION = 2
 )
@@ -77,14 +84,12 @@ type DSQueue struct {
 	// Instance of the database.
 	database *db.DataStorage
 	// Queue settings.
-	settings *DSQueueSettings
-	// Queue statistics
-	stats DSQueueStats
+	conf *DSQConfig
 
 	newMsgNotification chan bool
 }
 
-func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSettings) *DSQueue {
+func initDSQueue(database *db.DataStorage, queueName string, conf *DSQConfig) *DSQueue {
 	dsq := DSQueue{
 		allMessagesMap:        make(map[string]*DSQMessage),
 		availableMsgs:         structs.NewListQueue(),
@@ -94,7 +99,7 @@ func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSe
 		expireHeap:            structs.NewIndexHeap(),
 		inFlightHeap:          structs.NewIndexHeap(),
 		queueName:             queueName,
-		settings:              settings,
+		conf:                  conf,
 		workDone:              false,
 		newMsgNotification:    make(chan bool),
 	}
@@ -125,32 +130,44 @@ func initDSQueue(database *db.DataStorage, queueName string, settings *DSQueueSe
 }
 
 func NewDSQueue(database *db.DataStorage, queueName string, size int64) *DSQueue {
-	settings := NewDSQueueSettings(size)
-	queue := initDSQueue(database, queueName, settings)
-	queue.database.SaveServiceConfig(queueName, settings)
+	conf := &DSQConfig{
+		MsgTtl:         int64(CONF_DEFAULT_TTL),
+		DeliveryDelay:  int64(CONF_DEFAULT_DELIVERY_DELAY),
+		PopLockTimeout: int64(CONF_DEFAULT_LOCK_TIMEOUT),
+		PopCountLimit:  int64(CONF_DEFAULT_POP_COUNT_LIMIT),
+		MaxSize:        size,
+		CreateTs:       common.Uts(),
+		LastPushTs:     common.Uts(),
+		LastPopTs:      common.Uts(),
+		InactivityTtl:  0,
+	}
+	queue := initDSQueue(database, queueName, conf)
+	queue.database.SaveServiceConfig(queueName, conf)
 	return queue
 }
 
 func LoadDSQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
-	settings := new(DSQueueSettings)
-	err := database.GetServiceConfig(settings, queueName)
+	conf := &DSQConfig{}
+	err := database.LoadServiceConfig(conf, queueName)
 	if err != nil {
 		return nil, err
 	}
-	dsq := initDSQueue(database, queueName, settings)
+	dsq := initDSQueue(database, queueName, conf)
 	return dsq, nil
 }
 
 func (dsq *DSQueue) GetStatus() map[string]interface{} {
-	res := dsq.settings.ToMap()
+	res := make(map[string]interface{})
+	res["MsgTtl"] = dsq.conf.GetMsgTtl()
+	res["DeliveryDelay"] = dsq.conf.GetDeliveryDelay()
+	res["PopLockTimeout"] = dsq.conf.GetPopLockTimeout()
+	res["PopCountLimit"] = dsq.conf.GetPopCountLimit()
+	res["MaxSize"] = dsq.conf.GetMaxSize()
+	res["CreateTs"] = dsq.conf.GetCreateTs()
 	res["TotalMessages"] = len(dsq.allMessagesMap)
 	res["InFlightSize"] = dsq.inFlightHeap.Len()
-	res["LastPushTs"] = dsq.stats.LastPushTs
-	res["LastPopTs"] = dsq.stats.LastPopTs
-	res["LastPushFrontTs"] = dsq.stats.LastPushFrontTs
-	res["LastPopFrontTs"] = dsq.stats.LastPopFrontTs
-	res["LastPushBackTs"] = dsq.stats.LastPushBackTs
-	res["LastPopBackTs"] = dsq.stats.LastPopBackTs
+	res["LastPushTs"] = dsq.conf.LastPushTs
+	res["LastPopTs"] = dsq.conf.LastPopTs
 	return res
 }
 
@@ -506,7 +523,7 @@ func (dsq *DSQueue) push(params []string, direction int32) common.IResponse {
 	var err *common.ErrorResponse
 	var msgId string
 	var payload string = ""
-	var deliveryDelay = dsq.settings.DeliveryDelay
+	var deliveryDelay = dsq.conf.DeliveryDelay
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -528,7 +545,7 @@ func (dsq *DSQueue) push(params []string, direction int32) common.IResponse {
 	}
 
 	if deliveryDelay < 0 || deliveryDelay > int64(defs.TIMEOUT_MAX_DELIVERY) ||
-		dsq.settings.MsgTTL < deliveryDelay {
+		dsq.conf.MsgTtl < deliveryDelay {
 		return common.ERR_MSG_BAD_DELIVERY_TIMEOUT
 	}
 
@@ -540,14 +557,7 @@ func (dsq *DSQueue) push(params []string, direction int32) common.IResponse {
 
 	dsq.lock.Lock()
 	// Update stats
-	pushTime := common.Uts()
-	dsq.stats.LastPushTs = pushTime
-	switch msg.PushAt {
-	case QUEUE_DIRECTION_FRONT:
-		dsq.stats.LastPushFrontTs = pushTime
-	case QUEUE_DIRECTION_BACK:
-		dsq.stats.LastPushBackTs = pushTime
-	}
+	dsq.conf.LastPushTs = common.Uts()
 	defer dsq.lock.Unlock()
 	return dsq.storeMessage(msg, payload)
 }
@@ -640,10 +650,10 @@ func (dsq *DSQueue) getPayload(msgId string) string {
 
 func (dsq *DSQueue) lockMessage(msg *DSQMessage) {
 	nowTs := common.Uts()
-	dsq.stats.LastPopTs = nowTs
+	dsq.conf.LastPopTs = nowTs
 
 	msg.PopCount += 1
-	msg.UnlockTs = nowTs + dsq.settings.PopLockTimeout
+	msg.UnlockTs = nowTs + dsq.conf.PopLockTimeout
 	dsq.expireHeap.PopById(msg.Id)
 	dsq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 }
@@ -695,7 +705,7 @@ func (dsq *DSQueue) deleteMessageById(msgId string) bool {
 
 // Adds message into expiration heap. Not thread safe!
 func (dsq *DSQueue) trackExpiration(msg *DSQMessage) {
-	ok := dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(dsq.settings.MsgTTL))
+	ok := dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(dsq.conf.MsgTtl))
 	if !ok {
 		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
 	}
@@ -704,7 +714,7 @@ func (dsq *DSQueue) trackExpiration(msg *DSQMessage) {
 // Attempts to return a message into the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
 func (dsq *DSQueue) returnTo(msg *DSQMessage, place int32) *common.ErrorResponse {
-	lim := dsq.settings.PopCountLimit
+	lim := dsq.conf.PopCountLimit
 	if lim > 0 {
 		if lim <= msg.PopCount {
 			dsq.deleteMessageById(msg.Id)
@@ -838,12 +848,12 @@ func (dsq *DSQueue) loadAllMessages() {
 	unlockedBackMsgs := MessageSlice{}
 	delIds := []string{}
 
-	s := dsq.settings
+	cfg := dsq.conf
 	for iter.Valid() {
 		pqmsg := UnmarshalDSQMessage(string(iter.Key), iter.Value)
 		// Store list if message IDs that should be removed.
-		if pqmsg.CreatedTs+s.MsgTTL < nowTs ||
-			(pqmsg.PopCount >= s.PopCountLimit && s.PopCountLimit > 0) {
+		if pqmsg.CreatedTs+cfg.MsgTtl < nowTs ||
+			(pqmsg.PopCount >= cfg.PopCountLimit && cfg.PopCountLimit > 0) {
 			delIds = append(delIds, pqmsg.Id)
 		} else {
 			switch pqmsg.PushAt {
@@ -889,7 +899,7 @@ func (dsq *DSQueue) loadAllMessages() {
 				dsq.inFlightHeap.PushItem(msg.Id, msg.DeliveryTs)
 				inDelivery += 1
 			} else {
-				dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+s.MsgTTL)
+				dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+cfg.MsgTtl)
 				dsq.availableMsgs.PushFront(msg.Id)
 			}
 		}
