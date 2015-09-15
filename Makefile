@@ -1,7 +1,7 @@
 all: clean build
 
 build:
-	find . -name "*.proto" -type f -print0 | xargs protoc --gogoslick_out=.
+	find . -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 	go build firempq
 
 install:
