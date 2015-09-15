@@ -404,7 +404,7 @@ func (dsq *DSQueue) SetLockTimeout(params []string) common.IResponse {
 	msg.UnlockTs = common.Uts() + int64(lockTimeout)
 
 	dsq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	dsq.database.UpdateItem(dsq.queueName, msg)
+	dsq.database.StoreItem(dsq.queueName, msg)
 
 	return common.OK200_RESPONSE
 }
@@ -444,7 +444,7 @@ func (dsq *DSQueue) UnlockMessageById(params []string) common.IResponse {
 		return err
 	}
 	// Message exists and locked, push it into the front of the queue.
-	err = dsq.returnTo(msg, msg.pushAt)
+	err = dsq.returnTo(msg, msg.PushAt)
 	if err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func (dsq *DSQueue) UnlockMessageById(params []string) common.IResponse {
 
 func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 
-	switch msg.pushAt {
+	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT:
 		msg.ListId = int64(dsq.availableMsgs.Len()) + 1
 		dsq.availableMsgs.PushFront(msg.Id)
@@ -471,7 +471,7 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 		msg.ListId = int64(dsq.highPriorityBackMsgs.Len())
 		dsq.highPriorityBackMsgs.PushFront(msg.Id)
 	default:
-		log.Error("Error! Wrong pushAt value %d for message %s", msg.pushAt, msg.Id)
+		log.Error("Error! Wrong pushAt value %d for message %s", msg.PushAt, msg.Id)
 		return common.ERR_QUEUE_INTERNAL_ERROR
 	}
 	msg.DeliveryTs = 0
@@ -502,7 +502,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) common.IRespon
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) push(params []string, direction uint8) common.IResponse {
+func (dsq *DSQueue) push(params []string, direction int32) common.IResponse {
 	var err *common.ErrorResponse
 	var msgId string
 	var payload string = ""
@@ -532,17 +532,17 @@ func (dsq *DSQueue) push(params []string, direction uint8) common.IResponse {
 		return common.ERR_MSG_BAD_DELIVERY_TIMEOUT
 	}
 
-	msg := NewDSQMessageWithId(msgId)
+	msg := NewDSQMessage(msgId)
 	if deliveryDelay > 0 {
 		msg.DeliveryTs = common.Uts() + deliveryDelay
 	}
-	msg.pushAt = direction
+	msg.PushAt = direction
 
 	dsq.lock.Lock()
 	// Update stats
 	pushTime := common.Uts()
 	dsq.stats.LastPushTs = pushTime
-	switch msg.pushAt {
+	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT:
 		dsq.stats.LastPushFrontTs = pushTime
 	case QUEUE_DIRECTION_BACK:
@@ -552,7 +552,7 @@ func (dsq *DSQueue) push(params []string, direction uint8) common.IResponse {
 	return dsq.storeMessage(msg, payload)
 }
 
-func (dsq *DSQueue) popMetaMessage(popFrom uint8, permanentPop bool) *DSQMessage {
+func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMessage {
 	var msgId = ""
 
 	if dsq.availableMsgs.Empty() && dsq.highPriorityFrontMsgs.Empty() && dsq.highPriorityBackMsgs.Empty() {
@@ -583,19 +583,19 @@ func (dsq *DSQueue) popMetaMessage(popFrom uint8, permanentPop bool) *DSQMessage
 	}
 	msg.ListId = 0
 	if !permanentPop {
-		msg.pushAt = uint8(returnTo)
+		msg.PushAt = int32(returnTo)
 		dsq.lockMessage(msg)
 	} else {
-		msg.pushAt = QUEUE_DIRECTION_NONE
+		msg.PushAt = QUEUE_DIRECTION_NONE
 	}
-	dsq.database.UpdateItem(dsq.queueName, msg)
+	dsq.database.StoreItem(dsq.queueName, msg)
 
 	return msg
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) common.IResponse {
+func (dsq *DSQueue) popMessage(direction int32, permanentPop bool) common.IResponse {
 
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
@@ -611,7 +611,7 @@ func (dsq *DSQueue) popMessage(direction uint8, permanentPop bool) common.IRespo
 	return common.NewItemsResponse([]common.IItem{retMsg})
 }
 
-func (dsq *DSQueue) returnMessageTo(params []string, place uint8) common.IResponse {
+func (dsq *DSQueue) returnMessageTo(params []string, place int32) common.IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -670,7 +670,7 @@ func (dsq *DSQueue) deleteMessage(msg *DSQMessage) {
 	if msg == nil {
 		return
 	}
-	switch msg.pushAt {
+	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT_UNLOCKED:
 		dsq.highPriorityFrontMsgs.RemoveById(msg.Id)
 	case QUEUE_DIRECTION_BACK_UNLOCKED:
@@ -703,7 +703,7 @@ func (dsq *DSQueue) trackExpiration(msg *DSQMessage) {
 
 // Attempts to return a message into the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
-func (dsq *DSQueue) returnTo(msg *DSQMessage, place uint8) *common.ErrorResponse {
+func (dsq *DSQueue) returnTo(msg *DSQMessage, place int32) *common.ErrorResponse {
 	lim := dsq.settings.PopCountLimit
 	if lim > 0 {
 		if lim <= msg.PopCount {
@@ -711,18 +711,18 @@ func (dsq *DSQueue) returnTo(msg *DSQMessage, place uint8) *common.ErrorResponse
 			return common.ERR_MSG_POP_ATTEMPTS_EXCEEDED
 		}
 	}
-	msg.pushAt = place
+	msg.PushAt = place
 	msg.UnlockTs = 0
 	dsq.addMessageToQueue(msg)
 	dsq.trackExpiration(msg)
-	dsq.database.UpdateItem(dsq.queueName, msg)
+	dsq.database.StoreItem(dsq.queueName, msg)
 	return nil
 }
 
 // Finish message delivery to the queue.
 func (dsq *DSQueue) completeDelivery(msg *DSQMessage) {
 	dsq.addMessageToQueue(msg)
-	dsq.database.UpdateItem(dsq.queueName, msg)
+	dsq.database.StoreItem(dsq.queueName, msg)
 }
 
 // Unlocks all items which exceeded their lock/delivery time.
@@ -741,7 +741,7 @@ func (dsq *DSQueue) releaseInFlight() (int, int) {
 			dsq.completeDelivery(msg)
 			delivered += 1
 		} else if msg.UnlockTs <= cur_ts {
-			dsq.returnTo(msg, msg.pushAt)
+			dsq.returnTo(msg, msg.PushAt)
 			returned += 1
 		} else {
 			log.Error("Error! Wrong delivery/unlock interval specified for msg: %s", msg.Id)
@@ -840,13 +840,13 @@ func (dsq *DSQueue) loadAllMessages() {
 
 	s := dsq.settings
 	for iter.Valid() {
-		pqmsg := PQMessageFromBinary(string(iter.Key), iter.Value)
+		pqmsg := UnmarshalDSQMessage(string(iter.Key), iter.Value)
 		// Store list if message IDs that should be removed.
 		if pqmsg.CreatedTs+s.MsgTTL < nowTs ||
 			(pqmsg.PopCount >= s.PopCountLimit && s.PopCountLimit > 0) {
 			delIds = append(delIds, pqmsg.Id)
 		} else {
-			switch pqmsg.pushAt {
+			switch pqmsg.PushAt {
 			case QUEUE_DIRECTION_FRONT_UNLOCKED:
 				unlockedFrontMsgs = append(unlockedFrontMsgs, pqmsg)
 			case QUEUE_DIRECTION_BACK_UNLOCKED:

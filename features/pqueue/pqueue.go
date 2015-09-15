@@ -240,7 +240,7 @@ func (pq *PQueue) Push(params []string) common.IResponse {
 		msgId = common.GenRandMsgId()
 	}
 
-	msg := NewPQMessageWithId(msgId, priority)
+	msg := NewPQMessage(msgId, priority)
 
 	pq.settings.LastPushTs = common.Uts()
 
@@ -363,7 +363,7 @@ func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
 	}
 	msg.PopCount += 1
 	pq.lockMessage(msg, lockTimeout)
-	pq.database.UpdateItem(pq.queueName, msg)
+	pq.database.StoreItem(pq.queueName, msg)
 
 	return msg
 }
@@ -510,7 +510,7 @@ func (pq *PQueue) SetLockTimeout(params []string) common.IResponse {
 	msg.UnlockTs = common.Uts() + int64(lockTimeout)
 
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	pq.database.UpdateItem(pq.queueName, msg)
+	pq.database.StoreItem(pq.queueName, msg)
 
 	return common.OK200_RESPONSE
 }
@@ -587,7 +587,7 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 	msg.UnlockTs = 0
 	pq.availMsgs.PushFront(msg.Id)
 	pq.trackExpiration(msg)
-	pq.database.UpdateItem(pq.queueName, msg)
+	pq.database.StoreItem(pq.queueName, msg)
 	return nil
 }
 
@@ -688,7 +688,7 @@ func (pq *PQueue) loadAllMessages() {
 
 	s := pq.settings
 	for iter.Valid() {
-		pqmsg := PQMessageFromBinary(string(iter.Key), iter.Value)
+		pqmsg := UnmarshalPQMessage(string(iter.Key), iter.Value)
 		// Store list if message IDs that should be removed.
 		if pqmsg.CreatedTs+s.MsgTTL < nowTs ||
 			(pqmsg.PopCount >= s.PopCountLimit &&

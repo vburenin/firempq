@@ -132,11 +132,14 @@ func makeItemID(svcName, id string) string {
 
 // StoreItemWithPayload stores item and provide payload.
 func (ds *DataStorage) StoreItemWithPayload(svcName string, item common.IItemMetaData, payload string) {
+	itemBody, err := item.Marshal()
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+
 	itemID := makeItemID(svcName, item.GetId())
 	payloadID := makePayloadID(svcName, item.GetId())
-
-	itemBody := item.ToBinary()
-
 	ds.cacheLock.Lock()
 	ds.itemCache[itemID] = itemBody
 	ds.payloadCache[payloadID] = payload
@@ -145,19 +148,13 @@ func (ds *DataStorage) StoreItemWithPayload(svcName string, item common.IItemMet
 
 // StoreItem stores item onlt without paylaod.
 func (ds *DataStorage) StoreItem(svcName string, item common.IItemMetaData) {
+	itemBody, err := item.Marshal()
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
 	itemID := makeItemID(svcName, item.GetId())
 
-	itemBody := item.ToBinary()
-
-	ds.cacheLock.Lock()
-	ds.itemCache[itemID] = itemBody
-	ds.cacheLock.Unlock()
-}
-
-// UpdateItem updates item metadata, affects cache only until flushed.
-func (ds *DataStorage) UpdateItem(svcName string, item common.IItemMetaData) {
-	itemID := makeItemID(svcName, item.GetId())
-	itemBody := item.ToBinary()
 	ds.cacheLock.Lock()
 	ds.itemCache[itemID] = itemBody
 	ds.cacheLock.Unlock()

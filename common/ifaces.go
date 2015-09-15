@@ -4,12 +4,12 @@ import "firempq/defs"
 
 type IItemMetaData interface {
 	GetId() string
-	ToBinary() []byte
+	Marshal() (data []byte, err error)
 }
 
 type IItem interface {
 	GetId() string
-	GetContent() string
+	GetPayload() string
 }
 
 // All responses returned to the client must follow this interface.

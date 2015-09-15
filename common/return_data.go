@@ -57,7 +57,7 @@ func (self *ItemsResponse) GetResponse() string {
 	for _, item := range self.items {
 		data = append(data, " ")
 		itemId := item.GetId()
-		itemData := item.GetContent()
+		itemData := item.GetPayload()
 		data = append(data, "$")
 		data = append(data, strconv.Itoa(len(itemId)))
 		data = append(data, " ")

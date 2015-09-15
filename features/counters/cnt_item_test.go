@@ -7,7 +7,7 @@ import (
 
 func TestBinary(t *testing.T) {
 	cnt := NewIntLinearCounter("id", 100, 0, 20, 30.222, 200)
-	data := cnt.ToBinary()
+	data, _ := cnt.Marshal()
 
 	cntCopy := IntLinearCountersFromBytes("id", data)
 

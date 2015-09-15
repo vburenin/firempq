@@ -3,7 +3,6 @@ package counters
 import (
 	"encoding/binary"
 	"firempq/common"
-	"firempq/util"
 	"math"
 	"strconv"
 )
@@ -44,7 +43,7 @@ func NewIntLinearCounter(
 		MinValue:         minVal,
 		MaxValue:         maxVal,
 		CountRate:        cntRate,
-		LastUpdateNanoTs: util.UnixNanoTs(),
+		LastUpdateNanoTs: common.UnixNanoTs(),
 		InactiveTTL:      inactiveTTL,
 		CounterType:      CNT_INT_COUNTER,
 	}
@@ -60,7 +59,7 @@ func (c *IntLinearCounter) GetValueAsString() string {
 }
 
 func (c *IntLinearCounter) Update() {
-	curTs := util.UnixNanoTs()
+	curTs := common.UnixNanoTs()
 	tsDelta := float64(curTs-c.LastUpdateNanoTs) / 1000000000.0
 
 	// If clocks moved back, just do nothing. Lets just remember the last time stamp.
@@ -87,7 +86,7 @@ func (c *IntLinearCounter) correctLimits() {
 	}
 }
 
-func (c *IntLinearCounter) ToBinary() []byte {
+func (c *IntLinearCounter) Marshal() ([]byte, error) {
 	buf := make([]byte, 6*8+1)
 	buf[0] = byte(c.CounterType)
 
@@ -109,7 +108,7 @@ func (c *IntLinearCounter) ToBinary() []byte {
 	offset += 8
 	binary.BigEndian.PutUint64(buf[offset:], uint64(c.InactiveTTL))
 
-	return buf
+	return buf, nil
 }
 
 func IntLinearCountersFromBytes(itemId string, data []byte) *IntLinearCounter {
