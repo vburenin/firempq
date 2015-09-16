@@ -9,24 +9,30 @@ import (
 	"os"
 	"strconv"
 
+	"firempq/config"
+
+	"fmt"
+
 	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("firempq")
 
-func init_logging() {
+func init_logging(level logging.Level) {
 	format := logging.MustStringFormatter(
 		"%{color}%{time:2006-01-02 15:04:05.00000}: %{level}%{color:reset} %{shortfile} %{message}",
 	)
 	logbackend := logging.NewLogBackend(os.Stderr, "", 0)
 	formatter := logging.NewBackendFormatter(logbackend, format)
 	logging.SetBackend(formatter)
-	logging.SetLevel(logging.DEBUG, "firempq")
+	logging.SetLevel(level, "firempq")
 }
 
 func main() {
-	init_logging()
-	srv, err := server.GetServer(server.SIMPLE_SERVER, ":9033")
+	cfg := config.GetConfig()
+	init_logging(logging.Level(cfg.LogLevel))
+	iface := fmt.Sprintf(":%d", cfg.Port)
+	srv, err := server.GetServer(server.SIMPLE_SERVER, iface)
 	if err != nil {
 		log.Critical("Error: %s", err.Error())
 	}
@@ -45,7 +51,8 @@ func addMessages(pq common.ISvc) {
 }
 
 func main1() {
-	init_logging()
+	cfg := config.GetConfig()
+	init_logging(logging.Level(cfg.LogLevel))
 	//	f, _ := os.Create("pp.dat")
 	//	pprof.StartCPUProfile(f)
 	//	defer pprof.StopCPUProfile()

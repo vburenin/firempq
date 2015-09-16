@@ -1,0 +1,13 @@
+{
+  "Port": 9033,
+  "Interface": "asdasdasdas",
+  "FlushInterval": 100,
+  "DbBufferSize": 10000,
+  "LogLevel": 6,
+  "PQueueConfig": {
+    "DefaultMessageTtl": 3600000,
+    "DefaultDeliveryDelay": 1,
+    "DefaultLockTimeout": 1200000,
+    "DefaultPopCountLimit": 10
+  }
+}
