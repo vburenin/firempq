@@ -74,14 +74,13 @@ func (s *SessionHandler) DispatchConn() {
 		}
 		if err != nil {
 			errTxt := err.Error()
-			if err == io.EOF || strings.Index(errTxt, "use of closed") > 0 {
-				log.Debug("Client disconnected: %s", addr)
-			} else {
+			if err != io.EOF && !(strings.Index(errTxt, "use of closed") > 0) {
 				log.Error(errTxt)
 			}
 			break
 		}
 	}
+	log.Debug("Client disconnected: %s", addr)
 }
 
 // Basic token processing that looks for global commands,
