@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/op/go-logging"
 )
@@ -23,9 +24,9 @@ type PQueueConfigInfo struct {
 type Config struct {
 	Port            int
 	Interface       string
-	DbFlushInterval int64
+	DbFlushInterval time.Duration
 	DbBufferSize    int64
-	LogLevel        int
+	LogLevel        logging.Level
 	PQueueConfig    PQueueConfigInfo
 }
 
@@ -90,7 +91,7 @@ func GetConfig() *Config {
 			log.Error(err.Error())
 		}
 		config = cfg
-		log.InitLogging(logging.Level(config.LogLevel))
+		log.InitLogging(config.LogLevel)
 	}
 	return config
 }

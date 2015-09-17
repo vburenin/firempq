@@ -10,6 +10,7 @@ package db
 import (
 	"bytes"
 	"firempq/common"
+	"firempq/config"
 	"sync"
 	"time"
 
@@ -116,7 +117,7 @@ func (ds *DataStorage) periodicCacheFlush() {
 			ds.FlushCache()
 		}
 		ds.flushLock.Unlock()
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(config.GetConfig().DbFlushInterval)
 	}
 }
 
