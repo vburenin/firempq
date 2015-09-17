@@ -2,6 +2,7 @@ package pqueue
 
 import (
 	"firempq/common"
+	"firempq/conf"
 	"firempq/db"
 	"firempq/defs"
 	"firempq/structs"
@@ -36,13 +37,6 @@ const (
 	ACTION_EXPIRE              = "EXPIRE"
 )
 
-const (
-	CONF_DEFAULT_TTL             = 12000000
-	CONF_DEFAULT_DELIVERY_DELAY  = 0
-	CONF_DEFAULT_LOCK_TIMEOUT    = 30000000
-	CONF_DEFAULT_POP_COUNT_LIMIT = 0 // 0 means Unlimited.
-)
-
 type PQueue struct {
 	queueName string
 	// Messages which are waiting to be picked up
@@ -64,20 +58,20 @@ type PQueue struct {
 	// Instance of the database.
 	database *db.DataStorage
 	// Queue settings.
-	conf *PQConfig
+	config *PQConfig
 
 	newMsgNotification chan bool
 }
 
-func initPQueue(database *db.DataStorage, queueName string, conf *PQConfig) *PQueue {
+func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *PQueue {
 	pq := PQueue{
 		msgMap:             make(map[string]*PQMessage),
-		availMsgs:          structs.NewActiveQueues(conf.MaxPriority),
+		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
 		database:           database,
 		expireHeap:         structs.NewIndexHeap(),
 		inFlightHeap:       structs.NewIndexHeap(),
 		queueName:          queueName,
-		conf:               conf,
+		config:             config,
 		workDone:           false,
 		newMsgNotification: make(chan bool),
 	}
@@ -89,46 +83,47 @@ func initPQueue(database *db.DataStorage, queueName string, conf *PQConfig) *PQu
 }
 
 func NewPQueue(database *db.DataStorage, queueName string, priorities int64, size int64) *PQueue {
-	conf := &PQConfig{
+	defaults := conf.CFG.PQueueConfig
+	config := &PQConfig{
 		MaxPriority:    priorities,
 		MaxSize:        size,
-		MsgTtl:         CONF_DEFAULT_TTL,
-		DeliveryDelay:  CONF_DEFAULT_DELIVERY_DELAY,
-		PopLockTimeout: CONF_DEFAULT_LOCK_TIMEOUT,
-		PopCountLimit:  CONF_DEFAULT_POP_COUNT_LIMIT,
+		MsgTtl:         defaults.DefaultMessageTtl,
+		DeliveryDelay:  defaults.DefaultDeliveryDelay,
+		PopLockTimeout: defaults.DefaultLockTimeout,
+		PopCountLimit:  defaults.DefaultPopCountLimit,
 		LastPushTs:     common.Uts(),
 		LastPopTs:      common.Uts(),
 		CreateTs:       common.Uts(),
 		InactivityTtl:  0,
 	}
 
-	queue := initPQueue(database, queueName, conf)
-	queue.database.SaveServiceConfig(queueName, conf)
+	queue := initPQueue(database, queueName, config)
+	queue.database.SaveServiceConfig(queueName, config)
 	return queue
 }
 
 func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
-	conf := &PQConfig{}
-	err := database.LoadServiceConfig(conf, queueName)
+	config := &PQConfig{}
+	err := database.LoadServiceConfig(config, queueName)
 	if err != nil {
 		return nil, err
 	}
-	pq := initPQueue(database, queueName, conf)
+	pq := initPQueue(database, queueName, config)
 	return pq, nil
 }
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
-	res["MaxPriority"] = pq.conf.GetMaxPriority()
-	res["MaxSize"] = pq.conf.GetMaxSize()
-	res["MsgTtl"] = pq.conf.GetMsgTtl()
-	res["DeliveryDelay"] = pq.conf.GetDeliveryDelay()
-	res["PopLockTimeout"] = pq.conf.GetPopLockTimeout()
-	res["PopCountLimit"] = pq.conf.GetPopCountLimit()
-	res["CreateTs"] = pq.conf.GetCreateTs()
-	res["LastPushTs"] = pq.conf.GetLastPushTs()
-	res["LastPopTs"] = pq.conf.GetLastPopTs()
-	res["InactivityTtl"] = pq.conf.GetInactivityTtl()
+	res["MaxPriority"] = pq.config.GetMaxPriority()
+	res["MaxSize"] = pq.config.GetMaxSize()
+	res["MsgTtl"] = pq.config.GetMsgTtl()
+	res["DeliveryDelay"] = pq.config.GetDeliveryDelay()
+	res["PopLockTimeout"] = pq.config.GetPopLockTimeout()
+	res["PopCountLimit"] = pq.config.GetPopCountLimit()
+	res["CreateTs"] = pq.config.GetCreateTs()
+	res["LastPushTs"] = pq.config.GetLastPushTs()
+	res["LastPopTs"] = pq.config.GetLastPopTs()
+	res["InactivityTtl"] = pq.config.GetInactivityTtl()
 	res["TotalMessages"] = len(pq.msgMap)
 	res["InFlightSize"] = pq.inFlightHeap.Len()
 
@@ -248,7 +243,7 @@ func getMessageIdOnly(params []string) (string, *common.ErrorResponse) {
 func (pq *PQueue) Push(params []string) common.IResponse {
 	var err *common.ErrorResponse
 	var msgId string
-	var priority int64 = pq.conf.MaxPriority - 1
+	var priority int64 = pq.config.MaxPriority - 1
 	var payload string = ""
 
 	for len(params) > 0 {
@@ -256,7 +251,7 @@ func (pq *PQueue) Push(params []string) common.IResponse {
 		case PRM_ID:
 			params, msgId, err = common.ParseStringParam(params, 1, 128)
 		case PRM_PRIORITY:
-			params, priority, err = common.ParseInt64Params(params, 0, pq.conf.MaxPriority-1)
+			params, priority, err = common.ParseInt64Params(params, 0, pq.config.MaxPriority-1)
 		case PRM_PAYLOAD:
 			params, payload, err = common.ParseStringParam(params, 1, 512*1024)
 		default:
@@ -272,7 +267,7 @@ func (pq *PQueue) Push(params []string) common.IResponse {
 
 	msg := NewPQMessage(msgId, priority)
 
-	pq.conf.LastPushTs = common.Uts()
+	pq.config.LastPushTs = common.Uts()
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
@@ -303,7 +298,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) common.IResponse 
 func (pq *PQueue) Pop(params []string) common.IResponse {
 	var err *common.ErrorResponse
 	var limit int64 = 1
-	lockTimeout := pq.conf.PopLockTimeout
+	lockTimeout := pq.config.PopLockTimeout
 
 	for len(params) > 0 {
 		p := params[0]
@@ -359,7 +354,7 @@ func (pq *PQueue) PopWait(params []string) common.IResponse {
 	var err *common.ErrorResponse
 	var limit int64 = 1
 	var popWaitTimeout int64 = 1000
-	var lockTimeout int64 = pq.conf.PopLockTimeout
+	var lockTimeout int64 = pq.config.PopLockTimeout
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -459,7 +454,7 @@ func (pq *PQueue) getPayload(msgId string) string {
 
 func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
 	nowTs := common.Uts()
-	pq.conf.LastPopTs = nowTs
+	pq.config.LastPopTs = nowTs
 	// Increase number of pop attempts.
 
 	msg.UnlockTs = nowTs + lockTimeout
@@ -598,7 +593,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 
 // Adds message into expiration heap. Not thread safe!
 func (pq *PQueue) trackExpiration(msg *PQMessage) {
-	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.conf.MsgTtl))
+	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.config.MsgTtl))
 	if !ok {
 		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
 	}
@@ -607,7 +602,7 @@ func (pq *PQueue) trackExpiration(msg *PQMessage) {
 // Attempts to return a message into the front of the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
 func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
-	lim := pq.conf.PopCountLimit
+	lim := pq.config.PopCountLimit
 	if lim > 0 {
 		if lim <= msg.PopCount {
 			pq.deleteMessage(msg.Id)
@@ -716,7 +711,7 @@ func (pq *PQueue) loadAllMessages() {
 	msgs := MessageSlice{}
 	delIds := []string{}
 
-	cfg := pq.conf
+	cfg := pq.config
 	for iter.Valid() {
 		pqmsg := UnmarshalPQMessage(string(iter.Key), iter.Value)
 		// Store list if message IDs that should be removed.

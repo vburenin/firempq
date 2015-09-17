@@ -49,7 +49,7 @@ func TestAutoExpiration(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.conf.MsgTtl = 10
+	q.config.MsgTtl = 10
 	q.Push([]string{PRM_ID, "dd1", PRM_PRIORITY, "12", PRM_PAYLOAD, "p1"})
 	q.Push([]string{PRM_ID, "dd2", PRM_PRIORITY, "12", PRM_PAYLOAD, "p2"})
 

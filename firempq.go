@@ -13,7 +13,17 @@ import (
 )
 
 func main() {
-	conf.ReadConfig()
+	// Initialize logging to a default INFO level to be able to log config error.
+	log.InitLogging()
+
+	err := conf.ReadConfig()
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+	// Reinitialize log level according to the config data.
+	log.InitLogging()
+
 	iface := fmt.Sprintf("%s:%d", conf.CFG.Interface, conf.CFG.Port)
 	srv, err := server.GetServer(server.SIMPLE_SERVER, iface)
 	if err != nil {
@@ -22,8 +32,6 @@ func main() {
 	}
 	srv.Start()
 
-	//time.Sleep(1E9)
-	//srv.Stop()
 }
 
 func addMessages(pq common.ISvc) {
@@ -38,8 +46,6 @@ func main1() {
 	//	f, _ := os.Create("pp.dat")
 	//	pprof.StartCPUProfile(f)
 	//	defer pprof.StopCPUProfile()
-	//
-	//	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	fc := facade.CreateFacade()
 	defer fc.Close()

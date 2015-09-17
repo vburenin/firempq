@@ -1,16 +1,17 @@
 package log
 
 import "os"
+import "firempq/conf"
 import "github.com/op/go-logging"
 
-func InitLogging(level logging.Level) {
+func InitLogging() {
 	format := logging.MustStringFormatter(
 		"%{color}%{time:2006-01-02 15:04:05.00000}: %{level}%{color:reset} %{shortfile} %{message}",
 	)
 	logbackend := logging.NewLogBackend(os.Stderr, "", 0)
 	formatter := logging.NewBackendFormatter(logbackend, format)
 	logging.SetBackend(formatter)
-	logging.SetLevel(level, "firempq")
+	logging.SetLevel(conf.CFG.LogLevel, "firempq")
 	fixLogger()
 }
 

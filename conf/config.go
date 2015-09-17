@@ -3,10 +3,9 @@ package conf
 import (
 	"bytes"
 	"encoding/json"
-	"firempq/log"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"strings"
 	"time"
 
@@ -29,7 +28,24 @@ type Config struct {
 	PQueueConfig    PQueueConfigInfo
 }
 
-var CFG *Config
+func NewDefaultConfig() *Config {
+	cfg := Config{
+		Port:            9033,
+		Interface:       "",
+		DbFlushInterval: 100,
+		DbBufferSize:    10000,
+		LogLevel:        logging.INFO,
+		PQueueConfig: PQueueConfigInfo{
+			DefaultMessageTtl:    10 * 60 * 1000,
+			DefaultDeliveryDelay: 0,
+			DefaultLockTimeout:   60 * 1000,
+			DefaultPopCountLimit: 0,
+		},
+	}
+	return &cfg
+}
+
+var CFG *Config = NewDefaultConfig()
 
 func getErrorLine(data []byte, byteOffset int64) (int64, int64, string) {
 	var lineNum int64 = 1
@@ -60,27 +76,23 @@ func formatTypeError(lineNum, lineOffset int64, lineText string, err *json.Unmar
 		lineNum, lineOffset, err.Value, err.Type.String(), strings.TrimSpace(lineText))
 }
 
-func ReadConfig() {
-	if log.Logger == nil {
-		log.InitLogging(6)
-	}
+func ReadConfig() error {
 	confData, err := ioutil.ReadFile("firempq_cfg.json")
 
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(confData))
-	cfg := &Config{}
+	cfg := NewDefaultConfig()
 	err = decoder.Decode(cfg)
 	if err != nil {
 		if e, ok := err.(*json.UnmarshalTypeError); ok {
 			num, offset, str := getErrorLine(confData, e.Offset)
-			log.Error(formatTypeError(num, offset, str, e))
-			os.Exit(255)
+			err = errors.New(formatTypeError(num, offset, str, e))
 		}
-		log.Error(err.Error())
+		return err
 	}
-	log.InitLogging(cfg.LogLevel)
 	CFG = cfg
+	return nil
 }

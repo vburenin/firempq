@@ -6,7 +6,7 @@
   "DbBufferSize": 10000,
   "PQueueConfig": {
     "DefaultMessageTtl": 3600000,
-    "DefaultDeliveryDelay": 1,
+    "DefaultDeliveryDelay": 0,
     "DefaultLockTimeout": 1200000,
     "DefaultPopCountLimit": 10
   }
