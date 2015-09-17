@@ -117,7 +117,7 @@ func (ds *DataStorage) periodicCacheFlush() {
 			ds.FlushCache()
 		}
 		ds.flushLock.Unlock()
-		time.Sleep(conf.CFG.DbFlushInterval)
+		time.Sleep(conf.CFG.DbFlushInterval * time.Millisecond)
 	}
 }
 
