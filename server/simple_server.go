@@ -3,17 +3,14 @@ package server
 import (
 	"firempq/common"
 	"firempq/facade"
+	"firempq/log"
 	"firempq/proto"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
-
-	"github.com/op/go-logging"
 )
-
-var log = logging.MustGetLogger("firempq")
 
 const (
 	ENDL          = "\n"
@@ -23,8 +20,7 @@ const (
 
 type QueueOpFunc func(req []string) error
 
-type SimpleServer struct {
-	address    string
+type CommandServer struct {
 	facade     *facade.ServiceFacade
 	listener   net.Listener
 	quitChan   chan bool
@@ -32,30 +28,21 @@ type SimpleServer struct {
 	waitGroup  sync.WaitGroup
 }
 
-func NewSimpleServer(address string) common.IServer {
-	return &SimpleServer{address: address,
+func NewSimpleServer(listener net.Listener) common.IServer {
+	return &CommandServer{
 		facade:     facade.CreateFacade(),
-		listener:   nil,
+		listener:   listener,
 		quitChan:   make(chan bool, 1),
 		signalChan: make(chan os.Signal, 1),
 	}
 }
 
-func (this *SimpleServer) Start() {
-
+func (this *CommandServer) Start() {
 	signal.Notify(this.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go this.waitForSignal()
 
-	var err error
-
-	this.listener, err = net.Listen("tcp", this.address)
 	defer this.listener.Close()
 
-	if err != nil {
-		log.Fatalf("Can't listen to %s: %s", this.address, err.Error())
-	}
-
-	log.Info("Listening at %s", this.address)
 	for {
 		conn, err := this.listener.Accept()
 		if err == nil {
@@ -63,10 +50,7 @@ func (this *SimpleServer) Start() {
 		} else {
 			select {
 			case <-this.quitChan:
-				this.waitGroup.Wait()
-				log.Info("Closing database...")
-				this.facade.Close()
-				log.Info("Server stopped.")
+				this.Shutdown()
 				return
 			default:
 				log.Error("Could not accept incoming request: %s", err.Error())
@@ -75,7 +59,14 @@ func (this *SimpleServer) Start() {
 	}
 }
 
-func (this *SimpleServer) waitForSignal() {
+func (this *CommandServer) Shutdown() {
+	this.waitGroup.Wait()
+	log.Info("Closing database...")
+	this.facade.Close()
+	log.Info("Server stopped.")
+}
+
+func (this *CommandServer) waitForSignal() {
 	for {
 		select {
 		case <-this.signalChan:
@@ -86,14 +77,14 @@ func (this *SimpleServer) waitForSignal() {
 	}
 }
 
-func (this *SimpleServer) Stop() {
+func (this *CommandServer) Stop() {
 	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
 	this.listener.Close()
 	close(this.quitChan)
 }
 
-func (this *SimpleServer) handleConnection(conn net.Conn) {
+func (this *CommandServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	defer this.waitGroup.Done()
 
