@@ -87,7 +87,7 @@ func (this *SimpleServer) waitForSignal() {
 }
 
 func (this *SimpleServer) Stop() {
-	log.Warning("Server has been told to stop.")
+	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
 	this.listener.Close()
 	close(this.quitChan)

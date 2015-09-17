@@ -709,7 +709,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (pq *PQueue) loadAllMessages() {
 	nowTs := common.Uts()
-	log.Info("Initializing queue: %s", pq.queueName)
+	log.Debug("Initializing queue: %s", pq.queueName)
 	iter := pq.database.IterServiceItems(pq.queueName)
 	defer iter.Close()
 
