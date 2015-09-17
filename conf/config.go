@@ -1,4 +1,4 @@
-package config
+package conf
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/op/go-logging"
@@ -30,8 +29,7 @@ type Config struct {
 	PQueueConfig    PQueueConfigInfo
 }
 
-var config *Config
-var configLock sync.Mutex
+var CFG *Config
 
 func getErrorLine(data []byte, byteOffset int64) (int64, int64, string) {
 	var lineNum int64 = 1
@@ -62,36 +60,27 @@ func formatTypeError(lineNum, lineOffset int64, lineText string, err *json.Unmar
 		lineNum, lineOffset, err.Value, err.Type.String(), strings.TrimSpace(lineText))
 }
 
-func GetConfig() *Config {
-	if config != nil {
-		return config
+func ReadConfig() {
+	if log.Logger == nil {
+		log.InitLogging(6)
 	}
-	configLock.Lock()
-	defer configLock.Unlock()
-	if config != nil {
-		return config
-	}
-	log.InitLogging(6)
-	if config == nil {
-		confData, err := ioutil.ReadFile("firempq_cfg.json")
+	confData, err := ioutil.ReadFile("firempq_cfg.json")
 
-		if err != nil {
-			panic(err)
-		}
-
-		decoder := json.NewDecoder(bytes.NewReader(confData))
-		cfg := &Config{}
-		err = decoder.Decode(cfg)
-		if err != nil {
-			if e, ok := err.(*json.UnmarshalTypeError); ok {
-				num, offset, str := getErrorLine(confData, e.Offset)
-				log.Error(formatTypeError(num, offset, str, e))
-				os.Exit(255)
-			}
-			log.Error(err.Error())
-		}
-		config = cfg
-		log.InitLogging(config.LogLevel)
+	if err != nil {
+		panic(err)
 	}
-	return config
+
+	decoder := json.NewDecoder(bytes.NewReader(confData))
+	cfg := &Config{}
+	err = decoder.Decode(cfg)
+	if err != nil {
+		if e, ok := err.(*json.UnmarshalTypeError); ok {
+			num, offset, str := getErrorLine(confData, e.Offset)
+			log.Error(formatTypeError(num, offset, str, e))
+			os.Exit(255)
+		}
+		log.Error(err.Error())
+	}
+	log.InitLogging(cfg.LogLevel)
+	CFG = cfg
 }

@@ -1,7 +1,7 @@
 {
   "LogLevel": 5,
   "Port": 9033,
-  "Interface": "asdasdasdas",
+  "Interface": "",
   "DbFlushInterval": 100,
   "DbBufferSize": 10000,
   "PQueueConfig": {

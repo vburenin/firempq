@@ -2,7 +2,7 @@ package main
 
 import (
 	"firempq/common"
-	"firempq/config"
+	"firempq/conf"
 	"firempq/defs"
 	"firempq/facade"
 	"firempq/features/pqueue"
@@ -13,14 +13,15 @@ import (
 )
 
 func main() {
-	cfg := config.GetConfig()
-	iface := fmt.Sprintf(":%d", cfg.Port)
+	conf.ReadConfig()
+	iface := fmt.Sprintf("%s:%d", conf.CFG.Interface, conf.CFG.Port)
 	srv, err := server.GetServer(server.SIMPLE_SERVER, iface)
 	if err != nil {
 		log.Critical("Error: %s", err.Error())
+		return
 	}
-
 	srv.Start()
+
 	//time.Sleep(1E9)
 	//srv.Stop()
 }
