@@ -1,9 +1,9 @@
 {
+  "LogLevel": 5,
   "Port": 9033,
   "Interface": "asdasdasdas",
-  "FlushInterval": 100,
+  "DbFlushInterval": 100,
   "DbBufferSize": 10000,
-  "LogLevel": 6,
   "PQueueConfig": {
     "DefaultMessageTtl": 3600000,
     "DefaultDeliveryDelay": 1,
