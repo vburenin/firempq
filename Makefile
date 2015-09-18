@@ -13,7 +13,7 @@ proto:
 clean:
 	go clean ./...
 
-tests:
+test:
 	go test ./...
 
 vet:

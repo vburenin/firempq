@@ -77,8 +77,6 @@ func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *P
 	}
 
 	pq.loadAllMessages()
-	go pq.periodicCleanUp()
-
 	return &pq
 }
 
@@ -669,30 +667,26 @@ const MAX_CLEANS_PER_ATTEMPT = 1000
 // How frequently loop should run.
 const DEFAULT_UNLOCK_INTERVAL = 100 * 1000000 // 0.1 second
 
-// Remove expired items. Should be running as a thread.
-func (pq *PQueue) periodicCleanUp() {
-	for !(pq.workDone) {
-		var sleepTime time.Duration = DEFAULT_UNLOCK_INTERVAL
-		pq.workDoneLock.Lock()
-		if !(pq.workDone) {
-			params := []string{PRM_TIMESTAMP, strconv.FormatInt(common.Uts(), 10)}
+// Clean up work.
+func (pq *PQueue) PeriodicCall(ts int64) int64 {
+	var sleepTime int64 = DEFAULT_UNLOCK_INTERVAL
+	pq.workDoneLock.Lock()
+	defer pq.workDoneLock.Unlock()
+	if !(pq.workDone) {
+		params := []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
 
-			r, ok := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
-			if ok && r.Value > 0 {
-				sleepTime = SLEEP_INTERVAL_IF_ITEMS
-			}
-
-			params = []string{PRM_TIMESTAMP, strconv.FormatInt(common.Uts(), 10)}
-			r, ok = pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
-			if ok && r.Value > 0 {
-				sleepTime = SLEEP_INTERVAL_IF_ITEMS
-			}
+		r, ok := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
+		if ok && r.Value > 0 {
+			sleepTime = SLEEP_INTERVAL_IF_ITEMS
 		}
-		pq.workDoneLock.Unlock()
-		if !pq.workDone {
-			time.Sleep(sleepTime)
+
+		params = []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
+		r, ok = pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
+		if ok && r.Value > 0 {
+			return SLEEP_INTERVAL_IF_ITEMS
 		}
 	}
+	return sleepTime
 }
 
 // Database related data management.

@@ -1,10 +1,10 @@
 package dsqueue
 
 import (
+	"firempq/common"
 	"firempq/db"
 	"strings"
 	"testing"
-	"time"
 )
 
 func CreateTestQueue() *DSQueue {
@@ -73,10 +73,9 @@ func TestPushFrontDelayed(t *testing.T) {
 
 	q.PushFront([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "data2", PRM_DELAY, "100", PRM_PAYLOAD, "p2"})
-
-	time.Sleep(50 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 50)
 	pop_msg1 := q.PopFront(nil).GetResponse()
-	time.Sleep(200 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 250)
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
 	if pop_msg1 != "+DATA %1 $5 data1$2 p1" {
@@ -116,9 +115,9 @@ func TestPushBackDelayed(t *testing.T) {
 	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
 	q.PushBack([]string{PRM_ID, "data2", PRM_DELAY, "100", PRM_PAYLOAD, "p2"})
 
-	time.Sleep(50 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 50)
 	pop_msg1 := q.PopFront(nil).GetResponse()
-	time.Sleep(200 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 250)
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
 	if pop_msg1 != "+DATA %1 $5 data1$2 p1" {
@@ -140,7 +139,7 @@ func TestAutoExpiration(t *testing.T) {
 	q.PushBack([]string{PRM_ID, "dd2", PRM_PAYLOAD, "p2"})
 
 	// Wait for auto expiration.
-	time.Sleep(2000 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 2000)
 	msg := q.PopFront(nil).GetResponse()
 	if msg != "+DATA %0" {
 		t.Error("Unexpected message It should be expired!")
@@ -163,7 +162,7 @@ func TestLockAndReturn(t *testing.T) {
 	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
 	q.PushBack([]string{PRM_ID, "data2", PRM_DELAY, "10", PRM_PAYLOAD, "p2"})
 
-	time.Sleep(50 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 50)
 	if q.availableMsgs.Len() != 2 {
 		t.Error("Messages map should contain 2 messages!")
 	}
@@ -179,7 +178,7 @@ func TestLockAndReturn(t *testing.T) {
 		t.Error("Unexpected data: ", msg2)
 	}
 
-	time.Sleep(1500 * time.Millisecond)
+	q.PeriodicCall(common.Uts() + 1550)
 
 	msg3 := q.PopFront(nil)
 	if msg3.IsError() {
@@ -192,7 +191,8 @@ func TestLockAndReturn(t *testing.T) {
 }
 
 func TestLoadFromDb(t *testing.T) {
-
+	common.EnableTesting()
+	defer common.DisableTesting()
 	q := CreateTestQueue()
 	q.Clear()
 	defer q.Close()
@@ -203,28 +203,49 @@ func TestLoadFromDb(t *testing.T) {
 	q.PushFront([]string{PRM_ID, "f1", PRM_DELAY, "500", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "f2", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "f3", PRM_PAYLOAD, "p1"})
-	q.PopLockFront(nil)
+	msg := q.PopLockFront(nil).GetResponse()
+
+	if !strings.Contains(msg, "f3") {
+		t.Error("Invalid message, expecterdf")
+	}
+
 	q.SetLockTimeout([]string{PRM_ID, "f3", PRM_LOCK_TIMEOUT, "100"})
 	// Wait till f3 will be unlocked and returned to the queue (priority front)
-	time.Sleep(200 * time.Millisecond)
+	common.IncTimer(120)
+	q.PeriodicCall(common.Uts())
+
 	q.Close()
-	time.Sleep(100 * time.Millisecond)
 
 	// Now reload queue from db as a new instance (should contain f3, f2, b1)
 	ql := CreateTestQueue()
 	defer ql.Close()
 	defer ql.Clear()
-	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 3 {
-		t.Error("Messages map should contain 3 messages instead of", ql.availableMsgs.Len()+
-			ql.highPriorityFrontMsgs.Len())
+
+	if len(ql.allMessagesMap) != 5 {
+		t.Error("5 messages should be in the queue")
 	}
-	time.Sleep(300 * time.Millisecond)
+
+	if ql.availableMsgs.Len() != 2 {
+		t.Error("2 messages should be available in generic queue", ql.availableMsgs.Len())
+	}
+
+	if ql.highPriorityFrontMsgs.Len() != 1 {
+		t.Error("1 message should be in high priority front queue")
+	}
+
+	if ql.inFlightHeap.Len() != 2 {
+		t.Error("Should be 2 messages in flight")
+	}
+
+	common.IncTimer(1600)
+	ql.PeriodicCall(common.Uts())
+
 	// Now f1 and b2 delivered and queue should contain 5 messages)
 	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 5 {
 		t.Error("Messages map should contain 5 messages instead of ", ql.availableMsgs.Len())
 	}
 	// Check order of loaded messages (front)
-	msg := ql.PopLockFront(nil).GetResponse()
+	msg = ql.PopLockFront(nil).GetResponse()
 
 	if !strings.Contains(msg, "f3") {
 		t.Error("Messages order is wrong! Got", msg, "instead of f3")

@@ -9,7 +9,6 @@ import (
 	"math"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/op/go-logging"
 )
@@ -124,7 +123,6 @@ func initDSQueue(database *db.DataStorage, queueName string, conf *DSQConfig) *D
 	}
 
 	dsq.loadAllMessages()
-	go dsq.periodicCleanUp()
 
 	return &dsq
 }
@@ -736,21 +734,20 @@ func (dsq *DSQueue) completeDelivery(msg *DSQMessage) {
 }
 
 // Unlocks all items which exceeded their lock/delivery time.
-func (dsq *DSQueue) releaseInFlight() (int, int) {
-	cur_ts := common.Uts()
+func (dsq *DSQueue) releaseInFlight(ts int64) (int, int) {
 	ifHeap := dsq.inFlightHeap
 
 	returned := 0
 	delivered := 0
 	iteration := 0
-	for !(ifHeap.Empty()) && ifHeap.MinElement() <= cur_ts {
+	for !(ifHeap.Empty()) && ifHeap.MinElement() <= ts {
 		iteration += 1
 		hi := ifHeap.PopItem()
 		msg := dsq.allMessagesMap[hi.Id]
-		if msg.DeliveryTs <= cur_ts {
+		if msg.DeliveryTs <= ts {
 			dsq.completeDelivery(msg)
 			delivered += 1
-		} else if msg.UnlockTs <= cur_ts {
+		} else if msg.UnlockTs <= ts {
 			dsq.returnTo(msg, msg.PushAt)
 			returned += 1
 		} else {
@@ -764,12 +761,11 @@ func (dsq *DSQueue) releaseInFlight() (int, int) {
 }
 
 // Remove all items which are completely expired.
-func (dsq *DSQueue) cleanExpiredItems() int {
-	cur_ts := common.Uts()
+func (dsq *DSQueue) cleanExpiredItems(ts int64) int {
 	eh := dsq.expireHeap
 
 	i := 0
-	for !(eh.Empty()) && eh.MinElement() < cur_ts {
+	for !(eh.Empty()) && eh.MinElement() < ts {
 		i++
 		hi := eh.PopItem()
 		dsq.deleteMessageById(hi.Id)
@@ -782,7 +778,7 @@ func (dsq *DSQueue) cleanExpiredItems() int {
 }
 
 // 1 milliseconds.
-const SLEEP_INTERVAL_IF_ITEMS = (1 * time.Millisecond)
+const SLEEP_INTERVAL_IF_ITEMS = 1
 
 // 1000 items should be enough to not create long locks. In the most good cases clean ups are rare.
 const MAX_CLEANS_PER_ATTEMPT = 1000
@@ -791,43 +787,38 @@ const MAX_CLEANS_PER_ATTEMPT = 1000
 const MAX_DELIVERYS_PER_ATTEMPT = 1000
 
 // How frequently loop should run.
-const DEFAULT_UNLOCK_INTERVAL = (10 * time.Millisecond) // 0.01 second
+const DEFAULT_UNLOCK_INTERVAL = 10 // 0.01 second
 
 // Remove expired items. Should be running as a thread.
-func (dsq *DSQueue) periodicCleanUp() {
-	for !(dsq.workDone) {
-		var sleepTime time.Duration = DEFAULT_UNLOCK_INTERVAL
-		dsq.workDoneLock.Lock()
-		if !(dsq.workDone) {
+func (dsq *DSQueue) PeriodicCall(ts int64) int64 {
+	var sleepTime int64 = DEFAULT_UNLOCK_INTERVAL
+	dsq.workDoneLock.Lock()
+	defer dsq.workDoneLock.Unlock()
+	if !(dsq.workDone) {
 
-			dsq.lock.Lock()
-			unlocked, delivered := dsq.releaseInFlight()
-			dsq.lock.Unlock()
+		dsq.lock.Lock()
+		unlocked, delivered := dsq.releaseInFlight(ts)
+		dsq.lock.Unlock()
 
-			if delivered > 0 {
-				log.Debug("%d messages delivered to the queue %s.", delivered, dsq.queueName)
-				sleepTime = SLEEP_INTERVAL_IF_ITEMS
-			}
-			if unlocked > 0 {
-				log.Debug("%d messages returned to the queue %s.", unlocked, dsq.queueName)
-				sleepTime = SLEEP_INTERVAL_IF_ITEMS
-			}
-
-			dsq.lock.Lock()
-			cleaned := dsq.cleanExpiredItems()
-			dsq.lock.Unlock()
-
-			if cleaned > 0 {
-				log.Debug("%d items expired.", cleaned)
-				sleepTime = SLEEP_INTERVAL_IF_ITEMS
-			}
+		if delivered > 0 {
+			log.Debug("%d messages delivered to the queue %s.", delivered, dsq.queueName)
+			sleepTime = SLEEP_INTERVAL_IF_ITEMS
 		}
-		dsq.workDoneLock.Unlock()
-		if !dsq.workDone {
-			time.Sleep(sleepTime)
+		if unlocked > 0 {
+			log.Debug("%d messages returned to the queue %s.", unlocked, dsq.queueName)
+			sleepTime = SLEEP_INTERVAL_IF_ITEMS
+		}
+
+		dsq.lock.Lock()
+		cleaned := dsq.cleanExpiredItems(ts)
+		dsq.lock.Unlock()
+
+		if cleaned > 0 {
+			log.Debug("%d items expired.", cleaned)
+			sleepTime = SLEEP_INTERVAL_IF_ITEMS
 		}
 	}
-	log.Info("periodic cleanup is done for queue: %s", dsq.queueName)
+	return sleepTime
 }
 
 // Database related data management.
