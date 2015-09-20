@@ -1,6 +1,7 @@
 package pqueue
 
 import "firempq/common"
+import "firempq/log"
 
 const (
 	MAX_MESSAGE_ID_LENGTH = 64

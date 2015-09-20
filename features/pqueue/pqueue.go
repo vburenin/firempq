@@ -5,6 +5,7 @@ import (
 	"firempq/conf"
 	"firempq/db"
 	"firempq/defs"
+	"firempq/log"
 	"firempq/structs"
 	"fmt"
 	"math"
@@ -12,11 +13,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/op/go-logging"
 )
 
-var log = logging.MustGetLogger("firempq")
 
 // Size of one batch of messages for popMessageBatch function
 const MESSAGES_BATCH_SIZE_LIMIT = 20

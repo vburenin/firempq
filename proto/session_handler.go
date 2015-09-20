@@ -3,14 +3,11 @@ package proto
 import (
 	"firempq/common"
 	"firempq/facade"
+	"firempq/log"
 	"io"
 	"net"
 	"strings"
-
-	"github.com/op/go-logging"
 )
-
-var log = logging.MustGetLogger("firempq")
 
 var EOM = []byte{'\n'}
 

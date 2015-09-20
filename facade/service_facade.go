@@ -3,13 +3,10 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
+	"firempq/log"
 	"strings"
 	"sync"
-
-	"github.com/op/go-logging"
 )
-
-var log = logging.MustGetLogger("firempq")
 
 type ServiceFacade struct {
 	allSvcs  map[string]common.ISvc

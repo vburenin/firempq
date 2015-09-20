@@ -2,18 +2,16 @@ package dsqueue
 
 import (
 	"firempq/common"
+	"firempq/conf"
 	"firempq/db"
 	"firempq/defs"
+	"firempq/log"
 	"firempq/structs"
 	"fmt"
 	"math"
 	"sort"
 	"sync"
-
-	"github.com/op/go-logging"
 )
-
-var log = logging.MustGetLogger("firempq")
 
 const (
 	ACTION_UNLOCK_BY_ID        = "UNLOCK"
