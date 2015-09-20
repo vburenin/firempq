@@ -75,9 +75,8 @@ type DSQueue struct {
 	allMessagesMap map[string]*DSQMessage
 
 	lock sync.Mutex
-	// Used to stop internal goroutine.
-	workDone     bool
-	workDoneLock sync.Mutex
+
+	closeFlag common.BoolFlag
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
@@ -99,7 +98,6 @@ func initDSQueue(database *db.DataStorage, queueName string, conf *DSQConfig) *D
 		inFlightHeap:          structs.NewIndexHeap(),
 		queueName:             queueName,
 		conf:                  conf,
-		workDone:              false,
 		newMsgNotification:    make(chan bool),
 	}
 
@@ -219,18 +217,11 @@ func (dsq *DSQueue) Clear() {
 }
 
 func (dsq *DSQueue) Close() {
-	dsq.workDoneLock.Lock()
-	defer dsq.workDoneLock.Unlock()
-	if dsq.workDone {
-		return
-	}
-	dsq.workDone = true
+	dsq.closeFlag.SetTrue()
 }
 
 func (dsq *DSQueue) IsClosed() bool {
-	dsq.workDoneLock.Lock()
-	defer dsq.workDoneLock.Unlock()
-	return dsq.workDone
+	return dsq.closeFlag.Flag
 }
 
 func makeUnknownParamResponse(paramName string) *common.ErrorResponse {
@@ -790,35 +781,28 @@ const MAX_DELIVERYS_PER_ATTEMPT = 1000
 const DEFAULT_UNLOCK_INTERVAL = 10 // 0.01 second
 
 // Remove expired items. Should be running as a thread.
-func (dsq *DSQueue) PeriodicCall(ts int64) int64 {
-	var sleepTime int64 = DEFAULT_UNLOCK_INTERVAL
-	dsq.workDoneLock.Lock()
-	defer dsq.workDoneLock.Unlock()
-	if !(dsq.workDone) {
+func (dsq *DSQueue) Update(ts int64) bool {
+	var delivered, unlocked, cleaned int
+	dsq.lock.Lock()
+	unlocked, delivered = dsq.releaseInFlight(ts)
+	dsq.lock.Unlock()
 
-		dsq.lock.Lock()
-		unlocked, delivered := dsq.releaseInFlight(ts)
-		dsq.lock.Unlock()
-
-		if delivered > 0 {
-			log.Debug("%d messages delivered to the queue %s.", delivered, dsq.queueName)
-			sleepTime = SLEEP_INTERVAL_IF_ITEMS
-		}
-		if unlocked > 0 {
-			log.Debug("%d messages returned to the queue %s.", unlocked, dsq.queueName)
-			sleepTime = SLEEP_INTERVAL_IF_ITEMS
-		}
-
-		dsq.lock.Lock()
-		cleaned := dsq.cleanExpiredItems(ts)
-		dsq.lock.Unlock()
-
-		if cleaned > 0 {
-			log.Debug("%d items expired.", cleaned)
-			sleepTime = SLEEP_INTERVAL_IF_ITEMS
-		}
+	if delivered > 0 {
+		log.Debug("%d messages delivered to the queue %s.", delivered, dsq.queueName)
 	}
-	return sleepTime
+	if unlocked > 0 {
+		log.Debug("%d messages returned to the queue %s.", unlocked, dsq.queueName)
+	}
+
+	dsq.lock.Lock()
+	cleaned = dsq.cleanExpiredItems(ts)
+	dsq.lock.Unlock()
+
+	if cleaned > 0 {
+		log.Debug("%d items expired.", cleaned)
+	}
+
+	return delivered > 0 || cleaned > 0 || unlocked > 0
 }
 
 // Database related data management.

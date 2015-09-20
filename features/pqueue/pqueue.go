@@ -50,9 +50,8 @@ type PQueue struct {
 	msgMap map[string]*PQMessage
 
 	lock sync.Mutex
-	// Used to stop internal goroutine.
-	workDone     bool
-	workDoneLock sync.Mutex
+	// Set as True if the service is closed.
+	closeFlag common.BoolFlag
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
@@ -72,7 +71,6 @@ func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *P
 		inFlightHeap:       structs.NewIndexHeap(),
 		queueName:          queueName,
 		config:             config,
-		workDone:           false,
 		newMsgNotification: make(chan bool),
 	}
 
@@ -196,18 +194,11 @@ func (pq *PQueue) Clear() {
 }
 
 func (pq *PQueue) Close() {
-	pq.workDoneLock.Lock()
-	defer pq.workDoneLock.Unlock()
-	if pq.workDone {
-		return
-	}
-	pq.workDone = true
+	pq.closeFlag.SetTrue()
 }
 
 func (pq *PQueue) IsClosed() bool {
-	pq.workDoneLock.Lock()
-	defer pq.workDoneLock.Unlock()
-	return pq.workDone
+	return pq.closeFlag.Flag
 }
 
 func makeUnknownParamResponse(paramName string) *common.ErrorResponse {
@@ -614,19 +605,19 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 	return nil
 }
 
+// 1000 items should be enough to not create long locks.
+const MAX_CLEANS_PER_ATTEMPT = 1000
+
 // Unlocks all items which exceeded their lock time.
 func (pq *PQueue) releaseInFlight(ts int64) int64 {
 	ifHeap := pq.inFlightHeap
 
 	var counter int64 = 0
-	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts {
+	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts && counter < MAX_CLEANS_PER_ATTEMPT {
 		counter++
 		unlockedItem := ifHeap.PopItem()
 		pqmsg := pq.msgMap[unlockedItem.Id]
 		pq.returnToFront(pqmsg)
-		if counter >= MAX_CLEANS_PER_ATTEMPT {
-			break
-		}
 	}
 	if counter > 0 {
 		log.Debug("'%d' item(s) returned to the front of the queue.", counter)
@@ -639,18 +630,9 @@ func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
 	var counter int64 = 0
 
 	eh := pq.expireHeap
-	for !(eh.Empty()) && eh.MinElement() < ts {
+	for !(eh.Empty()) && eh.MinElement() < ts && counter < MAX_CLEANS_PER_ATTEMPT {
 		counter++
-		expiredItem := eh.PopItem()
-		// There are two places to remove expired item:
-		// 1. Map of all items - all items map.
-		// 2. Available message.
-		msg := pq.msgMap[expiredItem.Id]
-		pq.availMsgs.RemoveItem(msg.Id, msg.Priority)
-		pq.deleteMessage(msg.Id)
-		if counter >= MAX_CLEANS_PER_ATTEMPT {
-			break
-		}
+		pq.deleteMessage(eh.PopItem().Id)
 	}
 	if counter > 0 {
 		log.Debug("%d item(s) expired.", counter)
@@ -658,35 +640,14 @@ func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
 	return counter
 }
 
-// 1 milliseconds.
-const SLEEP_INTERVAL_IF_ITEMS = 1000000
-
-// 1000 items should be enough to not create long locks. In the most good cases clean ups are rare.
-const MAX_CLEANS_PER_ATTEMPT = 1000
-
 // How frequently loop should run.
-const DEFAULT_UNLOCK_INTERVAL = 100 * 1000000 // 0.1 second
+func (pq *PQueue) Update(ts int64) bool {
 
-// Clean up work.
-func (pq *PQueue) PeriodicCall(ts int64) int64 {
-	var sleepTime int64 = DEFAULT_UNLOCK_INTERVAL
-	pq.workDoneLock.Lock()
-	defer pq.workDoneLock.Unlock()
-	if !(pq.workDone) {
-		params := []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
+	params := []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
+	r1, ok1 := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
+	r2, ok2 := pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
 
-		r, ok := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
-		if ok && r.Value > 0 {
-			sleepTime = SLEEP_INTERVAL_IF_ITEMS
-		}
-
-		params = []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
-		r, ok = pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
-		if ok && r.Value > 0 {
-			return SLEEP_INTERVAL_IF_ITEMS
-		}
-	}
-	return sleepTime
+	return (ok1 && r1.Value > 0) || (ok2 && r2.Value > 0)
 }
 
 // Database related data management.

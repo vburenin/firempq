@@ -73,9 +73,9 @@ func TestPushFrontDelayed(t *testing.T) {
 
 	q.PushFront([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
 	q.PushFront([]string{PRM_ID, "data2", PRM_DELAY, "100", PRM_PAYLOAD, "p2"})
-	q.PeriodicCall(common.Uts() + 50)
+	q.Update(common.Uts() + 50)
 	pop_msg1 := q.PopFront(nil).GetResponse()
-	q.PeriodicCall(common.Uts() + 250)
+	q.Update(common.Uts() + 250)
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
 	if pop_msg1 != "+DATA %1 $5 data1$2 p1" {
@@ -115,9 +115,9 @@ func TestPushBackDelayed(t *testing.T) {
 	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
 	q.PushBack([]string{PRM_ID, "data2", PRM_DELAY, "100", PRM_PAYLOAD, "p2"})
 
-	q.PeriodicCall(common.Uts() + 50)
+	q.Update(common.Uts() + 50)
 	pop_msg1 := q.PopFront(nil).GetResponse()
-	q.PeriodicCall(common.Uts() + 250)
+	q.Update(common.Uts() + 250)
 	pop_msg2 := q.PopFront(nil).GetResponse()
 
 	if pop_msg1 != "+DATA %1 $5 data1$2 p1" {
@@ -139,7 +139,7 @@ func TestAutoExpiration(t *testing.T) {
 	q.PushBack([]string{PRM_ID, "dd2", PRM_PAYLOAD, "p2"})
 
 	// Wait for auto expiration.
-	q.PeriodicCall(common.Uts() + 2000)
+	q.Update(common.Uts() + 2000)
 	msg := q.PopFront(nil).GetResponse()
 	if msg != "+DATA %0" {
 		t.Error("Unexpected message It should be expired!")
@@ -162,7 +162,7 @@ func TestLockAndReturn(t *testing.T) {
 	q.PushBack([]string{PRM_ID, "data1", PRM_PAYLOAD, "p1"})
 	q.PushBack([]string{PRM_ID, "data2", PRM_DELAY, "10", PRM_PAYLOAD, "p2"})
 
-	q.PeriodicCall(common.Uts() + 50)
+	q.Update(common.Uts() + 50)
 	if q.availableMsgs.Len() != 2 {
 		t.Error("Messages map should contain 2 messages!")
 	}
@@ -178,7 +178,7 @@ func TestLockAndReturn(t *testing.T) {
 		t.Error("Unexpected data: ", msg2)
 	}
 
-	q.PeriodicCall(common.Uts() + 1550)
+	q.Update(common.Uts() + 1550)
 
 	msg3 := q.PopFront(nil)
 	if msg3.IsError() {
@@ -212,7 +212,7 @@ func TestLoadFromDb(t *testing.T) {
 	q.SetLockTimeout([]string{PRM_ID, "f3", PRM_LOCK_TIMEOUT, "100"})
 	// Wait till f3 will be unlocked and returned to the queue (priority front)
 	common.IncTimer(120)
-	q.PeriodicCall(common.Uts())
+	q.Update(common.Uts())
 
 	q.Close()
 
@@ -238,7 +238,7 @@ func TestLoadFromDb(t *testing.T) {
 	}
 
 	common.IncTimer(1600)
-	ql.PeriodicCall(common.Uts())
+	ql.Update(common.Uts())
 
 	// Now f1 and b2 delivered and queue should contain 5 messages)
 	if ql.availableMsgs.Len()+ql.highPriorityFrontMsgs.Len() != 5 {

@@ -38,7 +38,7 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 
 	q.Call(ACTION_SET_LOCK_TIMEOUT, params)
 
-	q.PeriodicCall(common.Uts() + 110000)
+	q.Update(common.Uts() + 110000)
 
 	pop_msg3 := q.Pop(nil).GetResponse()
 	cmp(t, pop_msg3, "+DATA %1 $5 data1$2 p1")
@@ -55,7 +55,7 @@ func TestAutoExpiration(t *testing.T) {
 	q.Push([]string{PRM_ID, "dd2", PRM_PRIORITY, "12", PRM_PAYLOAD, "p2"})
 
 	// Wait for auto expiration.
-	q.PeriodicCall(common.Uts() + 1300)
+	q.Update(common.Uts() + 1300)
 	msg := q.Pop([]string{}).GetResponse()
 	cmp(t, msg, "+DATA %0")
 	if len(q.msgMap) != 0 {
