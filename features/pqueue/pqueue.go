@@ -15,11 +15,6 @@ import (
 	"time"
 )
 
-
-// Size of one batch of messages for popMessageBatch function
-const MESSAGES_BATCH_SIZE_LIMIT = 20
-const MAX_POP_WAIT_TIMEOUT = 30000
-
 const (
 	ACTION_UNLOCK_BY_ID        = "UNLOCK"
 	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
@@ -293,7 +288,7 @@ func (pq *PQueue) Pop(params []string) common.IResponse {
 		case PRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = common.ParseInt64Params(params, 0, 24*1000*3600)
 		case PRM_LIMIT:
-			params, limit, err = common.ParseInt64Params(params, 1, MESSAGES_BATCH_SIZE_LIMIT)
+			params, limit, err = common.ParseInt64Params(params, 1, conf.CFG.PQueueConfig.MaxPopBatchSize)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -348,9 +343,9 @@ func (pq *PQueue) PopWait(params []string) common.IResponse {
 		case PRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = common.ParseInt64Params(params, 0, 24*1000*3600)
 		case PRM_LIMIT:
-			params, limit, err = common.ParseInt64Params(params, 1, MESSAGES_BATCH_SIZE_LIMIT)
+			params, limit, err = common.ParseInt64Params(params, 1, conf.CFG.PQueueConfig.MaxPopBatchSize)
 		case PRM_POP_WAIT_TIMEOUT:
-			params, popWaitTimeout, err = common.ParseInt64Params(params, 1, MAX_POP_WAIT_TIMEOUT)
+			params, popWaitTimeout, err = common.ParseInt64Params(params, 1, conf.CFG.PQueueConfig.MaxPopWaitTimeout)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -603,15 +598,13 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 	return nil
 }
 
-// 1000 items should be enough to not create long locks.
-const MAX_CLEANS_PER_ATTEMPT = 1000
-
 // Unlocks all items which exceeded their lock time.
 func (pq *PQueue) releaseInFlight(ts int64) int64 {
 	ifHeap := pq.inFlightHeap
-
+	bs := conf.CFG.PQueueConfig.UnlockBatchSize
 	var counter int64 = 0
-	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts && counter < MAX_CLEANS_PER_ATTEMPT {
+
+	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts && counter < bs {
 		counter++
 		unlockedItem := ifHeap.PopItem()
 		pqmsg := pq.msgMap[unlockedItem.Id]
@@ -626,9 +619,10 @@ func (pq *PQueue) releaseInFlight(ts int64) int64 {
 // Remove all items which are completely expired.
 func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
 	var counter int64 = 0
-
 	eh := pq.expireHeap
-	for !(eh.Empty()) && eh.MinElement() < ts && counter < MAX_CLEANS_PER_ATTEMPT {
+	bs := conf.CFG.PQueueConfig.ExpirationBatchSize
+
+	for !(eh.Empty()) && eh.MinElement() < ts && counter < bs {
 		counter++
 		pq.deleteMessage(eh.PopItem().Id)
 	}

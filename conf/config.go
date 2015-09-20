@@ -12,11 +12,26 @@ import (
 	"github.com/op/go-logging"
 )
 
-type PQueueConfigInfo struct {
+type PQueueConfigData struct {
 	DefaultMessageTtl    int64
 	DefaultDeliveryDelay int64
 	DefaultLockTimeout   int64
 	DefaultPopCountLimit int64
+	ExpirationBatchSize  int64
+	UnlockBatchSize      int64
+	MaxPopWaitTimeout    int64
+	MaxPopBatchSize      int64
+}
+
+type DSQueueConfigData struct {
+	DefaultMessageTtl    int64
+	DefaultDeliveryDelay int64
+	DefaultLockTimeout   int64
+	DefaultPopCountLimit int64
+	ExpirationBatchSize  int64
+	UnlockBatchSize      int64
+	MaxPopWaitTimeout    int64
+	MaxPopBatchSize      int64
 }
 
 type Config struct {
@@ -25,7 +40,9 @@ type Config struct {
 	DbFlushInterval time.Duration
 	DbBufferSize    int64
 	LogLevel        logging.Level
-	PQueueConfig    PQueueConfigInfo
+	PQueueConfig    PQueueConfigData
+	DSQueueConfig   DSQueueConfigData
+	UpdateInterval  int64
 }
 
 func NewDefaultConfig() *Config {
@@ -35,11 +52,25 @@ func NewDefaultConfig() *Config {
 		DbFlushInterval: 100,
 		DbBufferSize:    10000,
 		LogLevel:        logging.INFO,
-		PQueueConfig: PQueueConfigInfo{
+		PQueueConfig: PQueueConfigData{
 			DefaultMessageTtl:    10 * 60 * 1000,
 			DefaultDeliveryDelay: 0,
 			DefaultLockTimeout:   60 * 1000,
 			DefaultPopCountLimit: 0,
+			ExpirationBatchSize:  1000,
+			UnlockBatchSize:      1000,
+			MaxPopWaitTimeout:    30000,
+			MaxPopBatchSize:      10,
+		},
+		DSQueueConfig: DSQueueConfigData{
+			DefaultMessageTtl:    10 * 60 * 1000,
+			DefaultDeliveryDelay: 0,
+			DefaultLockTimeout:   60 * 1000,
+			DefaultPopCountLimit: 0,
+			ExpirationBatchSize:  1000,
+			UnlockBatchSize:      1000,
+			MaxPopWaitTimeout:    30000,
+			MaxPopBatchSize:      10,
 		},
 	}
 	return &cfg

@@ -49,13 +49,6 @@ const (
 	CONF_DEFAULT_POP_COUNT_LIMIT = 0    // 0 means Unlimited.
 )
 
-const (
-	TIMEOUT_MSG_DELIVERY   = 1
-	TIMEOUT_MSG_EXPIRATION = 2
-)
-
-const CLEAN_BATCH_SIZE = 1000000
-
 type DSQueue struct {
 	queueName string
 	// Messages which are waiting to be picked up
@@ -189,11 +182,13 @@ func (dsq *DSQueue) Call(action string, params []string) common.IResponse {
 	return handler(params)
 }
 
+const CLEAN_BATCH_SIZE = 1000
+
 // Delete all messages in the queue. It includes all type of messages
 func (dsq *DSQueue) Clear() {
 	total := 0
 	for {
-		ids := []string{}
+		ids := make([]string, CLEAN_BATCH_SIZE)
 		dsq.lock.Lock()
 		if len(dsq.allMessagesMap) == 0 {
 			dsq.lock.Unlock()
@@ -723,14 +718,15 @@ func (dsq *DSQueue) completeDelivery(msg *DSQMessage) {
 }
 
 // Unlocks all items which exceeded their lock/delivery time.
-func (dsq *DSQueue) releaseInFlight(ts int64) (int, int) {
+func (dsq *DSQueue) releaseInFlight(ts int64) (int64, int64) {
 	ifHeap := dsq.inFlightHeap
+	var i int64 = 0
+	var returned int64 = 0
+	var delivered int64 = 0
 
-	returned := 0
-	delivered := 0
-	iteration := 0
-	for !(ifHeap.Empty()) && ifHeap.MinElement() <= ts {
-		iteration += 1
+	bs := conf.CFG.DSQueueConfig.UnlockBatchSize
+	for !(ifHeap.Empty()) && ifHeap.MinElement() <= ts && i < bs {
+		i += 1
 		hi := ifHeap.PopItem()
 		msg := dsq.allMessagesMap[hi.Id]
 		if msg.DeliveryTs <= ts {
@@ -742,45 +738,28 @@ func (dsq *DSQueue) releaseInFlight(ts int64) (int, int) {
 		} else {
 			log.Error("Error! Wrong delivery/unlock interval specified for msg: %s", msg.Id)
 		}
-		if iteration >= MAX_CLEANS_PER_ATTEMPT {
-			break
-		}
 	}
 	return returned, delivered
 }
 
 // Remove all items which are completely expired.
-func (dsq *DSQueue) cleanExpiredItems(ts int64) int {
+func (dsq *DSQueue) cleanExpiredItems(ts int64) int64 {
 	eh := dsq.expireHeap
 
-	i := 0
-	for !(eh.Empty()) && eh.MinElement() < ts {
+	var i int64 = 0
+	bs := conf.CFG.DSQueueConfig.UnlockBatchSize
+	for !(eh.Empty()) && eh.MinElement() < ts && i < bs {
 		i++
 		hi := eh.PopItem()
 		dsq.deleteMessageById(hi.Id)
 		log.Debug("Deleting expired message: %s.", hi.Id)
-		if i >= MAX_CLEANS_PER_ATTEMPT {
-			break
-		}
 	}
 	return i
 }
 
-// 1 milliseconds.
-const SLEEP_INTERVAL_IF_ITEMS = 1
-
-// 1000 items should be enough to not create long locks. In the most good cases clean ups are rare.
-const MAX_CLEANS_PER_ATTEMPT = 1000
-
-// 1000 items should be enough to not create long locks. In the most good cases clean ups are rare.
-const MAX_DELIVERYS_PER_ATTEMPT = 1000
-
-// How frequently loop should run.
-const DEFAULT_UNLOCK_INTERVAL = 10 // 0.01 second
-
 // Remove expired items. Should be running as a thread.
 func (dsq *DSQueue) Update(ts int64) bool {
-	var delivered, unlocked, cleaned int
+	var delivered, unlocked, cleaned int64
 	dsq.lock.Lock()
 	unlocked, delivered = dsq.releaseInFlight(ts)
 	dsq.lock.Unlock()
