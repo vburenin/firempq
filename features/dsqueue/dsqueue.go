@@ -77,6 +77,8 @@ type DSQueue struct {
 	conf *DSQConfig
 
 	newMsgNotification chan bool
+
+	msgSerialNumber uint64
 }
 
 func initDSQueue(database *db.DataStorage, queueName string, conf *DSQConfig) *DSQueue {
@@ -91,6 +93,7 @@ func initDSQueue(database *db.DataStorage, queueName string, conf *DSQConfig) *D
 		queueName:             queueName,
 		conf:                  conf,
 		newMsgNotification:    make(chan bool),
+		msgSerialNumber:       0,
 	}
 
 	dsq.actionHandlers = map[string](common.CallFuncType){
@@ -459,16 +462,12 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 
 	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT:
-		msg.ListId = int64(dsq.availableMsgs.Len()) + 1
 		dsq.availableMsgs.PushFront(msg.Id)
 	case QUEUE_DIRECTION_BACK:
 		dsq.availableMsgs.PushBack(msg.Id)
-		msg.ListId = -int64(dsq.availableMsgs.Len() + 1)
 	case QUEUE_DIRECTION_FRONT_UNLOCKED:
 		dsq.highPriorityFrontMsgs.PushFront(msg.Id)
-		msg.ListId = int64(dsq.highPriorityFrontMsgs.Len())
 	case QUEUE_DIRECTION_BACK_UNLOCKED:
-		msg.ListId = int64(dsq.highPriorityBackMsgs.Len())
 		dsq.highPriorityBackMsgs.PushFront(msg.Id)
 	default:
 		log.Error("Error! Wrong pushAt value %d for message %s", msg.PushAt, msg.Id)
@@ -532,6 +531,8 @@ func (dsq *DSQueue) push(params []string, direction int32) common.IResponse {
 		return common.ERR_MSG_BAD_DELIVERY_TIMEOUT
 	}
 
+	dsq.conf.LastPushTs = common.Uts()
+
 	msg := NewDSQMessage(msgId)
 	if deliveryDelay > 0 {
 		msg.DeliveryTs = common.Uts() + deliveryDelay
@@ -539,9 +540,12 @@ func (dsq *DSQueue) push(params []string, direction int32) common.IResponse {
 	msg.PushAt = direction
 
 	dsq.lock.Lock()
+	dsq.msgSerialNumber += 1
+	msg.SerialNumber = dsq.msgSerialNumber
+
 	// Update stats
-	dsq.conf.LastPushTs = common.Uts()
 	defer dsq.lock.Unlock()
+
 	return dsq.storeMessage(msg, payload)
 }
 
@@ -574,7 +578,6 @@ func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMessage
 	if !ok {
 		return nil
 	}
-	msg.ListId = 0
 	if !permanentPop {
 		msg.PushAt = int32(returnTo)
 		dsq.lockMessage(msg)
@@ -802,7 +805,7 @@ func (dsq *DSQueue) update(ts int64) bool {
 type MessageSlice []*DSQMessage
 
 func (p MessageSlice) Len() int           { return len(p) }
-func (p MessageSlice) Less(i, j int) bool { return p[i].ListId < p[j].ListId }
+func (p MessageSlice) Less(i, j int) bool { return p[i].SerialNumber < p[j].SerialNumber }
 func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (dsq *DSQueue) loadAllMessages() {
@@ -836,14 +839,16 @@ func (dsq *DSQueue) loadAllMessages() {
 		iter.Next()
 	}
 	log.Debug("Loaded %d messages for %s queue",
-		len(msgs)+len(unlockedFrontMsgs)+len(unlockedBackMsgs), dsq.queueName)
+		len(msgs)+len(unlockedFrontMsgs)+len(unlockedBackMsgs),
+		dsq.queueName)
+
 	if len(delIds) > 0 {
-		log.Debug("%d messages will be removed because of expiration", len(delIds))
+		log.Debug("%d messages are expired", len(delIds))
 		for _, msgId := range delIds {
 			dsq.database.DeleteItem(dsq.queueName, msgId)
 		}
-
 	}
+
 	// Sorting data guarantees that messages will be available:w
 	// almost in the same order as they arrived.
 	sort.Sort(unlockedFrontMsgs)
