@@ -92,7 +92,7 @@ func TestDeleteById(t *testing.T) {
 
 	q.Push([]string{PRM_ID, "dd1", PRM_PRIORITY, "12", PRM_PAYLOAD, "p1"})
 
-	cmp(t, q.Call(ACTION_DELETE_BY_ID, []string{PRM_ID, "dd1"}).GetResponse(), "+OK:200")
+	cmp(t, q.Call(ACTION_DELETE_BY_ID, []string{PRM_ID, "dd1"}).GetResponse(), "+OK")
 
 	msg := q.Pop(nil).GetResponse()
 	cmp(t, msg, "+DATA %0")
@@ -121,7 +121,7 @@ func TestDeleteLockedById(t *testing.T) {
 	cmp(t, m, "+DATA %1 $3 dd1$2 p1")
 
 	res = q.Call(ACTION_DELETE_LOCKED_BY_ID, params)
-	cmp(t, res.GetResponse(), "+OK:200")
+	cmp(t, res.GetResponse(), "+OK")
 
 	msg := q.Pop(nil).GetResponse()
 	cmp(t, msg, "+DATA %0")

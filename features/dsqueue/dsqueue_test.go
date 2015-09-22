@@ -23,7 +23,7 @@ func TestDelete(t *testing.T) {
 	q.PushFront([]string{PRM_ID, "data2", PRM_PAYLOAD, "p2"})
 
 	resp := q.DeleteById([]string{PRM_ID, "data1"})
-	if resp.GetResponse() != "+OK:200" {
+	if resp.GetResponse() != "+OK" {
 		t.Error("Unexpected response")
 	}
 
