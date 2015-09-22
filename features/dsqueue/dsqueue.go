@@ -868,7 +868,7 @@ func (dsq *DSQueue) loadAllMessages() {
 		if msg.UnlockTs > nowTs {
 			dsq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
-			if msg.DeliveryTs > 0 {
+			if msg.DeliveryTs > nowTs {
 				dsq.inFlightHeap.PushItem(msg.Id, msg.DeliveryTs)
 				inDelivery += 1
 			} else {
