@@ -12,7 +12,7 @@ var log = logging.MustGetLogger("firempq")
 
 func TranslateError(err error) IResponse {
 	if err == nil {
-		return OK200_RESPONSE
+		return OK_RESPONSE
 	}
 	if resp, ok := err.(IResponse); ok {
 		return resp

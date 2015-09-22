@@ -25,9 +25,7 @@ type IResponse interface {
 
 type ISvc interface {
 	IsClosed() bool
-	// TimedCalls is called periodically where ts passed as a parameter.
-	// Returns True if action is there is more work to do.
-	Update(ts int64) bool
+	StartUpdate()
 	GetStatus() map[string]interface{}
 	GetType() defs.ServiceType
 	GetTypeName() string

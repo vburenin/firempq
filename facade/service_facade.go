@@ -36,6 +36,7 @@ func (s *ServiceFacade) loadAllServices() {
 			log.Error("Service '%s' was not loaded because of: %s", sm.Name, err)
 		} else {
 			s.allSvcs[sm.Name] = svcInstance
+			svcInstance.StartUpdate()
 		}
 	}
 }
@@ -54,10 +55,11 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 
 	metaInfo := common.NewServiceMetaInfo(svcType, 0, svcName)
 	s.database.SaveServiceMeta(metaInfo)
+	svc := svcCrt(svcName, params)
+	svc.StartUpdate()
+	s.allSvcs[svcName] = svc
 
-	s.allSvcs[svcName] = svcCrt(svcName, params)
-
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 func (s *ServiceFacade) DropService(svcName string) common.IResponse {
@@ -70,7 +72,7 @@ func (s *ServiceFacade) DropService(svcName string) common.IResponse {
 	svc.Close()
 	delete(s.allSvcs, svcName)
 	s.database.DeleteServiceData(svcName)
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IResponse {
@@ -104,6 +106,8 @@ func (s *ServiceFacade) GetService(name string) (common.ISvc, bool) {
 }
 
 func (s *ServiceFacade) Close() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	for _, svc := range s.allSvcs {
 		svc.Close()
 	}

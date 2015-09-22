@@ -23,8 +23,6 @@ const (
 	ACTION_PUSH                = "PUSH"
 	ACTION_POP                 = "POP"
 	ACTION_POP_WAIT            = "POPWAIT"
-	ACTION_SET_QPARAM          = "SETQP"
-	ACTION_SET_MPARAM          = "SETMP"
 	ACTION_STATUS              = "STATUS"
 	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
 	ACTION_EXPIRE              = "EXPIRE"
@@ -44,7 +42,7 @@ type PQueue struct {
 
 	lock sync.Mutex
 	// Set as True if the service is closed.
-	closeFlag common.BoolFlag
+	closedState common.BoolFlag
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
@@ -187,11 +185,11 @@ func (pq *PQueue) Clear() {
 }
 
 func (pq *PQueue) Close() {
-	pq.closeFlag.SetTrue()
+	pq.closedState.SetTrue()
 }
 
 func (pq *PQueue) IsClosed() bool {
-	return pq.closeFlag.Flag
+	return pq.closedState.IsTrue()
 }
 
 func makeUnknownParamResponse(paramName string) *common.ErrorResponse {
@@ -272,7 +270,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) common.IResponse 
 	}
 
 	pq.database.StoreItemWithPayload(pq.queueName, msg, payload)
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Pop first available messages.
@@ -286,7 +284,7 @@ func (pq *PQueue) Pop(params []string) common.IResponse {
 		p := params[0]
 		switch p {
 		case PRM_LOCK_TIMEOUT:
-			params, lockTimeout, err = common.ParseInt64Params(params, 0, 24*1000*3600)
+			params, lockTimeout, err = common.ParseInt64Params(params, 0, pq.config.PopLockTimeout)
 		case PRM_LIMIT:
 			params, limit, err = common.ParseInt64Params(params, 1, conf.CFG.PQueueConfig.MaxPopBatchSize)
 		default:
@@ -317,9 +315,18 @@ func (pq *PQueue) tsParamFunc(params []string, f func(int64) int64) common.IResp
 		return common.ERR_TS_PARAMETER_NEEDED
 	}
 
+	var result int64 = 0
 	pq.lock.Lock()
-	defer pq.lock.Unlock()
-	return common.NewIntResponse(f(ts))
+	for {
+		value := f(ts)
+		if value == 0 {
+			break
+		}
+		result += value
+	}
+	pq.lock.Unlock()
+
+	return common.NewIntResponse(result)
 }
 
 func (pq *PQueue) ExpireItems(params []string) common.IResponse {
@@ -475,7 +482,7 @@ func (pq *PQueue) DeleteById(params []string) common.IResponse {
 		return common.ERR_MSG_NOT_EXIST
 	}
 
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Set a user defined message lock timeout. Only locked message timeout can be set.
@@ -519,7 +526,7 @@ func (pq *PQueue) SetLockTimeout(params []string) common.IResponse {
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
 	pq.database.StoreItem(pq.queueName, msg)
 
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Delete locked message by id.
@@ -537,7 +544,7 @@ func (pq *PQueue) DeleteLockedById(params []string) common.IResponse {
 		return err
 	}
 	pq.deleteMessage(msgId)
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 func (pq *PQueue) UnlockMessageById(params []string) common.IResponse {
@@ -559,7 +566,7 @@ func (pq *PQueue) UnlockMessageById(params []string) common.IResponse {
 	if err != nil {
 		return err
 	}
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 func (pq *PQueue) deleteMessage(msgId string) bool {
@@ -632,14 +639,32 @@ func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
 	return counter
 }
 
+// StartUpdate runs a loop of periodic data updates.
+func (pq *PQueue) StartUpdate() {
+	go pq.updateLoop()
+}
+
+func (pq *PQueue) updateLoop() {
+	for pq.closedState.IsFalse() {
+		if pq.update(common.Uts()) {
+			time.Sleep(time.Millisecond)
+		} else {
+			time.Sleep(conf.CFG.UpdateInterval * time.Millisecond)
+		}
+	}
+}
+
 // How frequently loop should run.
-func (pq *PQueue) Update(ts int64) bool {
-
-	params := []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
-	r1, ok1 := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
-	r2, ok2 := pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
-
-	return (ok1 && r1.Value > 0) || (ok2 && r2.Value > 0)
+func (pq *PQueue) update(ts int64) bool {
+	pq.closedState.Lock()
+	defer pq.closedState.Unlock()
+	if pq.closedState.IsFalse() {
+		params := []string{PRM_TIMESTAMP, strconv.FormatInt(ts, 10)}
+		r1, ok1 := pq.Call(ACTION_RELEASE_IN_FLIGHT, params).(*common.IntResponse)
+		r2, ok2 := pq.Call(ACTION_EXPIRE, params).(*common.IntResponse)
+		return (ok1 && r1.Value > 0) || (ok2 && r2.Value > 0)
+	}
+	return false
 }
 
 // Database related data management.

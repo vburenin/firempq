@@ -4,7 +4,7 @@
   "Interface": "",
   "DbFlushInterval": 100,
   "DbBufferSize": 10000,
-  "UpdateInterval": 10,
+  "UpdateInterval": 100,
   "PQueueConfig": {
     "DefaultMessageTtl": 3600000,
     "DefaultDeliveryDelay": 0,

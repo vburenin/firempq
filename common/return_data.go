@@ -85,7 +85,9 @@ func (e *ErrorResponse) Error() string {
 }
 
 func (e *ErrorResponse) GetResponse() string {
-	return fmt.Sprintf("-ERR:%d:%s", e.ErrorCode, e.ErrorText)
+	return fmt.Sprintf("-ERR %s %s",
+		EncodeRespInt64(e.ErrorCode),
+		EncodeRespString(e.ErrorText))
 }
 
 func (e *ErrorResponse) IsError() bool {
@@ -94,15 +96,14 @@ func (e *ErrorResponse) IsError() bool {
 
 // Error response.
 type OkResponse struct {
-	Code int64
 }
 
 func (e *OkResponse) GetResponse() string {
-	return fmt.Sprintf("+OK:%d", e.Code)
+	return fmt.Sprintf("+OK")
 }
 
 func (self *OkResponse) IsError() bool {
 	return false
 }
 
-var OK200_RESPONSE *OkResponse = &OkResponse{200}
+var OK_RESPONSE *OkResponse = &OkResponse{}

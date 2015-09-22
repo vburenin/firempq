@@ -1,20 +1,28 @@
 package common
-import "sync"
 
+import "sync"
 
 type BoolFlag struct {
 	sync.Mutex
-	Flag bool
+	flag bool
 }
 
 func (this *BoolFlag) SetFalse() {
 	this.Lock()
-	this.Flag = false
+	this.flag = false
 	this.Unlock()
 }
 
 func (this *BoolFlag) SetTrue() {
 	this.Lock()
-	this.Flag = true
+	this.flag = true
 	this.Unlock()
+}
+
+func (this *BoolFlag) IsTrue() bool {
+	return this.flag
+}
+
+func (this *BoolFlag) IsFalse() bool {
+	return !this.flag
 }

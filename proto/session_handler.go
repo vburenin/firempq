@@ -86,7 +86,7 @@ func (s *SessionHandler) DispatchConn() {
 func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 	var resp common.IResponse
 	if len(cmdTokens) == 0 {
-		return s.writeResponse(common.OK200_RESPONSE)
+		return s.writeResponse(common.OK_RESPONSE)
 	}
 
 	cmd := cmdTokens[0]
@@ -174,7 +174,7 @@ func (s *SessionHandler) setCtxHandler(tokens []string) common.IResponse {
 		return common.ERR_NO_SVC
 	}
 	s.ctx = svc
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Set stop active flag to false that will case an exit from the processing loop.
@@ -188,7 +188,7 @@ func (s *SessionHandler) quitHandler(tokens []string) common.IResponse {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
 	s.Stop()
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // List all active services.

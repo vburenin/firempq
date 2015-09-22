@@ -11,6 +11,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"time"
 )
 
 const (
@@ -67,7 +68,7 @@ type DSQueue struct {
 
 	lock sync.Mutex
 
-	closeFlag common.BoolFlag
+	closedState common.BoolFlag
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
@@ -210,11 +211,11 @@ func (dsq *DSQueue) Clear() {
 }
 
 func (dsq *DSQueue) Close() {
-	dsq.closeFlag.SetTrue()
+	dsq.closedState.SetTrue()
 }
 
 func (dsq *DSQueue) IsClosed() bool {
-	return dsq.closeFlag.Flag
+	return dsq.closedState.IsTrue()
 }
 
 func makeUnknownParamResponse(paramName string) *common.ErrorResponse {
@@ -264,7 +265,7 @@ func (dsq *DSQueue) tsParamFunc(params []string, f func(int64) int64) common.IRe
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 	if f == nil {
-		return common.OK200_RESPONSE
+		return common.OK_RESPONSE
 	}
 	return common.NewIntResponse(f(ts))
 }
@@ -344,7 +345,7 @@ func (dsq *DSQueue) DeleteById(params []string) common.IResponse {
 
 	dsq.deleteMessage(msg)
 
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Delete message locked or unlocked from the queue by message's ID
@@ -361,7 +362,7 @@ func (dsq *DSQueue) ForceDelete(params []string) common.IResponse {
 		return common.ERR_MSG_NOT_EXIST
 	}
 
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Set a user defined message lock timeout. Only locked message timeout can be set.
@@ -405,7 +406,7 @@ func (dsq *DSQueue) SetLockTimeout(params []string) common.IResponse {
 	dsq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
 	dsq.database.StoreItem(dsq.queueName, msg)
 
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Delete locked message by id.
@@ -423,7 +424,7 @@ func (dsq *DSQueue) DeleteLockedById(params []string) common.IResponse {
 		return err
 	}
 	dsq.deleteMessage(msg)
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Unlock locked message by id.
@@ -447,7 +448,7 @@ func (dsq *DSQueue) UnlockMessageById(params []string) common.IResponse {
 	if err != nil {
 		return err
 	}
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // *********************************************************************************************************
@@ -496,7 +497,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) common.IRespon
 		}
 	}
 	dsq.database.StoreItemWithPayload(dsq.queueName, msg, payload)
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Push message to the queue.
@@ -621,7 +622,7 @@ func (dsq *DSQueue) returnMessageTo(params []string, place int32) common.IRespon
 	if err != nil {
 		return err
 	}
-	return common.OK200_RESPONSE
+	return common.OK_RESPONSE
 }
 
 // Returns message payload.
@@ -757,8 +758,23 @@ func (dsq *DSQueue) cleanExpiredItems(ts int64) int64 {
 	return i
 }
 
+// StartUpdate runs a loop of periodic data updates.
+func (dsq *DSQueue) StartUpdate() {
+	go dsq.updateLoop()
+}
+
+func (dsq *DSQueue) updateLoop() {
+	for dsq.closedState.IsFalse() {
+		if dsq.update(common.Uts()) {
+			time.Sleep(time.Millisecond)
+		} else {
+			time.Sleep(conf.CFG.UpdateInterval * 1000)
+		}
+	}
+}
+
 // Remove expired items. Should be running as a thread.
-func (dsq *DSQueue) Update(ts int64) bool {
+func (dsq *DSQueue) update(ts int64) bool {
 	var delivered, unlocked, cleaned int64
 	dsq.lock.Lock()
 	unlocked, delivered = dsq.releaseInFlight(ts)

@@ -42,7 +42,7 @@ type Config struct {
 	LogLevel        logging.Level
 	PQueueConfig    PQueueConfigData
 	DSQueueConfig   DSQueueConfigData
-	UpdateInterval  int64
+	UpdateInterval  time.Duration
 }
 
 func NewDefaultConfig() *Config {
