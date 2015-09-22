@@ -51,6 +51,8 @@ type PQueue struct {
 	config *PQConfig
 
 	newMsgNotification chan bool
+
+	msgSerialNumber uint64
 }
 
 func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *PQueue {
@@ -63,6 +65,7 @@ func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *P
 		queueName:          queueName,
 		config:             config,
 		newMsgNotification: make(chan bool),
+		msgSerialNumber:    0,
 	}
 
 	pq.loadAllMessages()
@@ -245,12 +248,12 @@ func (pq *PQueue) Push(params []string) common.IResponse {
 		msgId = common.GenRandMsgId()
 	}
 
-	msg := NewPQMessage(msgId, priority)
-
 	pq.config.LastPushTs = common.Uts()
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
+	pq.msgSerialNumber += 1
+	msg := NewPQMessage(msgId, priority, pq.msgSerialNumber)
 	return pq.storeMessage(msg, payload)
 }
 
@@ -671,7 +674,7 @@ func (pq *PQueue) update(ts int64) bool {
 type MessageSlice []*PQMessage
 
 func (p MessageSlice) Len() int           { return len(p) }
-func (p MessageSlice) Less(i, j int) bool { return p[i].CreatedTs < p[j].CreatedTs }
+func (p MessageSlice) Less(i, j int) bool { return p[i].SerialNumber < p[j].SerialNumber }
 func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (pq *PQueue) loadAllMessages() {
@@ -704,8 +707,13 @@ func (pq *PQueue) loadAllMessages() {
 		}
 
 	}
-	// Sorting data guarantees that messages will be available almost in the same order as they arrived.
+	// Sorting data guarantees that messages will be available in the same order as they arrived.
 	sort.Sort(msgs)
+
+	// Update serial number to match the latest message.
+	if len(msgs) > 0 {
+		pq.msgSerialNumber = msgs[len(msgs)-1].SerialNumber
+	}
 
 	for _, msg := range msgs {
 		pq.msgMap[msg.Id] = msg
@@ -718,7 +726,7 @@ func (pq *PQueue) loadAllMessages() {
 	}
 
 	log.Debug("Messages available: %d", pq.expireHeap.Len())
-	log.Debug("Messages in flight: %d", pq.inFlightHeap.Len())
+	log.Debug("Messages are in flight: %d", pq.inFlightHeap.Len())
 }
 
 var _ common.ISvc = &PQueue{}

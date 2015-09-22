@@ -12,8 +12,8 @@ type PQMessage struct {
 	PQueueMsgData
 }
 
-func NewPQMessage(id string, priority int64) *PQMessage {
-	return &PQMessage{id, PQueueMsgData{priority, common.Uts(), 0, 0}}
+func NewPQMessage(id string, priority int64, serialNumber uint64) *PQMessage {
+	return &PQMessage{id, PQueueMsgData{priority, common.Uts(), 0, 0, serialNumber}}
 }
 
 func UnmarshalPQMessage(msgId string, buf []byte) *PQMessage {
