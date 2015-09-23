@@ -52,20 +52,14 @@ func NewItemsResponse(items []IItem) *ItemsResponse {
 
 func (self *ItemsResponse) GetResponse() string {
 	data := make([]string, 0, 3+9*len(self.items))
-	data = append(data, "+DATA %")
+	data = append(data, "+DATA *")
 	data = append(data, strconv.Itoa(len(self.items)))
 	for _, item := range self.items {
 		data = append(data, " ")
-		itemId := item.GetId()
-		itemData := item.GetPayload()
-		data = append(data, "$")
-		data = append(data, strconv.Itoa(len(itemId)))
-		data = append(data, " ")
-		data = append(data, itemId)
-		data = append(data, "$")
-		data = append(data, strconv.Itoa(len(itemData)))
-		data = append(data, " ")
-		data = append(data, itemData)
+		data = append(data, "%2 ID ")
+		data = append(data, EncodeRespStringTo(data, item.GetId())...)
+		data = append(data, " PL ")
+		data = append(data, EncodeRespStringTo(data, item.GetPayload())...)
 	}
 	return strings.Join(data, "")
 }
