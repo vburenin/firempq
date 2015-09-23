@@ -230,7 +230,7 @@ func (ds *DataStorage) FlushCache() {
 
 	wb := levigo.NewWriteBatch()
 	for k, v := range tmpItemCache {
-		key := []byte(k)
+		key := common.UnsafeStringToBytes(k)
 		if v == nil {
 			wb.Delete(key)
 		} else {
@@ -239,11 +239,11 @@ func (ds *DataStorage) FlushCache() {
 	}
 
 	for k, v := range ds.tmpPayloadCache {
-		key := []byte(k)
+		key := common.UnsafeStringToBytes(k)
 		if v == "" {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, []byte(v))
+			wb.Put(key, common.UnsafeStringToBytes(v))
 		}
 	}
 
@@ -258,7 +258,7 @@ func (ds *DataStorage) FlushCache() {
 // Service name used as a prefix to file all service items.
 func (ds *DataStorage) IterServiceItems(svcName string) *ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
-	prefix := []byte(makeItemID(svcName, ""))
+	prefix := common.UnsafeStringToBytes(makeItemID(svcName, ""))
 	return makeItemIterator(iter, prefix)
 }
 
@@ -302,7 +302,7 @@ func (ds *DataStorage) SaveServiceMeta(qmi *common.ServiceMetaInfo) {
 }
 
 func makeSettingsKey(svcName string) []byte {
-	return []byte(serviceConfigPrefix + svcName)
+	return common.UnsafeStringToBytes(serviceConfigPrefix + svcName)
 }
 
 // GetServiceConfig reads service config bases on service name.
@@ -336,7 +336,6 @@ func (ds *DataStorage) Close() {
 	if !ds.closed {
 		ds.closed = true
 		ds.FlushCache()
-		//ds.db.CompactRange(levigo.Range{nil, nil})
 		ds.db.Close()
 	} else {
 		log.Error("Attempt to close database more than once!")
