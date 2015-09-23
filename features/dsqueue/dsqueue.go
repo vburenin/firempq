@@ -878,6 +878,21 @@ func (dsq *DSQueue) loadAllMessages() {
 		}
 	}
 
+	lastEl := len(msgs) - 1
+	if lastEl >= 0 && msgs[lastEl].SerialNumber > dsq.msgSerialNumber {
+		dsq.msgSerialNumber = msgs[lastEl].SerialNumber
+	}
+
+	lastEl = len(unlockedFrontMsgs) - 1
+	if lastEl >= 0 && unlockedFrontMsgs[lastEl].SerialNumber > dsq.msgSerialNumber {
+		dsq.msgSerialNumber = unlockedFrontMsgs[lastEl].SerialNumber
+	}
+
+	lastEl = len(unlockedBackMsgs) - 1
+	if lastEl >= 0 && unlockedBackMsgs[lastEl].SerialNumber > dsq.msgSerialNumber {
+		dsq.msgSerialNumber = unlockedBackMsgs[lastEl].SerialNumber
+	}
+
 	log.Debug("Messages available: %d", dsq.expireHeap.Len())
 	log.Debug("Messages in flight: %d", dsq.inFlightHeap.Len())
 	log.Debug("Messages in delivery (part of in flight): %d", inDelivery)
