@@ -1,21 +1,24 @@
 all: clean build
 
-build:
-	find . -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
+build: protobuf
 	go build firempq
 
 install:
 	go install firempq
 
-proto:
-	build proto
+protobuf:
+	find . -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 
 clean:
 	go clean ./...
 
-test:
+test: protobuf
 	go test ./...
 
 vet:
 	go vet ./...
 	go tool vet --shadow .
+
+run: build
+	./firempq
+
