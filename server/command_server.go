@@ -4,7 +4,6 @@ import (
 	"firempq/common"
 	"firempq/facade"
 	"firempq/log"
-	"firempq/proto"
 	"net"
 	"os"
 	"os/signal"
@@ -89,6 +88,6 @@ func (this *CommandServer) handleConnection(conn net.Conn) {
 	defer this.waitGroup.Done()
 
 	this.waitGroup.Add(1)
-	session_handler := proto.NewSessionHandler(conn, this.facade, this.quitChan)
+	session_handler := NewSessionHandler(conn, this.facade, this.quitChan)
 	session_handler.DispatchConn()
 }

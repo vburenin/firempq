@@ -1,4 +1,4 @@
-package proto
+package server
 
 const (
 	CMD_PING       = "PING"
