@@ -336,8 +336,12 @@ func (ds *DataStorage) LoadServiceConfig(conf common.Marshalable, svcName string
 	if data == nil {
 		return common.InvalidRequest("No service settings found: " + svcName)
 	}
-	err := conf.Unmarshal(data)
-	return err
+
+	if err := conf.Unmarshal(data); err != nil {
+		log.Error("Error in '%s' service settings: %s", svcName, err.Error())
+		return common.InvalidRequest("Service settings error: " + svcName)
+	}
+	return nil
 }
 
 // SaveServiceConfig saves service config into database.
