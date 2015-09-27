@@ -10,7 +10,7 @@ import (
 
 type ServiceFacade struct {
 	allSvcs  map[string]common.ISvc
-	lock     sync.Mutex
+	rwLock sync.RWMutex
 	database *db.DataStorage
 }
 
@@ -42,8 +42,8 @@ func (s *ServiceFacade) loadAllServices() {
 }
 
 func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) common.IResponse {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.rwLock.Lock()
+	defer s.rwLock.Unlock()
 
 	if _, ok := s.allSvcs[svcName]; ok {
 		return common.ERR_SVC_ALREADY_EXISTS
@@ -63,8 +63,8 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 }
 
 func (s *ServiceFacade) DropService(svcName string) common.IResponse {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.rwLock.Lock()
+	defer s.rwLock.Unlock()
 	svc, ok := s.allSvcs[svcName]
 	if !ok {
 		return common.ERR_NO_SVC
@@ -76,8 +76,6 @@ func (s *ServiceFacade) DropService(svcName string) common.IResponse {
 }
 
 func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IResponse {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
 	if svcType != "" {
 		_, ok := SVC_CREATOR[svcType]
@@ -87,6 +85,8 @@ func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IR
 	}
 
 	services := make([]string, 0)
+
+	s.rwLock.RLock()
 	for svcName, svc := range s.allSvcs {
 		if svcType != "" && svcType != svc.GetTypeName() {
 			continue
@@ -95,22 +95,24 @@ func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IR
 			services = append(services, svcName+" "+svc.GetTypeName())
 		}
 	}
+	s.rwLock.RUnlock()
+
 	return common.NewStrArrayResponse(services)
 }
 
 func (s *ServiceFacade) GetService(name string) (common.ISvc, bool) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.rwLock.RLock()
 	svc, ok := s.allSvcs[name]
+	s.rwLock.RUnlock()
 	return svc, ok
 }
 
 func (s *ServiceFacade) Close() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.rwLock.Lock()
 	for _, svc := range s.allSvcs {
 		svc.Close()
 	}
+	s.rwLock.Unlock()
 	s.database.FlushCache()
 	s.database.Close()
 }
