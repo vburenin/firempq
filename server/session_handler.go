@@ -51,7 +51,7 @@ func (s *SessionHandler) quitListenter() {
 	for {
 		select {
 		case <-s.quitChan:
-			s.active = false
+			s.Stop()
 			s.conn.Close()
 			return
 		}
@@ -165,9 +165,11 @@ func (s *SessionHandler) setCtxHandler(tokens []string) common.IResponse {
 	if len(tokens) > 1 {
 		return common.InvalidRequest("SETCTX accept service name only")
 	}
+
 	if len(tokens) == 0 {
 		return common.InvalidRequest("Service name must be provided")
 	}
+
 	svcName := tokens[0]
 	svc, exists := s.svcs.GetService(svcName)
 	if !exists {
