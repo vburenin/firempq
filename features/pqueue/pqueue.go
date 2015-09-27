@@ -59,9 +59,9 @@ func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *P
 	pq := PQueue{
 		msgMap:             make(map[string]*PQMessage),
 		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
-		database:           database,
 		expireHeap:         structs.NewIndexHeap(),
 		inFlightHeap:       structs.NewIndexHeap(),
+		database:           database,
 		queueName:          queueName,
 		config:             config,
 		newMsgNotification: make(chan bool),
