@@ -86,6 +86,8 @@ type DataStorage struct {
 	cacheLock       sync.Mutex        // Used for caches access.
 	flushLock       sync.Mutex        // Used to prevent double flush.
 	closed          bool
+	flushSync       *sync.WaitGroup // Use to wait until flush happens.
+	forceFlushChan  chan bool
 }
 
 // NewDataStorage is a constructor of DataStorage.
@@ -96,6 +98,8 @@ func NewDataStorage(dbName string) (*DataStorage, error) {
 		payloadCache:    make(map[string]string),
 		tmpPayloadCache: make(map[string]string),
 		closed:          false,
+		forceFlushChan:  make(chan bool, 1),
+		flushSync:       &sync.WaitGroup{},
 	}
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
@@ -106,19 +110,38 @@ func NewDataStorage(dbName string) (*DataStorage, error) {
 		return nil, err
 	}
 	ds.db = db
+	ds.flushSync.Add(1)
 	go ds.periodicCacheFlush()
 	return &ds, nil
 }
 
 func (ds *DataStorage) periodicCacheFlush() {
 	for !ds.closed {
+		select {
+		case <-ds.forceFlushChan:
+			break
+		case <-time.After(conf.CFG.DbFlushInterval * time.Millisecond):
+			break
+		}
 		ds.flushLock.Lock()
+		oldFlushSync := ds.flushSync
+		ds.flushSync = &sync.WaitGroup{}
+		ds.flushSync.Add(1)
 		if !ds.closed {
 			ds.FlushCache()
 		}
+		oldFlushSync.Done()
 		ds.flushLock.Unlock()
-		time.Sleep(conf.CFG.DbFlushInterval * time.Millisecond)
 	}
+	ds.flushSync.Done()
+}
+
+// WaitFlush waits until all data is flushed on disk.
+func (ds *DataStorage) WaitFlush() {
+	ds.flushLock.Lock()
+	s := ds.flushSync
+	ds.flushLock.Unlock()
+	s.Wait()
 }
 
 // Item payload Id.
