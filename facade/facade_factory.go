@@ -8,17 +8,29 @@ import (
 	"sync"
 )
 
-type CreateFactoryFunc func(string, []string) common.ISvc
-type DataLoaderFunc func(*db.DataStorage, string) (common.ISvc, error)
+type ServiceConstructor func(string, []string) common.ISvc
+type ServiceLoader func(*db.DataStorage, string) (common.ISvc, error)
 
-var SVC_CREATOR = map[string](CreateFactoryFunc){
-	common.STYPE_PRIORITY_QUEUE:     pqueue.CreatePQueue,
-	common.STYPE_DOUBLE_SIDED_QUEUE: dsqueue.CreateDSQueue,
+func GetServiceConstructor(serviceName string) (ServiceConstructor, bool) {
+	switch serviceName {
+	case common.STYPE_PRIORITY_QUEUE:
+		return pqueue.CreatePQueue, true
+	case common.STYPE_DOUBLE_SIDED_QUEUE:
+		return dsqueue.CreateDSQueue, true
+	default:
+		return nil, false
+	}
 }
 
-var SVC_LOADER = map[string](DataLoaderFunc){
-	common.STYPE_PRIORITY_QUEUE:     pqueue.LoadPQueue,
-	common.STYPE_DOUBLE_SIDED_QUEUE: dsqueue.LoadDSQueue,
+func GetServiceLoader(serviceName string) (ServiceLoader, bool) {
+	switch serviceName {
+	case common.STYPE_PRIORITY_QUEUE:
+		return pqueue.LoadPQueue, true
+	case common.STYPE_DOUBLE_SIDED_QUEUE:
+		return dsqueue.LoadDSQueue, true
+	default:
+		return nil, false
+	}
 }
 
 var facade *ServiceFacade

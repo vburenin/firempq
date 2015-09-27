@@ -10,7 +10,7 @@ import (
 
 type ServiceFacade struct {
 	allSvcs  map[string]common.ISvc
-	rwLock sync.RWMutex
+	rwLock   sync.RWMutex
 	database *db.DataStorage
 }
 
@@ -26,12 +26,12 @@ func NewFacade(database *db.DataStorage) *ServiceFacade {
 func (s *ServiceFacade) loadAllServices() {
 	for _, sm := range s.database.GetAllServiceMeta() {
 		log.Info("Loading service data for: %s", sm.Name)
-		objLoader, ok := SVC_LOADER[sm.SType]
+		serviceLoader, ok := GetServiceLoader(sm.SType)
 		if !ok {
 			log.Error("Unknown service '%s' type: %s", sm.Name, sm.SType)
 			continue
 		}
-		svcInstance, err := objLoader(s.database, sm.Name)
+		svcInstance, err := serviceLoader(s.database, sm.Name)
 		if err != nil {
 			log.Error("Service '%s' was not loaded because of: %s", sm.Name, err)
 		} else {
@@ -48,14 +48,14 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 	if _, ok := s.allSvcs[svcName]; ok {
 		return common.ERR_SVC_ALREADY_EXISTS
 	}
-	svcCrt, ok := SVC_CREATOR[svcType]
+	serviceConstructor, ok := GetServiceConstructor(svcType)
 	if !ok {
 		return common.ERR_SVC_UNKNOWN_TYPE
 	}
 
 	metaInfo := common.NewServiceMetaInfo(svcType, 0, svcName)
 	s.database.SaveServiceMeta(metaInfo)
-	svc := svcCrt(svcName, params)
+	svc := serviceConstructor(svcName, params)
 	svc.StartUpdate()
 	s.allSvcs[svcName] = svc
 
@@ -78,7 +78,7 @@ func (s *ServiceFacade) DropService(svcName string) common.IResponse {
 func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IResponse {
 
 	if svcType != "" {
-		_, ok := SVC_CREATOR[svcType]
+		_, ok := GetServiceConstructor(svcType)
 		if !ok {
 			return common.ERR_SVC_UNKNOWN_TYPE
 		}
