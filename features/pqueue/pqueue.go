@@ -29,10 +29,8 @@ const (
 )
 
 type PQueue struct {
-	queueName string
-	// Messages which are waiting to be picked up
+	// Currently available messages to be popped.
 	availMsgs *structs.PriorityFirstQueue
-
 	// All messages with the ticking counters except those which are inFlight.
 	expireHeap *structs.IndexHeap
 	// All locked messages
@@ -40,7 +38,6 @@ type PQueue struct {
 	// Just a message map message id to the full message data.
 	msgMap map[string]*PQMessage
 
-	lock sync.Mutex
 	// Set as True if the service is closed.
 	closedState common.BoolFlag
 	// Action handlers which are out of standard queue interface.
@@ -50,29 +47,40 @@ type PQueue struct {
 	// Queue settings.
 	config *PQConfig
 
+	// A must attribute of each service containing all essential service information generated upon creation.
+	desc *common.ServiceDescription
+	// Shorter version of service name to identify this service.
+	serviceId string
+
+	lock               sync.Mutex
 	newMsgNotification chan bool
 
 	msgSerialNumber uint64
 }
 
-func initPQueue(database *db.DataStorage, queueName string, config *PQConfig) *PQueue {
+func CreatePQueue(desc *common.ServiceDescription, params []string) common.ISvc {
+	return NewPQueue(desc, 100, 1000)
+}
+
+func initPQueue(desc *common.ServiceDescription, config *PQConfig) *PQueue {
 	pq := PQueue{
+		desc:               desc,
+		config:             config,
 		msgMap:             make(map[string]*PQMessage),
 		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
 		expireHeap:         structs.NewIndexHeap(),
 		inFlightHeap:       structs.NewIndexHeap(),
-		database:           database,
-		queueName:          queueName,
-		config:             config,
+		database:           db.GetDatabase(),
 		newMsgNotification: make(chan bool),
 		msgSerialNumber:    0,
+		serviceId:          common.MakeServiceId(desc),
 	}
 
 	pq.loadAllMessages()
 	return &pq
 }
 
-func NewPQueue(database *db.DataStorage, queueName string, priorities int64, size int64) *PQueue {
+func NewPQueue(desc *common.ServiceDescription, priorities int64, size int64) *PQueue {
 	defaults := conf.CFG.PQueueConfig
 	config := &PQConfig{
 		MaxPriority:    priorities,
@@ -83,22 +91,22 @@ func NewPQueue(database *db.DataStorage, queueName string, priorities int64, siz
 		PopCountLimit:  defaults.DefaultPopCountLimit,
 		LastPushTs:     common.Uts(),
 		LastPopTs:      common.Uts(),
-		CreateTs:       common.Uts(),
 		InactivityTtl:  0,
 	}
 
-	queue := initPQueue(database, queueName, config)
-	queue.database.SaveServiceConfig(queueName, config)
+	queue := initPQueue(desc, config)
+	queue.database.SaveServiceConfig(queue.serviceId, config)
 	return queue
 }
 
-func LoadPQueue(database *db.DataStorage, queueName string) (common.ISvc, error) {
+func LoadPQueue(desc *common.ServiceDescription) (common.ISvc, error) {
 	config := &PQConfig{}
-	err := database.LoadServiceConfig(config, queueName)
+	database := db.GetDatabase()
+	err := database.LoadServiceConfig(config, common.MakeServiceId(desc))
 	if err != nil {
 		return nil, err
 	}
-	pq := initPQueue(database, queueName, config)
+	pq := initPQueue(desc, config)
 	return pq, nil
 }
 
@@ -110,7 +118,7 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res["DeliveryDelay"] = pq.config.GetDeliveryDelay()
 	res["PopLockTimeout"] = pq.config.GetPopLockTimeout()
 	res["PopCountLimit"] = pq.config.GetPopCountLimit()
-	res["CreateTs"] = pq.config.GetCreateTs()
+	res["CreateTs"] = pq.desc.GetCreateTs()
 	res["LastPushTs"] = pq.config.GetLastPushTs()
 	res["LastPopTs"] = pq.config.GetLastPopTs()
 	res["InactivityTtl"] = pq.config.GetInactivityTtl()
@@ -272,7 +280,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) common.IResponse 
 		}
 	}
 
-	pq.database.StoreItemWithPayload(pq.queueName, msg, payload)
+	pq.database.StoreItemWithPayload(pq.serviceId, msg, payload)
 	return common.OK_RESPONSE
 }
 
@@ -380,7 +388,7 @@ func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
 	}
 	msg.PopCount += 1
 	pq.lockMessage(msg, lockTimeout)
-	pq.database.StoreItem(pq.queueName, msg)
+	pq.database.StoreItem(pq.serviceId, msg)
 
 	return msg
 }
@@ -441,7 +449,7 @@ func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) []commo
 // Returns message payload.
 // This method doesn't lock anything. Actually lock happens withing loadPayload structure.
 func (pq *PQueue) getPayload(msgId string) string {
-	return pq.database.GetPayload(pq.queueName, msgId)
+	return pq.database.GetPayload(pq.serviceId, msgId)
 }
 
 func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
@@ -527,7 +535,7 @@ func (pq *PQueue) SetLockTimeout(params []string) common.IResponse {
 	msg.UnlockTs = common.Uts() + int64(lockTimeout)
 
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	pq.database.StoreItem(pq.queueName, msg)
+	pq.database.StoreItem(pq.serviceId, msg)
 
 	return common.OK_RESPONSE
 }
@@ -576,7 +584,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 	if msg, ok := pq.msgMap[msgId]; ok {
 		delete(pq.msgMap, msgId)
 		pq.availMsgs.RemoveItem(msgId, msg.Priority)
-		pq.database.DeleteItem(pq.queueName, msgId)
+		pq.database.DeleteItem(pq.serviceId, msgId)
 		pq.expireHeap.PopById(msgId)
 		return true
 	}
@@ -604,7 +612,7 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 	msg.UnlockTs = 0
 	pq.availMsgs.PushFront(msg.Id)
 	pq.trackExpiration(msg)
-	pq.database.StoreItem(pq.queueName, msg)
+	pq.database.StoreItem(pq.serviceId, msg)
 	return nil
 }
 
@@ -679,8 +687,8 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (pq *PQueue) loadAllMessages() {
 	nowTs := common.Uts()
-	log.Debug("Initializing queue: %s", pq.queueName)
-	iter := pq.database.IterServiceItems(pq.queueName)
+	log.Debug("Initializing queue: %s", pq.desc.Name)
+	iter := pq.database.IterServiceItems(pq.serviceId)
 	defer iter.Close()
 
 	msgs := MessageSlice{}
@@ -699,11 +707,11 @@ func (pq *PQueue) loadAllMessages() {
 		}
 		iter.Next()
 	}
-	log.Debug("Loaded %d messages for %s queue", len(msgs), pq.queueName)
+	log.Debug("Loaded %d messages for %s queue", len(msgs), pq.desc.Name)
 	if len(delIds) > 0 {
 		log.Debug("Deleting %d expired messages", len(delIds))
 		for _, msgId := range delIds {
-			pq.database.DeleteItem(pq.queueName, msgId)
+			pq.database.DeleteItem(pq.serviceId, msgId)
 		}
 
 	}

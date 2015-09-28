@@ -10,7 +10,8 @@ import (
 func CreateTestQueue() *PQueue {
 	ldb := db.GetDatabase()
 	ldb.FlushCache()
-	return NewPQueue(ldb, "name", 100, 1000)
+	desc := common.NewServiceDescription(common.STYPE_PRIORITY_QUEUE, 54634673456, "name")
+	return NewPQueue(desc, 100, 1000)
 }
 
 func cmp(t *testing.T, a, b string) {

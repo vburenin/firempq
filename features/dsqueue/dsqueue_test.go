@@ -10,7 +10,8 @@ import (
 func CreateTestQueue() *DSQueue {
 	ldb := db.GetDatabase()
 	ldb.FlushCache()
-	return NewDSQueue(ldb, "dsqueue-test", 1000)
+	desc := common.NewServiceDescription(common.STYPE_DOUBLE_SIDED_QUEUE, 15243523452345, "dsqueue-test")
+	return NewDSQueue(desc, 1000)
 }
 
 func TestDelete(t *testing.T) {

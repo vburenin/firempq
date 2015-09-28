@@ -1,0 +1,10 @@
+syntax = "proto2";
+package common;
+
+message ServiceDescription {
+	required uint64 export_id = 1;
+	required string s_type = 2;
+	required string name = 3;
+	required int64 create_ts = 4;
+	required bool disabled = 5;
+}

@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-type ServiceConstructor func(string, []string) common.ISvc
-type ServiceLoader func(*db.DataStorage, string) (common.ISvc, error)
+type ServiceConstructor func(*common.ServiceDescription, []string) common.ISvc
+type ServiceLoader func(*common.ServiceDescription) (common.ISvc, error)
 
 func GetServiceConstructor(serviceName string) (ServiceConstructor, bool) {
 	switch serviceName {
@@ -22,8 +22,8 @@ func GetServiceConstructor(serviceName string) (ServiceConstructor, bool) {
 	}
 }
 
-func GetServiceLoader(serviceName string) (ServiceLoader, bool) {
-	switch serviceName {
+func GetServiceLoader(serviceType string) (ServiceLoader, bool) {
+	switch serviceType {
 	case common.STYPE_PRIORITY_QUEUE:
 		return pqueue.LoadPQueue, true
 	case common.STYPE_DOUBLE_SIDED_QUEUE:

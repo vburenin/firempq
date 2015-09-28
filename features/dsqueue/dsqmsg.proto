@@ -16,7 +16,6 @@ message DSQConfig {
 	required int64 pop_lock_timeout = 3; // Timeout before message is getting released.
 	required int64 pop_count_limit = 4; // Pop count limit. 0 - unlimited. >0 Will be removed after this number of attempts.
 	required int64 max_size = 5; // Max queue size.
-	required int64 create_ts = 6; // Time when queue was created.
 	required int64 last_push_ts = 7; // Last time item has been pushed into queue.
 	required int64 last_pop_ts = 8; // Last pop time.
 	required int64 inactivity_ttl = 9; // Inactivity TTL foir queue.

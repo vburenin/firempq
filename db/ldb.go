@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"sort"
+
 	"github.com/jmhodges/levigo"
 	"github.com/op/go-logging"
 )
@@ -145,25 +147,25 @@ func (ds *DataStorage) WaitFlush() {
 }
 
 // Item payload Id.
-func makePayloadID(svcName, id string) string {
-	return svcName + "\x01" + id
+func makePayloadID(serviceId, id string) string {
+	return serviceId + "\x01" + id
 }
 
 // Item Id.
-func makeItemID(svcName, id string) string {
-	return svcName + "\x02" + id
+func makeItemID(serviceId, id string) string {
+	return serviceId + "\x02" + id
 }
 
 // StoreItemWithPayload stores item and provide payload.
-func (ds *DataStorage) StoreItemWithPayload(svcName string, item common.IItemMetaData, payload string) {
+func (ds *DataStorage) StoreItemWithPayload(serviceId string, item common.IItemMetaData, payload string) {
 	itemBody, err := item.Marshal()
 	if err != nil {
 		log.Error(err.Error())
 		return
 	}
 
-	itemID := makeItemID(svcName, item.GetId())
-	payloadID := makePayloadID(svcName, item.GetId())
+	itemID := makeItemID(serviceId, item.GetId())
+	payloadID := makePayloadID(serviceId, item.GetId())
 	ds.cacheLock.Lock()
 	ds.itemCache[itemID] = itemBody
 	ds.payloadCache[payloadID] = payload
@@ -171,13 +173,13 @@ func (ds *DataStorage) StoreItemWithPayload(svcName string, item common.IItemMet
 }
 
 // StoreItem stores item onlt without paylaod.
-func (ds *DataStorage) StoreItem(svcName string, item common.IItemMetaData) {
+func (ds *DataStorage) StoreItem(serviceId string, item common.IItemMetaData) {
 	itemBody, err := item.Marshal()
 	if err != nil {
 		log.Error(err.Error())
 		return
 	}
-	itemID := makeItemID(svcName, item.GetId())
+	itemID := makeItemID(serviceId, item.GetId())
 
 	ds.cacheLock.Lock()
 	ds.itemCache[itemID] = itemBody
@@ -185,9 +187,9 @@ func (ds *DataStorage) StoreItem(svcName string, item common.IItemMetaData) {
 }
 
 // DeleteItem deletes item metadata and payload, affects cache only until flushed.
-func (ds *DataStorage) DeleteItem(svcName string, itemID string) {
-	id := makeItemID(svcName, itemID)
-	payloadID := makePayloadID(svcName, itemID)
+func (ds *DataStorage) DeleteItem(serviceId string, itemID string) {
+	id := makeItemID(serviceId, itemID)
+	payloadID := makePayloadID(serviceId, itemID)
 	ds.cacheLock.Lock()
 	ds.itemCache[id] = nil
 	ds.payloadCache[payloadID] = ""
@@ -195,10 +197,10 @@ func (ds *DataStorage) DeleteItem(svcName string, itemID string) {
 }
 
 // DeleteServiceData deletes all service data such as service metadata, items and payloads.
-func (ds *DataStorage) DeleteServiceData(svcName string) {
+func (ds *DataStorage) DeleteServiceData(serviceId string) {
 
 	counter := 0
-	iter := ds.IterServiceItems(svcName)
+	iter := ds.IterServiceItems(serviceId)
 	wb := levigo.NewWriteBatch()
 
 	for iter.Valid() {
@@ -211,8 +213,8 @@ func (ds *DataStorage) DeleteServiceData(svcName string) {
 		}
 	}
 
-	wb.Delete([]byte(serviceMetadataPrefix + svcName))
-	wb.Delete([]byte(serviceConfigPrefix + svcName))
+	wb.Delete([]byte(serviceDescriptionPrefix + serviceId))
+	wb.Delete([]byte(serviceConfigPrefix + serviceId))
 
 	ds.db.Write(defaultWriteOptions, wb)
 }
@@ -221,8 +223,8 @@ func (ds *DataStorage) DeleteServiceData(svcName string) {
 // 1. Top level cache.
 // 2. Temp cache while data is getting flushed into db.
 // 3. If not found in cache, will mane a DB lookup.
-func (ds *DataStorage) GetPayload(svcName string, itemID string) string {
-	payloadID := makePayloadID(svcName, itemID)
+func (ds *DataStorage) GetPayload(serviceId string, itemID string) string {
+	payloadID := makePayloadID(serviceId, itemID)
 	ds.cacheLock.Lock()
 	payload, ok := ds.payloadCache[payloadID]
 	if ok {
@@ -279,78 +281,75 @@ func (ds *DataStorage) FlushCache() {
 
 // IterServiceItems returns new over all service item metadata.
 // Service name used as a prefix to file all service items.
-func (ds *DataStorage) IterServiceItems(svcName string) *ItemIterator {
+func (ds *DataStorage) IterServiceItems(serviceId string) *ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
-	prefix := common.UnsafeStringToBytes(makeItemID(svcName, ""))
+	prefix := common.UnsafeStringToBytes(makeItemID(serviceId, ""))
 	return makeItemIterator(iter, prefix)
 }
 
-const serviceMetadataPrefix = ":meta:"
+const serviceDescriptionPrefix = ":desc:"
 const serviceConfigPrefix = ":conf:"
 
 // GetAllServiceMeta returns all available services.
-func (ds *DataStorage) GetAllServiceMeta() []*common.ServiceMetaInfo {
-	qmiList := make([]*common.ServiceMetaInfo, 0, 1000)
-	qtPrefix := []byte(serviceMetadataPrefix)
+func (ds *DataStorage) GetServiceDescriptions() []*common.ServiceDescription {
+	sdList := make(common.ServiceDescriptionList, 0, 1000)
+	sdPrefix := []byte(serviceDescriptionPrefix)
 	iter := ds.db.NewIterator(defaultReadOptions)
-	iter.Seek(qtPrefix)
+	iter.Seek(sdPrefix)
 	for iter.Valid() {
 		svcKey := iter.Key()
-		svcName := bytes.TrimPrefix(svcKey, qtPrefix)
+		svcName := bytes.TrimPrefix(svcKey, sdPrefix)
 
 		if len(svcKey) == len(svcName) {
 			break
 		}
-		smi, err := common.ServiceInfoFromBinary(iter.Value())
+		serviceDesc, err := common.NewServiceDescriptionFromBinary(iter.Value())
 		if err != nil {
-			log.Error("Coudn't read service meta data because of: %s", err.Error())
+			log.Error(
+				"Coudn't read service '%s' description: %s",
+				svcName, err.Error())
 			iter.Next()
 			continue
 		}
-		if smi.Disabled {
-			log.Error("Service is disabled. Skipping: %s", smi.Name)
-			iter.Next()
-			continue
-		}
-		qmiList = append(qmiList, smi)
+		sdList = append(sdList, serviceDesc)
 		iter.Next()
 	}
-	return qmiList
+	sort.Sort(sdList)
+	return sdList
 }
 
 // SaveServiceMeta stores service metadata into database.
-func (ds *DataStorage) SaveServiceMeta(qmi *common.ServiceMetaInfo) {
-	key := serviceMetadataPrefix + qmi.Name
-	ds.db.Put(defaultWriteOptions, []byte(key), qmi.ToBinary())
+func (ds *DataStorage) SaveServiceMeta(serviceDescription *common.ServiceDescription) {
+	key := serviceDescriptionPrefix + serviceDescription.GetName()
+	data, _ := serviceDescription.Marshal()
+	ds.db.Put(defaultWriteOptions, common.UnsafeStringToBytes(key), data)
 }
 
-func makeSettingsKey(svcName string) []byte {
-	return common.UnsafeStringToBytes(serviceConfigPrefix + svcName)
+func makeSettingsKey(serviceId string) []byte {
+	return common.UnsafeStringToBytes(serviceConfigPrefix + serviceId)
 }
 
 // GetServiceConfig reads service config bases on service name.
 // Caller should provide correct settings structure to read binary data.
-func (ds *DataStorage) LoadServiceConfig(conf common.Marshalable, svcName string) error {
-	key := makeSettingsKey(svcName)
+func (ds *DataStorage) LoadServiceConfig(conf common.Marshalable, serviceId string) error {
+	key := makeSettingsKey(serviceId)
 	data, _ := ds.db.Get(defaultReadOptions, key)
 	if data == nil {
-		return common.InvalidRequest("No service settings found: " + svcName)
+		return common.InvalidRequest("No service settings found: " + serviceId)
 	}
 
 	if err := conf.Unmarshal(data); err != nil {
-		log.Error("Error in '%s' service settings: %s", svcName, err.Error())
-		return common.InvalidRequest("Service settings error: " + svcName)
+		log.Error("Error in '%s' service settings: %s", serviceId, err.Error())
+		return common.InvalidRequest("Service settings error: " + serviceId)
 	}
 	return nil
 }
 
 // SaveServiceConfig saves service config into database.
-func (ds *DataStorage) SaveServiceConfig(svcName string, conf common.Marshalable) {
-	key := makeSettingsKey(svcName)
-	data, err := conf.Marshal()
-	if err == nil {
-		err = ds.db.Put(defaultWriteOptions, key, data)
-	}
+func (ds *DataStorage) SaveServiceConfig(serviceId string, conf common.Marshalable) {
+	key := makeSettingsKey(serviceId)
+	data, _ := conf.Marshal()
+	err := ds.db.Put(defaultWriteOptions, key, data)
 	if err != nil {
 		log.Error("Failed to save config: %s", err.Error())
 	}

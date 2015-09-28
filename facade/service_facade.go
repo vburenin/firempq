@@ -9,33 +9,45 @@ import (
 )
 
 type ServiceFacade struct {
-	allSvcs  map[string]common.ISvc
-	rwLock   sync.RWMutex
-	database *db.DataStorage
+	allSvcs          map[string]common.ISvc
+	rwLock           sync.RWMutex
+	database         *db.DataStorage
+	serviceIdCounter uint64
 }
 
 func NewFacade(database *db.DataStorage) *ServiceFacade {
 	f := ServiceFacade{
-		database: database,
-		allSvcs:  make(map[string]common.ISvc),
+		database:         database,
+		allSvcs:          make(map[string]common.ISvc),
+		serviceIdCounter: 0,
 	}
 	f.loadAllServices()
 	return &f
 }
 
 func (s *ServiceFacade) loadAllServices() {
-	for _, sm := range s.database.GetAllServiceMeta() {
-		log.Info("Loading service data for: %s", sm.Name)
-		serviceLoader, ok := GetServiceLoader(sm.SType)
-		if !ok {
-			log.Error("Unknown service '%s' type: %s", sm.Name, sm.SType)
+	descList := s.database.GetServiceDescriptions()
+	if len(descList) > 0 {
+		s.serviceIdCounter = descList[len(descList)-1].ExportId
+	}
+	for _, desc := range descList {
+		if desc.GetDisabled() {
+			log.Error("Service is disabled. Skipping: %s", desc.Name)
 			continue
 		}
-		svcInstance, err := serviceLoader(s.database, sm.Name)
+
+		log.Info("Loading service data for: %s", desc.Name)
+		serviceLoader, ok := GetServiceLoader(desc.SType)
+
+		if !ok {
+			log.Error("Unknown service '%s' type: %s", desc.Name, desc.SType)
+			continue
+		}
+		svcInstance, err := serviceLoader(desc)
 		if err != nil {
-			log.Error("Service '%s' was not loaded because of: %s", sm.Name, err)
+			log.Error("Service '%s' was not loaded because of: %s", desc.Name, err)
 		} else {
-			s.allSvcs[sm.Name] = svcInstance
+			s.allSvcs[desc.Name] = svcInstance
 			svcInstance.StartUpdate()
 		}
 	}
@@ -53,9 +65,11 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 		return common.ERR_SVC_UNKNOWN_TYPE
 	}
 
-	metaInfo := common.NewServiceMetaInfo(svcType, 0, svcName)
-	s.database.SaveServiceMeta(metaInfo)
-	svc := serviceConstructor(svcName, params)
+	s.serviceIdCounter += 1
+
+	desc := common.NewServiceDescription(svcType, s.serviceIdCounter, svcName)
+	s.database.SaveServiceMeta(desc)
+	svc := serviceConstructor(desc, params)
 	svc.StartUpdate()
 	s.allSvcs[svcName] = svc
 
