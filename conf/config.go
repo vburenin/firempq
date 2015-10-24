@@ -35,23 +35,29 @@ type DSQueueConfigData struct {
 }
 
 type Config struct {
-	Port            int
-	Interface       string
-	DbFlushInterval time.Duration
-	DbBufferSize    int64
-	LogLevel        logging.Level
-	PQueueConfig    PQueueConfigData
-	DSQueueConfig   DSQueueConfigData
-	UpdateInterval  time.Duration
+	Port                int
+	Interface           string
+	DbFlushInterval     time.Duration
+	DbBufferSize        int64
+	LogLevel            logging.Level
+	PQueueConfig        PQueueConfigData
+	DSQueueConfig       DSQueueConfigData
+	UpdateInterval      time.Duration
+	BinaryLogPath       string
+	BinaryLogBufferSize int
+	BinaryLogPageSize   uint64
 }
 
 func NewDefaultConfig() *Config {
 	cfg := Config{
-		Port:            9033,
-		Interface:       "",
-		DbFlushInterval: 100,
-		DbBufferSize:    10000,
-		LogLevel:        logging.INFO,
+		Port:                9033,
+		Interface:           "",
+		DbFlushInterval:     100,
+		DbBufferSize:        10000,
+		LogLevel:            logging.INFO,
+		BinaryLogPath:       "./",
+		BinaryLogBufferSize: 128,
+		BinaryLogPageSize:   2 * 1024 * 1024 * 1025, // 2Gb
 		PQueueConfig: PQueueConfigData{
 			DefaultMessageTtl:    10 * 60 * 1000,
 			DefaultDeliveryDelay: 0,
