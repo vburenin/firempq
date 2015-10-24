@@ -1,11 +1,8 @@
-package common
+package iface
 
-import "firempq/defs"
-
-type Marshalable interface {
-	Marshal() (data []byte, err error)
-	Unmarshal(data []byte) error
-}
+import (
+	"firempq/defs"
+)
 
 type IItemMetaData interface {
 	GetId() string
@@ -32,9 +29,4 @@ type ISvc interface {
 	Call(string, []string) IResponse
 	Clear()
 	Close()
-}
-
-type IServer interface {
-	Start()
-	Stop()
 }

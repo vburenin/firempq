@@ -1,6 +1,7 @@
 package pqueue
 
 import "firempq/common"
+import "firempq/iface"
 import "firempq/log"
 
 const (
@@ -46,5 +47,5 @@ func (m *MsgItem) GetPayload() string {
 	return m.payload
 }
 
-var _ common.IItem = &MsgItem{}
-var _ common.IItemMetaData = &PQMessage{}
+var _ iface.IItem = &MsgItem{}
+var _ iface.IItemMetaData = &PQMessage{}

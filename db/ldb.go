@@ -11,10 +11,10 @@ import (
 	"bytes"
 	"firempq/common"
 	"firempq/conf"
+	"firempq/iface"
+	"sort"
 	"sync"
 	"time"
-
-	"sort"
 
 	"github.com/jmhodges/levigo"
 	"github.com/op/go-logging"
@@ -157,7 +157,7 @@ func makeItemID(serviceId, id string) string {
 }
 
 // StoreItemWithPayload stores item and provide payload.
-func (ds *DataStorage) StoreItemWithPayload(serviceId string, item common.IItemMetaData, payload string) {
+func (ds *DataStorage) StoreItemWithPayload(serviceId string, item iface.IItemMetaData, payload string) {
 	itemBody, err := item.Marshal()
 	if err != nil {
 		log.Error(err.Error())
@@ -173,7 +173,7 @@ func (ds *DataStorage) StoreItemWithPayload(serviceId string, item common.IItemM
 }
 
 // StoreItem stores item onlt without paylaod.
-func (ds *DataStorage) StoreItem(serviceId string, item common.IItemMetaData) {
+func (ds *DataStorage) StoreItem(serviceId string, item iface.IItemMetaData) {
 	itemBody, err := item.Marshal()
 	if err != nil {
 		log.Error(err.Error())
@@ -331,7 +331,7 @@ func makeSettingsKey(serviceId string) []byte {
 
 // GetServiceConfig reads service config bases on service name.
 // Caller should provide correct settings structure to read binary data.
-func (ds *DataStorage) LoadServiceConfig(conf common.Marshalable, serviceId string) error {
+func (ds *DataStorage) LoadServiceConfig(conf iface.Marshalable, serviceId string) error {
 	key := makeSettingsKey(serviceId)
 	data, _ := ds.db.Get(defaultReadOptions, key)
 	if data == nil {
@@ -346,7 +346,7 @@ func (ds *DataStorage) LoadServiceConfig(conf common.Marshalable, serviceId stri
 }
 
 // SaveServiceConfig saves service config into database.
-func (ds *DataStorage) SaveServiceConfig(serviceId string, conf common.Marshalable) {
+func (ds *DataStorage) SaveServiceConfig(serviceId string, conf iface.MarshalToBin) {
 	key := makeSettingsKey(serviceId)
 	data, _ := conf.Marshal()
 	err := ds.db.Put(defaultWriteOptions, key, data)

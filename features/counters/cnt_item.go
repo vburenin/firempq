@@ -3,12 +3,13 @@ package counters
 import (
 	"encoding/binary"
 	"firempq/common"
+	"firempq/iface"
 	"math"
 	"strconv"
 )
 
 type Counter interface {
-	common.IItemMetaData
+	iface.IItemMetaData
 	Update()
 	GetValueAsString() string
 }

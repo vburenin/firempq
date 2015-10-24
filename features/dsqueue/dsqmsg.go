@@ -1,6 +1,7 @@
 package dsqueue
 
 import "firempq/common"
+import "firempq/iface"
 
 const (
 	MAX_MESSAGE_ID_LENGTH = 64
@@ -42,5 +43,5 @@ func (m *MsgItem) GetPayload() string {
 	return m.payload
 }
 
-var _ common.IItem = &MsgItem{}
-var _ common.IItemMetaData = &DSQMessage{}
+var _ iface.IItem = &MsgItem{}
+var _ iface.IItemMetaData = &DSQMessage{}

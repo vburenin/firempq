@@ -6,6 +6,7 @@ import (
 	"firempq/defs"
 	"firempq/facade"
 	"firempq/features/pqueue"
+	"firempq/iface"
 	"firempq/log"
 	"firempq/server"
 	"fmt"
@@ -34,7 +35,7 @@ func main() {
 
 }
 
-func addMessages(pq common.ISvc) {
+func addMessages(pq iface.ISvc) {
 	payload := "0000"
 	v := []string{defs.PRM_PRIORITY, "1", defs.PRM_PAYLOAD, payload}
 	for i := 0; i < 10000000; i++ {

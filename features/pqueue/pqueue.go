@@ -5,6 +5,7 @@ import (
 	"firempq/conf"
 	"firempq/db"
 	"firempq/defs"
+	"firempq/iface"
 	"firempq/log"
 	"firempq/structs"
 	"fmt"
@@ -58,7 +59,7 @@ type PQueue struct {
 	msgSerialNumber uint64
 }
 
-func CreatePQueue(desc *common.ServiceDescription, params []string) common.ISvc {
+func CreatePQueue(desc *common.ServiceDescription, params []string) iface.ISvc {
 	return NewPQueue(desc, 100, 1000)
 }
 
@@ -99,7 +100,7 @@ func NewPQueue(desc *common.ServiceDescription, priorities int64, size int64) *P
 	return queue
 }
 
-func LoadPQueue(desc *common.ServiceDescription) (common.ISvc, error) {
+func LoadPQueue(desc *common.ServiceDescription) (iface.ISvc, error) {
 	config := &PQConfig{}
 	database := db.GetDatabase()
 	err := database.LoadServiceConfig(config, common.MakeServiceId(desc))
@@ -128,7 +129,7 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-func (pq *PQueue) GetCurrentStatus(params []string) common.IResponse {
+func (pq *PQueue) GetCurrentStatus(params []string) iface.IResponse {
 	if len(params) > 0 {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
@@ -144,7 +145,7 @@ func (pq *PQueue) GetTypeName() string {
 }
 
 // Call dispatches processing of the command to the appropriate command parser.
-func (pq *PQueue) Call(cmd string, params []string) common.IResponse {
+func (pq *PQueue) Call(cmd string, params []string) iface.IResponse {
 	switch cmd {
 	case ACTION_POP_WAIT:
 		return pq.PopWait(params)
@@ -200,6 +201,7 @@ func (pq *PQueue) Close() {
 }
 
 func (pq *PQueue) IsClosed() bool {
+	log.Debug("Closing PQueue service: %s", pq.desc.Name)
 	return pq.closedState.IsTrue()
 }
 
@@ -231,7 +233,7 @@ func getMessageIdOnly(params []string) (string, *common.ErrorResponse) {
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (pq *PQueue) Push(params []string) common.IResponse {
+func (pq *PQueue) Push(params []string) iface.IResponse {
 	var err *common.ErrorResponse
 	var msgId string
 	var priority int64 = pq.config.MaxPriority - 1
@@ -265,7 +267,7 @@ func (pq *PQueue) Push(params []string) common.IResponse {
 	return pq.storeMessage(msg, payload)
 }
 
-func (pq *PQueue) storeMessage(msg *PQMessage, payload string) common.IResponse {
+func (pq *PQueue) storeMessage(msg *PQMessage, payload string) iface.IResponse {
 	if _, ok := pq.msgMap[msg.Id]; ok {
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
@@ -286,7 +288,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) common.IResponse 
 
 // Pop first available messages.
 // Will return nil if there are no messages available.
-func (pq *PQueue) Pop(params []string) common.IResponse {
+func (pq *PQueue) Pop(params []string) iface.IResponse {
 	var err *common.ErrorResponse
 	var limit int64 = 1
 	lockTimeout := pq.config.PopLockTimeout
@@ -308,7 +310,7 @@ func (pq *PQueue) Pop(params []string) common.IResponse {
 	return common.NewItemsResponse(pq.popMessages(lockTimeout, limit))
 }
 
-func (pq *PQueue) tsParamFunc(params []string, f func(int64) int64) common.IResponse {
+func (pq *PQueue) tsParamFunc(params []string, f func(int64) int64) iface.IResponse {
 	var err *common.ErrorResponse
 	var ts int64 = -1
 	for len(params) > 0 {
@@ -340,17 +342,17 @@ func (pq *PQueue) tsParamFunc(params []string, f func(int64) int64) common.IResp
 	return common.NewIntResponse(result)
 }
 
-func (pq *PQueue) ExpireItems(params []string) common.IResponse {
+func (pq *PQueue) ExpireItems(params []string) iface.IResponse {
 	return pq.tsParamFunc(params, pq.cleanExpiredItems)
 }
 
-func (pq *PQueue) ReleaseInFlight(params []string) common.IResponse {
+func (pq *PQueue) ReleaseInFlight(params []string) iface.IResponse {
 	return pq.tsParamFunc(params, pq.releaseInFlight)
 }
 
 // PopWait pops up to specified number of messages, if there are no available messages.
 // It will wait until either new message is pushed or wait time exceeded.
-func (pq *PQueue) PopWait(params []string) common.IResponse {
+func (pq *PQueue) PopWait(params []string) iface.IResponse {
 	var err *common.ErrorResponse
 	var limit int64 = 1
 	var popWaitTimeout int64 = 1000
@@ -393,7 +395,7 @@ func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
 	return msg
 }
 
-func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []common.IItem {
+func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []iface.IItem {
 	var msgsMeta []*PQMessage
 	pq.lock.Lock()
 	for int64(len(msgsMeta)) < limit {
@@ -406,7 +408,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []common.IItem {
 	}
 	pq.lock.Unlock()
 
-	var msgs []common.IItem
+	var msgs []iface.IItem
 	for _, mm := range msgsMeta {
 		msgs = append(msgs, NewMsgItem(mm, pq.getPayload(mm.Id)))
 	}
@@ -415,7 +417,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []common.IItem {
 }
 
 // Will pop 'limit' messages within 'timeout'(milliseconds) time interval.
-func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) []common.IItem {
+func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) []iface.IItem {
 	// Try to pop items first time and return them if number of popped items is greater than 0.
 	msgItems := pq.popMessages(lockTimeout, limit)
 	if len(msgItems) > 0 {
@@ -477,7 +479,7 @@ func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, *common.ErrorRespon
 	return msg, nil
 }
 
-func (pq *PQueue) DeleteById(params []string) common.IResponse {
+func (pq *PQueue) DeleteById(params []string) iface.IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -497,7 +499,7 @@ func (pq *PQueue) DeleteById(params []string) common.IResponse {
 }
 
 // Set a user defined message lock timeout. Only locked message timeout can be set.
-func (pq *PQueue) SetLockTimeout(params []string) common.IResponse {
+func (pq *PQueue) SetLockTimeout(params []string) iface.IResponse {
 	var err *common.ErrorResponse
 	var msgId string
 	var lockTimeout int64 = -1
@@ -541,7 +543,7 @@ func (pq *PQueue) SetLockTimeout(params []string) common.IResponse {
 }
 
 // Delete locked message by id.
-func (pq *PQueue) DeleteLockedById(params []string) common.IResponse {
+func (pq *PQueue) DeleteLockedById(params []string) iface.IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -558,7 +560,7 @@ func (pq *PQueue) DeleteLockedById(params []string) common.IResponse {
 	return common.OK_RESPONSE
 }
 
-func (pq *PQueue) UnlockMessageById(params []string) common.IResponse {
+func (pq *PQueue) UnlockMessageById(params []string) iface.IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -737,4 +739,4 @@ func (pq *PQueue) loadAllMessages() {
 	log.Debug("Messages are in flight: %d", pq.inFlightHeap.Len())
 }
 
-var _ common.ISvc = &PQueue{}
+var _ iface.ISvc = &PQueue{}

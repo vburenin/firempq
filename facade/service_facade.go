@@ -3,13 +3,14 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
+	"firempq/iface"
 	"firempq/log"
 	"strings"
 	"sync"
 )
 
 type ServiceFacade struct {
-	allSvcs          map[string]common.ISvc
+	allSvcs          map[string]iface.ISvc
 	rwLock           sync.RWMutex
 	database         *db.DataStorage
 	serviceIdCounter uint64
@@ -18,7 +19,7 @@ type ServiceFacade struct {
 func NewFacade(database *db.DataStorage) *ServiceFacade {
 	f := ServiceFacade{
 		database:         database,
-		allSvcs:          make(map[string]common.ISvc),
+		allSvcs:          make(map[string]iface.ISvc),
 		serviceIdCounter: 0,
 	}
 	f.loadAllServices()
@@ -53,7 +54,7 @@ func (s *ServiceFacade) loadAllServices() {
 	}
 }
 
-func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) common.IResponse {
+func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) iface.IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
 
@@ -76,7 +77,7 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 	return common.OK_RESPONSE
 }
 
-func (s *ServiceFacade) DropService(svcName string) common.IResponse {
+func (s *ServiceFacade) DropService(svcName string) iface.IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
 	svc, ok := s.allSvcs[svcName]
@@ -89,7 +90,7 @@ func (s *ServiceFacade) DropService(svcName string) common.IResponse {
 	return common.OK_RESPONSE
 }
 
-func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IResponse {
+func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) iface.IResponse {
 
 	if svcType != "" {
 		_, ok := GetServiceConstructor(svcType)
@@ -114,7 +115,7 @@ func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) common.IR
 	return common.NewStrArrayResponse(services)
 }
 
-func (s *ServiceFacade) GetService(name string) (common.ISvc, bool) {
+func (s *ServiceFacade) GetService(name string) (iface.ISvc, bool) {
 	s.rwLock.RLock()
 	svc, ok := s.allSvcs[name]
 	s.rwLock.RUnlock()

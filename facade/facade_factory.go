@@ -5,11 +5,12 @@ import (
 	"firempq/db"
 	"firempq/features/dsqueue"
 	"firempq/features/pqueue"
+	"firempq/iface"
 	"sync"
 )
 
-type ServiceConstructor func(*common.ServiceDescription, []string) common.ISvc
-type ServiceLoader func(*common.ServiceDescription) (common.ISvc, error)
+type ServiceConstructor func(*common.ServiceDescription, []string) iface.ISvc
+type ServiceLoader func(*common.ServiceDescription) (iface.ISvc, error)
 
 func GetServiceConstructor(serviceName string) (ServiceConstructor, bool) {
 	switch serviceName {

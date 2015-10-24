@@ -3,6 +3,7 @@ package server
 import (
 	"firempq/common"
 	"firempq/facade"
+	"firempq/iface"
 	"firempq/log"
 	"io"
 	"net"
@@ -11,14 +12,14 @@ import (
 
 var EOM = []byte{'\n'}
 
-type FuncHandler func([]string) common.IResponse
+type FuncHandler func([]string) iface.IResponse
 
 type SessionHandler struct {
 	conn         net.Conn
 	tokenizer    *common.Tokenizer
 	mainHandlers map[string]FuncHandler
 	active       bool
-	ctx          common.ISvc
+	ctx          iface.ISvc
 	svcs         *facade.ServiceFacade
 	quitChan     chan bool
 }
@@ -84,7 +85,7 @@ func (s *SessionHandler) DispatchConn() {
 // if there is no token match it will look into current context
 // to see if there is a processor for the rest of the tokens.
 func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
-	var resp common.IResponse
+	var resp iface.IResponse
 	if len(cmdTokens) == 0 {
 		return s.writeResponse(common.OK_RESPONSE)
 	}
@@ -107,7 +108,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 }
 
 // Writes IResponse into connection.
-func (s *SessionHandler) writeResponse(resp common.IResponse) error {
+func (s *SessionHandler) writeResponse(resp iface.IResponse) error {
 	unsafeData := common.UnsafeStringToBytes(resp.GetResponse())
 	if _, err := s.conn.Write(unsafeData); err != nil {
 		return err
@@ -118,7 +119,7 @@ func (s *SessionHandler) writeResponse(resp common.IResponse) error {
 	return nil
 }
 
-func (s *SessionHandler) ctxHandler(tokens []string) common.IResponse {
+func (s *SessionHandler) ctxHandler(tokens []string) iface.IResponse {
 	if len(tokens) < 2 {
 		return common.ERR_SVC_CTX
 	}
@@ -131,7 +132,7 @@ func (s *SessionHandler) ctxHandler(tokens []string) common.IResponse {
 }
 
 // Handler that creates a service.
-func (s *SessionHandler) createServiceHandler(tokens []string) common.IResponse {
+func (s *SessionHandler) createServiceHandler(tokens []string) iface.IResponse {
 	if len(tokens) < 2 {
 		return common.InvalidRequest("At least service type and name should be provided")
 	}
@@ -148,7 +149,7 @@ func (s *SessionHandler) createServiceHandler(tokens []string) common.IResponse 
 }
 
 // Drop service.
-func (s *SessionHandler) dropServiceHandler(tokens []string) common.IResponse {
+func (s *SessionHandler) dropServiceHandler(tokens []string) iface.IResponse {
 	if len(tokens) == 0 {
 		return common.InvalidRequest("Service name must be provided")
 	}
@@ -161,7 +162,7 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) common.IResponse {
 }
 
 // Context changer.
-func (s *SessionHandler) setCtxHandler(tokens []string) common.IResponse {
+func (s *SessionHandler) setCtxHandler(tokens []string) iface.IResponse {
 	if len(tokens) > 1 {
 		return common.InvalidRequest("SETCTX accept service name only")
 	}
@@ -185,7 +186,7 @@ func (s *SessionHandler) Stop() {
 }
 
 // Stops the main loop on QUIT.
-func (s *SessionHandler) quitHandler(tokens []string) common.IResponse {
+func (s *SessionHandler) quitHandler(tokens []string) iface.IResponse {
 	if len(tokens) > 0 {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
@@ -194,7 +195,7 @@ func (s *SessionHandler) quitHandler(tokens []string) common.IResponse {
 }
 
 // List all active services.
-func (s *SessionHandler) listServicesHandler(tokens []string) common.IResponse {
+func (s *SessionHandler) listServicesHandler(tokens []string) iface.IResponse {
 	svcPrefix := ""
 	svcType := ""
 	if len(tokens) == 1 {
@@ -209,7 +210,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) common.IResponse {
 }
 
 // Ping responder.
-func pingHandler(tokens []string) common.IResponse {
+func pingHandler(tokens []string) iface.IResponse {
 	if len(tokens) > 0 {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
@@ -217,7 +218,7 @@ func pingHandler(tokens []string) common.IResponse {
 }
 
 // Returns current server unix time stamp in milliseconds.
-func tsHandler(tokens []string) common.IResponse {
+func tsHandler(tokens []string) iface.IResponse {
 	if len(tokens) > 0 {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
