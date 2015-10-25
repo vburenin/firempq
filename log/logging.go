@@ -3,6 +3,7 @@ package log
 import "os"
 import "firempq/conf"
 import "github.com/op/go-logging"
+import "log"
 
 func InitLogging() {
 	format := logging.MustStringFormatter(
@@ -27,3 +28,4 @@ var Warning func(string, ...interface{}) = Logger.Warning
 var Notice func(string, ...interface{}) = Logger.Notice
 var Info func(string, ...interface{}) = Logger.Info
 var Debug func(string, ...interface{}) = Logger.Debug
+var Fatal func(string, ...interface{}) = log.Fatalf
