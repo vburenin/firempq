@@ -49,3 +49,12 @@ func TestFileFilter(t *testing.T) {
 		fval = d[i].Num
 	}
 }
+
+func TestSelectLogFile(t *testing.T) {
+	bl := &BinaryLog{logLocation: "./", logFiles: BinaryLogs{}}
+	binLogFile := bl.initializeLogFile()
+	os.Remove(binLogFile.FilePath)
+	if binLogFile.Num != 0 {
+		t.Error("Number if log file is not 0")
+	}
+}

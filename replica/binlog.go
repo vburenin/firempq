@@ -28,11 +28,11 @@ func (self *BinLogFile) String() string {
 	return fmt.Sprintf("FileName: %s, Position: %d", self.FilePath, self.Num)
 }
 
-type BinLogs []*BinLogFile
+type BinaryLogs []*BinLogFile
 
-func (p BinLogs) Len() int           { return len(p) }
-func (p BinLogs) Less(i, j int) bool { return p[i].Num < p[j].Num }
-func (p BinLogs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p BinaryLogs) Len() int           { return len(p) }
+func (p BinaryLogs) Less(i, j int) bool { return p[i].Num < p[j].Num }
+func (p BinaryLogs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type BinaryLog struct {
 	dataChan    chan []byte
@@ -41,9 +41,8 @@ type BinaryLog struct {
 	maxPageSize uint64
 	pageSize    uint64
 	logWriter   io.WriteCloser
-	logReader   io.ReadCloser
 	logLocation string
-	logFiles    BinLogs
+	logFiles    BinaryLogs
 }
 
 func NewBinaryLog(cfg conf.Config) *BinaryLog {
@@ -54,13 +53,52 @@ func NewBinaryLog(cfg conf.Config) *BinaryLog {
 		maxPageSize: cfg.BinaryLogPageSize,
 		pageSize:    0,
 		logWriter:   nil,
-		logReader:   nil,
 	}
+	logFiles, err := findLogFiles(cfg.BinaryLogPath)
+	if err != nil {
+		log.Fatal("Coould not init bin log subsystems: %s", err.Error())
+	}
+	binlog.logFiles = logFiles
 	return binlog
 }
 
-func extractLogFiles(items []os.FileInfo) BinLogs {
-	candidates := BinLogs{}
+// createFileIfNotExists initialized log file.
+func createFileIfNotExists(path string) error {
+	_, err := os.Lstat(path)
+	if err != nil {
+		// What??? It is false if file doesn't exist.
+		if os.IsExist(err) {
+			log.Fatal("Can not read file stats: %s", err.Error())
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+
+		if err := f.Close(); err != nil {
+			return err
+		}
+		return createFileIfNotExists(path)
+	}
+	return nil
+}
+
+func (self *BinaryLog) initializeLogFile() *BinLogFile {
+	if len(self.logFiles) == 0 {
+		firstName := self.logLocation + BinaryLogNamePrefix + "0" + BinaryLogFileExt
+		self.logFiles = append(self.logFiles, &BinLogFile{firstName, 0})
+	}
+	lastLogFile := self.logFiles[len(self.logFiles)-1]
+
+	err := createFileIfNotExists(lastLogFile.FilePath)
+	if err != nil {
+		log.Fatal("Failed to open a log file: %s", err.Error())
+	}
+	return lastLogFile
+}
+
+func extractLogFiles(items []os.FileInfo) BinaryLogs {
+	candidates := BinaryLogs{}
 	for _, item := range items {
 		if item.IsDir() {
 			continue
@@ -81,7 +119,7 @@ func extractLogFiles(items []os.FileInfo) BinLogs {
 	return candidates
 }
 
-func findLogFiles(location string) (BinLogs, error) {
+func findLogFiles(location string) (BinaryLogs, error) {
 	items, err := ioutil.ReadDir(location)
 	if err != nil {
 		log.Critical("Can't read binary log directory: %s", err.Error())
