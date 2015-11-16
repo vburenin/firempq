@@ -57,12 +57,12 @@ func main1() {
 			log.Notice("%s: %s", err, qid)
 		}
 	}
-	start_ts := common.Uts()
+	startTs := common.Uts()
 	log.Notice("Started")
 	for i := 0; i < 1; i++ {
 		qid := "tst_queue_" + strconv.Itoa(i)
 		q, _ := fc.GetService(qid)
 		addMessages(q)
 	}
-	log.Notice("Finished. Elapsed: %d", common.Uts()-start_ts)
+	log.Notice("Finished. Elapsed: %d", common.Uts()-startTs)
 }
