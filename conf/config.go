@@ -46,6 +46,7 @@ type Config struct {
 	BinaryLogPath       string
 	BinaryLogBufferSize int
 	BinaryLogPageSize   uint64
+	BinaryLogFrameSize  uint64
 }
 
 func NewDefaultConfig() *Config {
