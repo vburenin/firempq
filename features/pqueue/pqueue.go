@@ -33,9 +33,9 @@ type PQueue struct {
 	// Currently available messages to be popped.
 	availMsgs *structs.PriorityFirstQueue
 	// All messages with the ticking counters except those which are inFlight.
-	expireHeap *structs.IndexHeap
+	expireHeap *structs.IndexedPriorityQueue
 	// All locked messages
-	inFlightHeap *structs.IndexHeap
+	inFlightHeap *structs.IndexedPriorityQueue
 	// Just a message map message id to the full message data.
 	msgMap map[string]*PQMessage
 
@@ -69,8 +69,8 @@ func initPQueue(desc *common.ServiceDescription, config *PQConfig) *PQueue {
 		config:             config,
 		msgMap:             make(map[string]*PQMessage),
 		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
-		expireHeap:         structs.NewIndexHeap(),
-		inFlightHeap:       structs.NewIndexHeap(),
+		expireHeap:         structs.NewIndexedPriorityQueue(),
+		inFlightHeap:       structs.NewIndexedPriorityQueue(),
 		database:           db.GetDatabase(),
 		newMsgNotification: make(chan bool),
 		msgSerialNumber:    0,
@@ -472,7 +472,7 @@ func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, *common.ErrorRespon
 	}
 
 	hi := pq.inFlightHeap.PopById(msgId)
-	if hi == structs.EMPTY_HEAP_ITEM {
+	if hi == structs.EmptyHeapItem {
 		return nil, common.ERR_MSG_NOT_LOCKED
 	}
 

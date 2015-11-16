@@ -4,14 +4,14 @@ import (
 	"container/heap"
 )
 
-// Heap items are very light, so you them directly with no pointers
+// Heap items are very light, so use them directly with no pointers
 // it should save tons of time on GC.
 type HeapItem struct {
 	Id       string
 	Priority int64
 }
 
-var EMPTY_HEAP_ITEM = HeapItem{"", -1}
+var EmptyHeapItem = HeapItem{"", -1}
 
 type IndexHeap struct {
 	// Used as a heap container.
@@ -27,6 +27,7 @@ func NewIndexHeap() *IndexHeap {
 	}
 }
 
+//
 func (h *IndexHeap) Len() int {
 	return len(h.iHeap)
 }
@@ -70,21 +71,17 @@ func (h *IndexHeap) MinElement() int64 {
 	return h.iHeap[0].Priority
 }
 
-func (h *IndexHeap) PushHeapItem(item *HeapItem) bool {
-	_, ok := h.iMap[item.Id]
-	if !ok {
-		heap.Push(h, item)
-		return true
-	}
-	return false
-}
-
 func (h *IndexHeap) PushItem(itemId string, priority int64) bool {
-	return h.PushHeapItem(&HeapItem{itemId, priority})
+	_, ok := h.iMap[itemId]
+	if ok {
+		return false
+	}
+	heap.Push(h, &HeapItem{itemId, priority})
+	return true
 }
 
 func (h *IndexHeap) PopItem() HeapItem {
-	return heap.Pop(h).(HeapItem)
+	return (heap.Pop(h).(HeapItem))
 }
 
 // Pop item by ID. As as result message reference is removed
@@ -93,7 +90,7 @@ func (h *IndexHeap) PopById(id string) HeapItem {
 	idx, ok := h.iMap[id]
 
 	if !ok {
-		return EMPTY_HEAP_ITEM
+		return EmptyHeapItem
 	}
 
 	msgRef := h.iHeap[idx]

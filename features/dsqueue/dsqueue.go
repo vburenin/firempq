@@ -2,10 +2,10 @@ package dsqueue
 
 import (
 	"firempq/common"
-	"firempq/iface"
 	"firempq/conf"
 	"firempq/db"
 	"firempq/defs"
+	"firempq/iface"
 	"firempq/log"
 	"firempq/structs"
 	"fmt"
@@ -61,9 +61,9 @@ type DSQueue struct {
 	highPriorityBackMsgs  *structs.IndexList
 
 	// All messages with the ticking counters except those which are inFlight.
-	expireHeap *structs.IndexHeap
+	expireHeap *structs.IndexedPriorityQueue
 	// All locked messages and messages with delivery interval > 0
-	inFlightHeap *structs.IndexHeap
+	inFlightHeap *structs.IndexedPriorityQueue
 	// Just a message map message id to the full message data.
 	allMessagesMap map[string]*DSQMessage
 
@@ -97,8 +97,8 @@ func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 		highPriorityFrontMsgs: structs.NewListQueue(),
 		highPriorityBackMsgs:  structs.NewListQueue(),
 		database:              db.GetDatabase(),
-		expireHeap:            structs.NewIndexHeap(),
-		inFlightHeap:          structs.NewIndexHeap(),
+		expireHeap:            structs.NewIndexedPriorityQueue(),
+		inFlightHeap:          structs.NewIndexedPriorityQueue(),
 		serviceId:             common.MakeServiceId(desc),
 		conf:                  conf,
 		newMsgNotification:    make(chan bool),
@@ -663,7 +663,7 @@ func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMessage, *common.ErrorRes
 	}
 
 	hi := dsq.inFlightHeap.PopById(msgId)
-	if hi == structs.EMPTY_HEAP_ITEM {
+	if hi == structs.EmptyHeapItem {
 		return nil, common.ERR_MSG_NOT_LOCKED
 	}
 
