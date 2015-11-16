@@ -40,6 +40,7 @@ type BinaryLog struct {
 	seqId       uint64
 	maxPageSize uint64
 	pageSize    uint64
+	frameSize   uint64
 	logWriter   io.WriteCloser
 	logLocation string
 	logFiles    BinaryLogs
@@ -49,6 +50,7 @@ func NewBinaryLog(cfg conf.Config) *BinaryLog {
 	binlog := &BinaryLog{
 		dataChan:    make(chan []byte, cfg.BinaryLogBufferSize),
 		serviceChan: make(chan []byte, cfg.BinaryLogBufferSize),
+		frameSize: cfg.FrameSize,
 		seqId:       0,
 		maxPageSize: cfg.BinaryLogPageSize,
 		pageSize:    0,
@@ -62,7 +64,25 @@ func NewBinaryLog(cfg conf.Config) *BinaryLog {
 	return binlog
 }
 
-// createFileIfNotExists initialized log file.
+func (self *BinaryLog) initializeLogFile() *BinLogFile {
+	if len(self.logFiles) == 0 {
+		firstName := self.logLocation + BinaryLogNamePrefix + "0" + BinaryLogFileExt
+		self.logFiles = append(self.logFiles, &BinLogFile{firstName, 0})
+	}
+	lastLogFile := self.logFiles[len(self.logFiles)-1]
+
+	err := createFileIfNotExists(lastLogFile.FilePath)
+	if err != nil {
+		log.Fatal("Failed to open a log file: %s", err.Error())
+	}
+	return lastLogFile
+}
+
+func (self *BinaryLog) LogDataChange(exportId uint64, data []byte) {
+
+}
+
+// createFileIfNotExists initializes log file.
 func createFileIfNotExists(path string) error {
 	_, err := os.Lstat(path)
 	if err != nil {
@@ -83,20 +103,6 @@ func createFileIfNotExists(path string) error {
 	return nil
 }
 
-func (self *BinaryLog) initializeLogFile() *BinLogFile {
-	if len(self.logFiles) == 0 {
-		firstName := self.logLocation + BinaryLogNamePrefix + "0" + BinaryLogFileExt
-		self.logFiles = append(self.logFiles, &BinLogFile{firstName, 0})
-	}
-	lastLogFile := self.logFiles[len(self.logFiles)-1]
-
-	err := createFileIfNotExists(lastLogFile.FilePath)
-	if err != nil {
-		log.Fatal("Failed to open a log file: %s", err.Error())
-	}
-	return lastLogFile
-}
-
 func extractLogFiles(items []os.FileInfo) BinaryLogs {
 	candidates := BinaryLogs{}
 	for _, item := range items {
@@ -107,8 +113,8 @@ func extractLogFiles(items []os.FileInfo) BinaryLogs {
 		if strings.Index(name, BinaryLogNamePrefix) == 0 {
 			chunks := strings.SplitN(name, BinaryLogNamePrefix, 2)
 			chunks = strings.SplitN(chunks[1], BinaryLogFileExt, 2)
-			num, cnverr := strconv.Atoi(chunks[0])
-			if cnverr != nil {
+			num, err := strconv.Atoi(chunks[0])
+			if err != nil {
 				log.Warning("File matches binary log naming pattern, please remove it: %s", item.Name())
 				continue
 			}
