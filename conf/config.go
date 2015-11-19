@@ -23,6 +23,7 @@ type PQueueConfigData struct {
 	MaxPopBatchSize      int64
 }
 
+// DSQueueConfigData a config specific to a DSQueue
 type DSQueueConfigData struct {
 	DefaultMessageTtl    int64
 	DefaultDeliveryDelay int64
@@ -34,6 +35,7 @@ type DSQueueConfigData struct {
 	MaxPopBatchSize      int64
 }
 
+// Config is a generic service config type.
 type Config struct {
 	Port                int
 	Interface           string
@@ -87,18 +89,18 @@ var CFG *Config = NewDefaultConfig()
 
 func getErrorLine(data []byte, byteOffset int64) (int64, int64, string) {
 	var lineNum int64 = 1
-	var lineOffset int64 = 0
+	var lineOffset int64
 	var lineData []byte
 	for idx, b := range data {
 		if b < 32 {
 			if lineOffset > 0 {
-				lineNum += 1
+				lineNum++
 				lineOffset = 0
 				lineData = make([]byte, 0, 32)
 			}
 
 		} else {
-			lineOffset += 1
+			lineOffset++
 			lineData = append(lineData, b)
 		}
 		if int64(idx) == byteOffset {
@@ -114,6 +116,7 @@ func formatTypeError(lineNum, lineOffset int64, lineText string, err *json.Unmar
 		lineNum, lineOffset, err.Value, err.Type.String(), strings.TrimSpace(lineText))
 }
 
+// ReadConfig reads and decodes firempq_cfg.json file.
 func ReadConfig() error {
 	confData, err := ioutil.ReadFile("firempq_cfg.json")
 
@@ -122,6 +125,7 @@ func ReadConfig() error {
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(confData))
+	
 	cfg := NewDefaultConfig()
 	err = decoder.Decode(cfg)
 	if err != nil {
