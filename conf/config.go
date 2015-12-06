@@ -37,11 +37,12 @@ type DSQueueConfigData struct {
 
 // Config is a generic service config type.
 type Config struct {
+	LogLevel            logging.Level
 	Port                int
 	Interface           string
 	DbFlushInterval     time.Duration
 	DbBufferSize        int64
-	LogLevel            logging.Level
+	DatabasePath        string
 	PQueueConfig        PQueueConfigData
 	DSQueueConfig       DSQueueConfigData
 	UpdateInterval      time.Duration
@@ -53,11 +54,12 @@ type Config struct {
 
 func NewDefaultConfig() *Config {
 	cfg := Config{
+		LogLevel:            logging.INFO,
 		Port:                9033,
 		Interface:           "",
+		DatabasePath:        "./",
 		DbFlushInterval:     100,
 		DbBufferSize:        10000,
-		LogLevel:            logging.INFO,
 		BinaryLogPath:       "./",
 		BinaryLogBufferSize: 128,
 		BinaryLogPageSize:   2 * 1024 * 1024 * 1025, // 2Gb
@@ -125,7 +127,7 @@ func ReadConfig() error {
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(confData))
-	
+
 	cfg := NewDefaultConfig()
 	err = decoder.Decode(cfg)
 	if err != nil {
