@@ -16,6 +16,7 @@ func NewServiceDescription(sType string, exportId uint64, name string) *ServiceD
 		Name:     name,
 		CreateTs: Uts(),
 		Disabled: false,
+		ToDelete: false,
 	}
 }
 
