@@ -3,6 +3,7 @@ package facade
 import (
 	"firempq/common"
 	"firempq/db"
+	"firempq/features"
 	"firempq/iface"
 	"firempq/log"
 	"strings"
@@ -27,13 +28,18 @@ func NewFacade(database *db.DataStorage) *ServiceFacade {
 }
 
 func (s *ServiceFacade) loadAllServices() {
-	descList := s.database.GetServiceDescriptions()
+	descList := features.GetServiceDescriptions()
 	if len(descList) > 0 {
 		s.serviceIdCounter = descList[len(descList)-1].ExportId
 	}
 	for _, desc := range descList {
 		if desc.GetDisabled() {
 			log.Error("Service is disabled. Skipping: %s", desc.Name)
+			continue
+		}
+		if desc.GetToDelete() {
+			log.Warning("Service should be deleted: %s", desc.GetName())
+			features.DeleteServiceData(desc.GetName())
 			continue
 		}
 
@@ -69,7 +75,7 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 	s.serviceIdCounter += 1
 
 	desc := common.NewServiceDescription(svcType, s.serviceIdCounter, svcName)
-	s.database.SaveServiceMeta(desc)
+	features.SaveServiceDescription(desc)
 	svc := serviceConstructor(desc, params)
 	svc.StartUpdate()
 	s.allSvcs[svcName] = svc
@@ -86,7 +92,8 @@ func (s *ServiceFacade) DropService(svcName string) iface.IResponse {
 	}
 	svc.Close()
 	delete(s.allSvcs, svcName)
-	s.database.DeleteServiceData(svcName)
+	features.DeleteServiceData(svc.GetServiceId())
+	log.Info("Service '%s' has been removed: (id:%s)", svcName, svc.GetServiceId())
 	return common.OK_RESPONSE
 }
 
@@ -128,6 +135,5 @@ func (s *ServiceFacade) Close() {
 		svc.Close()
 	}
 	s.rwLock.Unlock()
-	s.database.FlushCache()
 	s.database.Close()
 }
