@@ -1,16 +1,10 @@
 package main
 
 import (
-	"firempq/common"
 	"firempq/conf"
-	"firempq/defs"
-	"firempq/facade"
-	"firempq/features/pqueue"
-	"firempq/iface"
 	"firempq/log"
 	"firempq/server"
 	"fmt"
-	"strconv"
 )
 
 func main() {
@@ -33,36 +27,4 @@ func main() {
 	}
 	srv.Start()
 
-}
-
-func addMessages(pq iface.ISvc) {
-	payload := "0000"
-	v := []string{defs.PRM_PRIORITY, "1", defs.PRM_PAYLOAD, payload}
-	for i := 0; i < 10000000; i++ {
-		pq.Call(pqueue.ACTION_PUSH, v)
-	}
-}
-
-func main1() {
-	//	f, _ := os.Create("pp.dat")
-	//	pprof.StartCPUProfile(f)
-	//	defer pprof.StopCPUProfile()
-
-	fc := facade.CreateFacade()
-	defer fc.Close()
-	for i := 0; i < 1; i++ {
-		qid := "tst_queue_" + strconv.Itoa(i)
-		err := fc.CreateService(common.STYPE_PRIORITY_QUEUE, qid, nil)
-		if err != nil {
-			log.Notice("%s: %s", err, qid)
-		}
-	}
-	startTs := common.Uts()
-	log.Notice("Started")
-	for i := 0; i < 1; i++ {
-		qid := "tst_queue_" + strconv.Itoa(i)
-		q, _ := fc.GetService(qid)
-		addMessages(q)
-	}
-	log.Notice("Finished. Elapsed: %d", common.Uts()-startTs)
 }
