@@ -3,8 +3,8 @@ package pqueue
 import (
 	"firempq/common"
 	"firempq/conf"
-	"firempq/db"
 	"firempq/defs"
+	"firempq/features"
 	"firempq/iface"
 	"firempq/log"
 	"firempq/structs"
@@ -30,6 +30,7 @@ const (
 )
 
 type PQueue struct {
+	features.DBService
 	// Currently available messages to be popped.
 	availMsgs *structs.PriorityFirstQueue
 	// All messages with the ticking counters except those which are inFlight.
@@ -44,8 +45,6 @@ type PQueue struct {
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
 	// Instance of the database.
-	database *db.DataStorage
-	// Queue settings.
 	config *PQConfig
 
 	// A must attribute of each service containing all essential service information generated upon creation.
@@ -57,6 +56,9 @@ type PQueue struct {
 	newMsgNotification chan bool
 
 	msgSerialNumber uint64
+
+	payloadPrefix string
+	messagePrefix string
 }
 
 func CreatePQueue(desc *common.ServiceDescription, params []string) iface.ISvc {
@@ -71,11 +73,15 @@ func initPQueue(desc *common.ServiceDescription, config *PQConfig) *PQueue {
 		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
 		expireHeap:         structs.NewIndexedPriorityQueue(),
 		inFlightHeap:       structs.NewIndexedPriorityQueue(),
-		database:           db.GetDatabase(),
-		newMsgNotification: make(chan bool),
+		newMsgNotification: make(chan bool, 1),
 		msgSerialNumber:    0,
 		serviceId:          common.MakeServiceId(desc),
 	}
+	pq.InitServiceDB(pq.serviceId)
+
+	// Pre-initialize prefixes.
+	pq.payloadPrefix = features.MakePayloadPrefix(pq.serviceId)
+	pq.messagePrefix = features.MakeItemPrefix(pq.serviceId)
 
 	pq.loadAllMessages()
 	return &pq
@@ -96,14 +102,13 @@ func NewPQueue(desc *common.ServiceDescription, priorities int64, size int64) *P
 	}
 
 	queue := initPQueue(desc, config)
-	queue.database.SaveServiceConfig(queue.serviceId, config)
+	features.SaveServiceConfig(queue.serviceId, config)
 	return queue
 }
 
 func LoadPQueue(desc *common.ServiceDescription) (iface.ISvc, error) {
 	config := &PQConfig{}
-	database := db.GetDatabase()
-	err := database.LoadServiceConfig(config, common.MakeServiceId(desc))
+	err := features.LoadServiceConfig(common.MakeServiceId(desc), config)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +128,14 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res["LastPushTs"] = pq.config.GetLastPushTs()
 	res["LastPopTs"] = pq.config.GetLastPopTs()
 	res["InactivityTtl"] = pq.config.GetInactivityTtl()
-	res["TotalMessages"] = len(pq.msgMap)
+	res["TotalMessages"] = pq.Size()
 	res["InFlightSize"] = pq.inFlightHeap.Len()
 
 	return res
+}
+
+func (pq *PQueue) Size() int {
+	return len(pq.msgMap)
 }
 
 func (pq *PQueue) GetCurrentStatus(params []string) iface.IResponse {
@@ -281,8 +290,7 @@ func (pq *PQueue) storeMessage(msg *PQMessage, payload string) iface.IResponse {
 		default: // allows non blocking channel usage if there are no users awaiting wor the message
 		}
 	}
-
-	pq.database.StoreItemWithPayload(pq.serviceId, msg, payload)
+	pq.StoreFullItemInDB(msg, payload)
 	return common.OK_RESPONSE
 }
 
@@ -390,8 +398,7 @@ func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
 	}
 	msg.PopCount += 1
 	pq.lockMessage(msg, lockTimeout)
-	pq.database.StoreItem(pq.serviceId, msg)
-
+	pq.StoreItemBodyInDB(msg)
 	return msg
 }
 
@@ -410,7 +417,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []iface.IItem {
 
 	var msgs []iface.IItem
 	for _, mm := range msgsMeta {
-		msgs = append(msgs, NewMsgItem(mm, pq.getPayload(mm.Id)))
+		msgs = append(msgs, NewMsgItem(mm, pq.GetPayloadFromDB(mm.Id)))
 	}
 
 	return msgs
@@ -446,12 +453,6 @@ func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) []iface
 			}
 		}
 	}
-}
-
-// Returns message payload.
-// This method doesn't lock anything. Actually lock happens withing loadPayload structure.
-func (pq *PQueue) getPayload(msgId string) string {
-	return pq.database.GetPayload(pq.serviceId, msgId)
 }
 
 func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
@@ -537,7 +538,7 @@ func (pq *PQueue) SetLockTimeout(params []string) iface.IResponse {
 	msg.UnlockTs = common.Uts() + int64(lockTimeout)
 
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	pq.database.StoreItem(pq.serviceId, msg)
+	pq.StoreItemBodyInDB(msg)
 
 	return common.OK_RESPONSE
 }
@@ -586,7 +587,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 	if msg, ok := pq.msgMap[msgId]; ok {
 		delete(pq.msgMap, msgId)
 		pq.availMsgs.RemoveItem(msgId, msg.Priority)
-		pq.database.DeleteItem(pq.serviceId, msgId)
+		pq.DeleteItemFromDB(msgId)
 		pq.expireHeap.PopById(msgId)
 		return true
 	}
@@ -614,7 +615,7 @@ func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
 	msg.UnlockTs = 0
 	pq.availMsgs.PushFront(msg.Id)
 	pq.trackExpiration(msg)
-	pq.database.StoreItem(pq.serviceId, msg)
+	pq.StoreItemBodyInDB(msg)
 	return nil
 }
 
@@ -690,15 +691,20 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (pq *PQueue) loadAllMessages() {
 	nowTs := common.Uts()
 	log.Debug("Initializing queue: %s", pq.desc.Name)
-	iter := pq.database.IterServiceItems(pq.serviceId)
-	defer iter.Close()
-
+	msgIter := pq.GetItemIterator()
 	msgs := MessageSlice{}
 	delIds := []string{}
 
 	cfg := pq.config
-	for iter.Valid() {
-		pqmsg := UnmarshalPQMessage(string(iter.Key), iter.Value)
+	for ; msgIter.Valid(); msgIter.Next() {
+		msgId := common.UnsafeBytesToString(msgIter.TrimKey)
+		pqmsg := UnmarshalPQMessage(msgId, msgIter.Value)
+
+		// Message data has errors.
+		if pqmsg == nil {
+			continue
+		}
+
 		// Store list if message IDs that should be removed.
 		if pqmsg.CreatedTs+cfg.MsgTtl < nowTs ||
 			(pqmsg.PopCount >= cfg.PopCountLimit &&
@@ -707,15 +713,15 @@ func (pq *PQueue) loadAllMessages() {
 		} else {
 			msgs = append(msgs, pqmsg)
 		}
-		iter.Next()
 	}
+	msgIter.Close()
+
 	log.Debug("Loaded %d messages for %s queue", len(msgs), pq.desc.Name)
 	if len(delIds) > 0 {
 		log.Debug("Deleting %d expired messages", len(delIds))
 		for _, msgId := range delIds {
-			pq.database.DeleteItem(pq.serviceId, msgId)
+			pq.DeleteItemFromDB(msgId)
 		}
-
 	}
 	// Sorting data guarantees that messages will be available in the same order as they arrived.
 	sort.Sort(msgs)

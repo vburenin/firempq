@@ -22,6 +22,7 @@ type IResponse interface {
 
 type ISvc interface {
 	IsClosed() bool
+	Size() int
 	StartUpdate()
 	GetStatus() map[string]interface{}
 	GetType() defs.ServiceType

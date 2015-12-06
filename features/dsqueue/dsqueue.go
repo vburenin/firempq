@@ -3,8 +3,8 @@ package dsqueue
 import (
 	"firempq/common"
 	"firempq/conf"
-	"firempq/db"
 	"firempq/defs"
+	"firempq/features"
 	"firempq/iface"
 	"firempq/log"
 	"firempq/structs"
@@ -52,6 +52,7 @@ const (
 )
 
 type DSQueue struct {
+	features.DBService
 	serviceId string
 	// Messages which are waiting to be picked up
 	availableMsgs *structs.IndexList
@@ -72,8 +73,6 @@ type DSQueue struct {
 	closedState common.BoolFlag
 	// Action handlers which are out of standard queue interface.
 	actionHandlers map[string](common.CallFuncType)
-	// Instance of the database.
-	database *db.DataStorage
 
 	// Queue settings.
 	conf *DSQConfig
@@ -96,7 +95,6 @@ func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 		availableMsgs:         structs.NewListQueue(),
 		highPriorityFrontMsgs: structs.NewListQueue(),
 		highPriorityBackMsgs:  structs.NewListQueue(),
-		database:              db.GetDatabase(),
 		expireHeap:            structs.NewIndexedPriorityQueue(),
 		inFlightHeap:          structs.NewIndexedPriorityQueue(),
 		serviceId:             common.MakeServiceId(desc),
@@ -104,6 +102,8 @@ func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 		newMsgNotification:    make(chan bool),
 		msgSerialNumber:       0,
 	}
+
+	dsq.InitServiceDB(dsq.serviceId)
 
 	dsq.actionHandlers = map[string](common.CallFuncType){
 		ACTION_DELETE_LOCKED_BY_ID: dsq.DeleteLockedById,
@@ -141,14 +141,13 @@ func NewDSQueue(desc *common.ServiceDescription, size int64) *DSQueue {
 		InactivityTtl:  0,
 	}
 	queue := initDSQueue(desc, conf)
-	queue.database.SaveServiceConfig(queue.serviceId, conf)
+	features.SaveServiceConfig(queue.serviceId, conf)
 	return queue
 }
 
 func LoadDSQueue(desc *common.ServiceDescription) (iface.ISvc, error) {
 	conf := &DSQConfig{}
-	database := db.GetDatabase()
-	err := database.LoadServiceConfig(conf, common.MakeServiceId(desc))
+	err := features.LoadServiceConfig(common.MakeServiceId(desc), conf)
 	if err != nil {
 		return nil, err
 	}
@@ -164,11 +163,15 @@ func (dsq *DSQueue) GetStatus() map[string]interface{} {
 	res["PopCountLimit"] = dsq.conf.GetPopCountLimit()
 	res["MaxSize"] = dsq.conf.GetMaxSize()
 	res["CreateTs"] = dsq.desc.GetCreateTs()
-	res["TotalMessages"] = len(dsq.allMessagesMap)
+	res["TotalMessages"] = dsq.Size()
 	res["InFlightSize"] = dsq.inFlightHeap.Len()
 	res["LastPushTs"] = dsq.conf.LastPushTs
 	res["LastPopTs"] = dsq.conf.LastPopTs
 	return res
+}
+
+func (dsq *DSQueue) Size() int {
+	return len(dsq.allMessagesMap)
 }
 
 func (dsq *DSQueue) GetCurrentStatus(params []string) iface.IResponse {
@@ -201,7 +204,7 @@ const CLEAN_BATCH_SIZE = 1000
 func (dsq *DSQueue) Clear() {
 	total := 0
 	for {
-		ids := make([]string, CLEAN_BATCH_SIZE)
+		ids := make([]string, 0, CLEAN_BATCH_SIZE)
 		dsq.lock.Lock()
 		if len(dsq.allMessagesMap) == 0 {
 			dsq.lock.Unlock()
@@ -213,11 +216,11 @@ func (dsq *DSQueue) Clear() {
 				break
 			}
 		}
-		total += len(ids)
 		for _, id := range ids {
 			dsq.deleteMessageById(id)
 		}
 		dsq.lock.Unlock()
+		total += len(ids)
 	}
 	log.Debug("Clear: Removed %d messages.", total)
 }
@@ -416,7 +419,7 @@ func (dsq *DSQueue) SetLockTimeout(params []string) iface.IResponse {
 	msg.UnlockTs = common.Uts() + int64(lockTimeout)
 
 	dsq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	dsq.database.StoreItem(dsq.serviceId, msg)
+	dsq.StoreItemBodyInDB(msg)
 
 	return common.OK_RESPONSE
 }
@@ -504,7 +507,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) iface.IRespons
 			}
 		}
 	}
-	dsq.database.StoreItemWithPayload(dsq.serviceId, msg, payload)
+	dsq.StoreFullItemInDB(msg, payload)
 	return common.OK_RESPONSE
 }
 
@@ -593,7 +596,7 @@ func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMessage
 	} else {
 		msg.PushAt = QUEUE_DIRECTION_NONE
 	}
-	dsq.database.StoreItem(dsq.serviceId, msg)
+	dsq.StoreItemBodyInDB(msg)
 
 	return msg
 }
@@ -609,7 +612,7 @@ func (dsq *DSQueue) popMessage(direction int32, permanentPop bool) iface.IRespon
 	if msg == nil {
 		return common.NewItemsResponse([]iface.IItem{})
 	}
-	retMsg := NewMsgItem(msg, dsq.getPayload(msg.Id))
+	retMsg := NewMsgItem(msg, dsq.GetPayloadFromDB(msg.Id))
 	if permanentPop {
 		dsq.deleteMessageById(msg.Id)
 	}
@@ -635,12 +638,6 @@ func (dsq *DSQueue) returnMessageTo(params []string, place int32) iface.IRespons
 		return err
 	}
 	return common.OK_RESPONSE
-}
-
-// Returns message payload.
-// This method doesn't lock anything. Actually lock happens withing loadPayload structure.
-func (dsq *DSQueue) getPayload(msgId string) string {
-	return dsq.database.GetPayload(dsq.serviceId, msgId)
 }
 
 func (dsq *DSQueue) lockMessage(msg *DSQMessage) {
@@ -684,7 +681,7 @@ func (dsq *DSQueue) deleteMessage(msg *DSQMessage) {
 		dsq.availableMsgs.RemoveById(msg.Id)
 	}
 	delete(dsq.allMessagesMap, msg.Id)
-	dsq.database.DeleteItem(dsq.serviceId, msg.Id)
+	dsq.DeleteItemFromDB(msg.Id)
 	dsq.expireHeap.PopById(msg.Id)
 	dsq.inFlightHeap.PopById(msg.Id)
 }
@@ -720,14 +717,14 @@ func (dsq *DSQueue) returnTo(msg *DSQMessage, place int32) *common.ErrorResponse
 	msg.UnlockTs = 0
 	dsq.addMessageToQueue(msg)
 	dsq.trackExpiration(msg)
-	dsq.database.StoreItem(dsq.serviceId, msg)
+	dsq.StoreItemBodyInDB(msg)
 	return nil
 }
 
 // Finish message delivery to the queue.
 func (dsq *DSQueue) completeDelivery(msg *DSQMessage) {
 	dsq.addMessageToQueue(msg)
-	dsq.database.StoreItem(dsq.serviceId, msg)
+	dsq.StoreItemBodyInDB(msg)
 }
 
 // Unlocks all items which exceeded their lock/delivery time.
@@ -820,8 +817,7 @@ func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (dsq *DSQueue) loadAllMessages() {
 	nowTs := common.Uts()
 	log.Info("Initializing queue: %s", dsq.desc.Name)
-	iter := dsq.database.IterServiceItems(dsq.serviceId)
-	defer iter.Close()
+	iter := dsq.GetItemIterator()
 
 	msgs := MessageSlice{}
 	unlockedFrontMsgs := MessageSlice{}
@@ -829,24 +825,29 @@ func (dsq *DSQueue) loadAllMessages() {
 	delIds := []string{}
 
 	cfg := dsq.conf
-	for iter.Valid() {
-		pqmsg := UnmarshalDSQMessage(string(iter.Key), iter.Value)
+	for ; iter.Valid(); iter.Next() {
+		msgId := common.UnsafeBytesToString(iter.TrimKey)
+		msg := UnmarshalDSQMessage(msgId, iter.Value)
+		if msg == nil {
+			continue
+		}
 		// Store list if message IDs that should be removed.
-		if pqmsg.CreatedTs+cfg.MsgTtl < nowTs ||
-			(pqmsg.PopCount >= cfg.PopCountLimit && cfg.PopCountLimit > 0) {
-			delIds = append(delIds, pqmsg.Id)
+		if msg.CreatedTs+cfg.MsgTtl < nowTs ||
+			(msg.PopCount >= cfg.PopCountLimit && cfg.PopCountLimit > 0) {
+			delIds = append(delIds, msg.Id)
 		} else {
-			switch pqmsg.PushAt {
+			switch msg.PushAt {
 			case QUEUE_DIRECTION_FRONT_UNLOCKED:
-				unlockedFrontMsgs = append(unlockedFrontMsgs, pqmsg)
+				unlockedFrontMsgs = append(unlockedFrontMsgs, msg)
 			case QUEUE_DIRECTION_BACK_UNLOCKED:
-				unlockedBackMsgs = append(unlockedBackMsgs, pqmsg)
+				unlockedBackMsgs = append(unlockedBackMsgs, msg)
 			default:
-				msgs = append(msgs, pqmsg)
+				msgs = append(msgs, msg)
 			}
 		}
-		iter.Next()
 	}
+	iter.Close()
+
 	log.Debug("Loaded %d messages for %s queue",
 		len(msgs)+len(unlockedFrontMsgs)+len(unlockedBackMsgs),
 		dsq.desc.Name)
@@ -854,7 +855,7 @@ func (dsq *DSQueue) loadAllMessages() {
 	if len(delIds) > 0 {
 		log.Debug("%d messages are expired", len(delIds))
 		for _, msgId := range delIds {
-			dsq.database.DeleteItem(dsq.serviceId, msgId)
+			dsq.DeleteItemFromDB(msgId)
 		}
 	}
 
@@ -870,6 +871,7 @@ func (dsq *DSQueue) loadAllMessages() {
 		dsq.allMessagesMap[msg.Id] = msg
 		dsq.highPriorityBackMsgs.PushBack(msg.Id)
 	}
+
 	sort.Sort(msgs)
 	inDelivery := 0
 	for _, msg := range msgs {
@@ -882,7 +884,11 @@ func (dsq *DSQueue) loadAllMessages() {
 				inDelivery += 1
 			} else {
 				dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+cfg.MsgTtl)
-				dsq.availableMsgs.PushFront(msg.Id)
+				if msg.PushAt == QUEUE_DIRECTION_FRONT {
+					dsq.availableMsgs.PushFront(msg.Id)
+				} else {
+					dsq.availableMsgs.PushBack(msg.Id)
+				}
 			}
 		}
 	}
