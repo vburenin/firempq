@@ -50,7 +50,7 @@ func NewBinaryLog(cfg conf.Config) *BinaryLog {
 	binlog := &BinaryLog{
 		dataChan:    make(chan []byte, cfg.BinaryLogBufferSize),
 		serviceChan: make(chan []byte, cfg.BinaryLogBufferSize),
-		frameSize: cfg.FrameSize,
+		//frameSize: cfg.FrameSize,
 		seqId:       0,
 		maxPageSize: cfg.BinaryLogPageSize,
 		pageSize:    0,
