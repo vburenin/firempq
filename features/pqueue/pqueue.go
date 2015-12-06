@@ -134,6 +134,10 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
+func (pq *PQueue) GetServiceId() string {
+	return pq.serviceId
+}
+
 func (pq *PQueue) Size() int {
 	return len(pq.msgMap)
 }

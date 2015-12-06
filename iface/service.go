@@ -27,6 +27,7 @@ type ISvc interface {
 	GetStatus() map[string]interface{}
 	GetType() defs.ServiceType
 	GetTypeName() string
+	GetServiceId() string
 	Call(string, []string) IResponse
 	Clear()
 	Close()

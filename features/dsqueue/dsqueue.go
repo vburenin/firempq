@@ -189,6 +189,10 @@ func (dsq *DSQueue) GetTypeName() string {
 	return common.STYPE_DOUBLE_SIDED_QUEUE
 }
 
+func (dsq *DSQueue) GetServiceId() string {
+	return dsq.serviceId
+}
+
 // Queue custom specific handler for the queue type specific features.
 func (dsq *DSQueue) Call(action string, params []string) iface.IResponse {
 	handler, ok := dsq.actionHandlers[action]
