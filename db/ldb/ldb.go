@@ -1,15 +1,11 @@
 package db
 
-// Level DB wrapper over multiple service data store.
-// Each key has a prefix that combines service name as well as type of stored data.
-// The following format is used for item keys:
-// somename:m:itemid
-// This format is used for payload keys:
-// somename:p:payload
+// Level DB cached wrapper to improve write performance using batching.
 
 import (
 	"firempq/common"
 	"firempq/conf"
+	"firempq/iface"
 	"firempq/log"
 	"sync"
 	"time"
@@ -26,7 +22,7 @@ var defaultWriteOptions = levigo.NewWriteOptions()
 // DataStorage A high level structure on top of LevelDB.
 // It caches item storing them into database
 // as multiple large batches later.
-type DataStorage struct {
+type LevelDBStorage struct {
 	db             *levigo.DB        // Pointer the the instance of level db.
 	dbName         string            // LevelDB database name.
 	itemCache      map[string][]byte // Active cache for item metadata.
@@ -39,8 +35,8 @@ type DataStorage struct {
 }
 
 // NewDataStorage is a constructor of DataStorage.
-func NewDataStorage(dbName string) (*DataStorage, error) {
-	ds := DataStorage{
+func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
+	ds := LevelDBStorage{
 		dbName:         dbName,
 		itemCache:      make(map[string][]byte),
 		tmpItemCache:   nil,
@@ -65,7 +61,7 @@ func NewDataStorage(dbName string) (*DataStorage, error) {
 	return &ds, nil
 }
 
-func (ds *DataStorage) periodicCacheFlush() {
+func (ds *LevelDBStorage) periodicCacheFlush() {
 	for !ds.closed {
 		select {
 		case <-ds.forceFlushChan:
@@ -87,7 +83,7 @@ func (ds *DataStorage) periodicCacheFlush() {
 }
 
 // WaitFlush waits until all data is flushed on disk.
-func (ds *DataStorage) WaitFlush() {
+func (ds *LevelDBStorage) WaitFlush() {
 	ds.flushLock.Lock()
 	s := ds.flushSync
 	ds.flushLock.Unlock()
@@ -95,14 +91,14 @@ func (ds *DataStorage) WaitFlush() {
 }
 
 // CachedStoreItem stores data into the cache.
-func (ds *DataStorage) FastStoreData(id string, data []byte) {
+func (ds *LevelDBStorage) FastStoreData(id string, data []byte) {
 	ds.cacheLock.Lock()
 	ds.itemCache[id] = data
 	ds.cacheLock.Unlock()
 }
 
 // CachedStoreItemWithPayload stores data into the cache.
-func (ds *DataStorage) FastStoreData2(id1 string, data1 []byte, id2 string, data2 []byte) {
+func (ds *LevelDBStorage) FastStoreData2(id1 string, data1 []byte, id2 string, data2 []byte) {
 	ds.cacheLock.Lock()
 	ds.itemCache[id1] = data1
 	ds.itemCache[id2] = data2
@@ -110,7 +106,7 @@ func (ds *DataStorage) FastStoreData2(id1 string, data1 []byte, id2 string, data
 }
 
 // DeleteServiceData deletes all service data such as service metadata, items and payloads.
-func (ds *DataStorage) DeleteDataWithPrefix(prefix string) int {
+func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 	ds.flushLock.Lock()
 	defer ds.flushLock.Unlock()
 	ds.flushCache()
@@ -123,7 +119,7 @@ func (ds *DataStorage) DeleteDataWithPrefix(prefix string) int {
 	for iter.Valid() {
 		total++
 		if limitCounter < 1000 {
-			wb.Delete(iter.Key)
+			wb.Delete(iter.GetKey())
 			limitCounter++
 		} else {
 			limitCounter = 0
@@ -138,7 +134,7 @@ func (ds *DataStorage) DeleteDataWithPrefix(prefix string) int {
 }
 
 // FlushCache flushes all cache into database.
-func (ds *DataStorage) flushCache() {
+func (ds *LevelDBStorage) flushCache() {
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = ds.itemCache
 	ds.itemCache = make(map[string][]byte)
@@ -158,17 +154,17 @@ func (ds *DataStorage) flushCache() {
 
 // IterServiceItems returns new over all service item metadata.
 // Service name used as a prefix to file all service items.
-func (ds *DataStorage) IterData(prefix string) *ItemIterator {
+func (ds *LevelDBStorage) IterData(prefix string) iface.ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
 	return makeItemIterator(iter, common.UnsafeStringToBytes(prefix))
 }
 
 // SaveServiceMeta stores service metadata into database.
-func (ds *DataStorage) StoreData(id string, data []byte) error {
+func (ds *LevelDBStorage) StoreData(id string, data []byte) error {
 	return ds.db.Put(defaultWriteOptions, common.UnsafeStringToBytes(id), data)
 }
 
-func (ds *DataStorage) DeleteData(id string) {
+func (ds *LevelDBStorage) DeleteData(id string) {
 	ds.db.Delete(defaultWriteOptions, common.UnsafeStringToBytes(id))
 }
 
@@ -176,7 +172,7 @@ func (ds *DataStorage) DeleteData(id string) {
 // 1. Top level cache.
 // 2. Temp cache while data is getting flushed into db.
 // 3. If not found in cache, will mane a DB lookup.
-func (ds *DataStorage) GetData(id string) []byte {
+func (ds *LevelDBStorage) GetData(id string) []byte {
 	ds.cacheLock.Lock()
 	data, ok := ds.itemCache[id]
 	if ok {
@@ -194,22 +190,22 @@ func (ds *DataStorage) GetData(id string) []byte {
 }
 
 // DeleteItem deletes item metadata and payload, affects cache only until flushed.
-func (ds *DataStorage) FastDeleteData(id string) {
+func (ds *LevelDBStorage) FastDeleteData(id ...string) {
 	ds.cacheLock.Lock()
-	ds.itemCache[id] = nil
+	for _, i := range id {
+		ds.itemCache[i] = nil
+	}
 	ds.cacheLock.Unlock()
 }
 
-// DeleteItem deletes item metadata and payload, affects cache only until flushed.
-func (ds *DataStorage) FastDeleteData2(id1, id2 string) {
-	ds.cacheLock.Lock()
-	ds.itemCache[id1] = nil
-	ds.itemCache[id2] = nil
-	ds.cacheLock.Unlock()
+func (ds *LevelDBStorage) IsClosed() bool {
+	ds.flushLock.Lock()
+	defer ds.flushLock.Unlock()
+	return ds.closed
 }
 
 // Close flushes data on disk and closes database.
-func (ds *DataStorage) Close() {
+func (ds *LevelDBStorage) Close() {
 	ds.flushLock.Lock()
 	defer ds.flushLock.Unlock()
 	if !ds.closed {

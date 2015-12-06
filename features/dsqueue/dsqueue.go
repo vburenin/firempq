@@ -830,8 +830,8 @@ func (dsq *DSQueue) loadAllMessages() {
 
 	cfg := dsq.conf
 	for ; iter.Valid(); iter.Next() {
-		msgId := common.UnsafeBytesToString(iter.TrimKey)
-		msg := UnmarshalDSQMessage(msgId, iter.Value)
+		msgId := common.UnsafeBytesToString(iter.GetTrimKey())
+		msg := UnmarshalDSQMessage(msgId, iter.GetValue())
 		if msg == nil {
 			continue
 		}

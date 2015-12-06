@@ -701,8 +701,8 @@ func (pq *PQueue) loadAllMessages() {
 
 	cfg := pq.config
 	for ; msgIter.Valid(); msgIter.Next() {
-		msgId := common.UnsafeBytesToString(msgIter.TrimKey)
-		pqmsg := UnmarshalPQMessage(msgId, msgIter.Value)
+		msgId := common.UnsafeBytesToString(msgIter.GetTrimKey())
+		pqmsg := UnmarshalPQMessage(msgId, msgIter.GetValue())
 
 		// Message data has errors.
 		if pqmsg == nil {

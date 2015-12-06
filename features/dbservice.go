@@ -8,7 +8,7 @@ import (
 )
 
 type DBService struct {
-	database      *db.DataStorage
+	database      DataStorage
 	itemPrefix    string
 	payloadPrefix string
 }
@@ -54,9 +54,9 @@ func (d *DBService) StoreFullItemInDB(item IItemMetaData, payload string) {
 func (d *DBService) DeleteItemFromDB(itemId string) {
 	itemKey := d.itemPrefix + itemId
 	payloadKey := d.payloadPrefix + itemId
-	d.database.FastDeleteData2(itemKey, payloadKey)
+	d.database.FastDeleteData(itemKey, payloadKey)
 }
 
-func (d *DBService) GetItemIterator() *db.ItemIterator {
+func (d *DBService) GetItemIterator() ItemIterator {
 	return d.database.IterData(d.itemPrefix)
 }

@@ -52,9 +52,9 @@ func GetServiceDescriptions() common.ServiceDescriptionList {
 	defer descIter.Close()
 
 	for ; descIter.Valid(); descIter.Next() {
-		svcDesc, err := common.NewServiceDescriptionFromBinary(descIter.Value)
+		svcDesc, err := common.NewServiceDescriptionFromBinary(descIter.GetValue())
 		if err != nil {
-			log.Error("Coudn't read service '%s' description: %s", descIter.TrimKey, err.Error())
+			log.Error("Coudn't read service '%s' description: %s", descIter.GetTrimKey(), err.Error())
 			continue
 		}
 		sdList = append(sdList, svcDesc)

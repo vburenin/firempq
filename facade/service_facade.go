@@ -2,7 +2,6 @@ package facade
 
 import (
 	"firempq/common"
-	"firempq/db"
 	"firempq/features"
 	"firempq/iface"
 	"firempq/log"
@@ -13,11 +12,11 @@ import (
 type ServiceFacade struct {
 	allSvcs          map[string]iface.ISvc
 	rwLock           sync.RWMutex
-	database         *db.DataStorage
+	database         iface.DataStorage
 	serviceIdCounter uint64
 }
 
-func NewFacade(database *db.DataStorage) *ServiceFacade {
+func NewFacade(database iface.DataStorage) *ServiceFacade {
 	f := ServiceFacade{
 		database:         database,
 		allSvcs:          make(map[string]iface.ISvc),

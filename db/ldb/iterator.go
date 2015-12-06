@@ -8,7 +8,7 @@ import (
 
 // ItemIterator built on top of LevelDB.
 // It takes into account service name to limit the amount of selected data.
-type ItemIterator struct {
+type LevelDbItemIterator struct {
 	iter    *levigo.Iterator
 	prefix  []byte // Prefix for look ups.
 	Key     []byte // Currently selected key. Valid only if the iterator is valid.
@@ -17,13 +17,13 @@ type ItemIterator struct {
 }
 
 //
-func makeItemIterator(iter *levigo.Iterator, prefix []byte) *ItemIterator {
+func makeItemIterator(iter *levigo.Iterator, prefix []byte) *LevelDbItemIterator {
 	iter.Seek(prefix)
-	return &ItemIterator{iter, prefix, nil, nil, nil}
+	return &LevelDbItemIterator{iter, prefix, nil, nil, nil}
 }
 
 // Next switches to the next element.
-func (mi *ItemIterator) Next() {
+func (mi *LevelDbItemIterator) Next() {
 	mi.iter.Next()
 }
 
@@ -34,7 +34,7 @@ func (mi *ItemIterator) Next() {
 //    ......
 //    iter.Next()
 //}
-func (mi *ItemIterator) Valid() bool {
+func (mi *LevelDbItemIterator) Valid() bool {
 	valid := mi.iter.Valid()
 	if valid {
 		k := mi.iter.Key()
@@ -52,6 +52,18 @@ func (mi *ItemIterator) Valid() bool {
 }
 
 // Close closes iterator. Iterator must be closed!
-func (mi *ItemIterator) Close() {
+func (mi *LevelDbItemIterator) Close() {
 	mi.iter.Close()
+}
+
+func (mi *LevelDbItemIterator) GetKey() []byte {
+	return mi.Key
+}
+
+func (mi *LevelDbItemIterator) GetValue() []byte {
+	return mi.Value
+}
+
+func (mi *LevelDbItemIterator) GetTrimKey() []byte {
+	return mi.TrimKey
 }
