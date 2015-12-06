@@ -168,6 +168,10 @@ func (ds *DataStorage) StoreData(id string, data []byte) error {
 	return ds.db.Put(defaultWriteOptions, common.UnsafeStringToBytes(id), data)
 }
 
+func (ds *DataStorage) DeleteData(id string) {
+	ds.db.Delete(defaultWriteOptions, common.UnsafeStringToBytes(id))
+}
+
 // GetPayload returns item payload. Three places are checked:
 // 1. Top level cache.
 // 2. Temp cache while data is getting flushed into db.
