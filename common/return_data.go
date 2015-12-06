@@ -1,16 +1,16 @@
 package common
 
 import (
-	"firempq/iface"
+	. "firempq/iface"
 	"fmt"
 	"strconv"
 	"strings"
 )
 
-type CallFuncType func([]string) iface.IResponse
+type CallFuncType func([]string) IResponse
 
 type ItemsResponse struct {
-	items []iface.IItem
+	items []IItem
 }
 
 type DictResponse struct {
@@ -19,6 +19,10 @@ type DictResponse struct {
 
 func NewDictResponse(dict map[string]interface{}) *DictResponse {
 	return &DictResponse{dict}
+}
+
+func (self *DictResponse) GetDict() map[string]interface{} {
+	return self.dict
 }
 
 func (self *DictResponse) GetResponse() string {
@@ -47,8 +51,12 @@ func (self *DictResponse) IsError() bool {
 	return false
 }
 
-func NewItemsResponse(items []iface.IItem) *ItemsResponse {
+func NewItemsResponse(items []IItem) *ItemsResponse {
 	return &ItemsResponse{items}
+}
+
+func (self *ItemsResponse) GetItems() []IItem {
+	return self.items
 }
 
 func (self *ItemsResponse) GetResponse() string {
