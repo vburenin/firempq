@@ -4,7 +4,7 @@ import (
 	"firempq/common"
 	"firempq/db"
 
-	. "firempq/iface"
+	. "firempq/api"
 )
 
 type DBService struct {

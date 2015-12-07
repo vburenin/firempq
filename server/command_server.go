@@ -2,13 +2,14 @@ package server
 
 import (
 	"firempq/facade"
-	"firempq/iface"
 	"firempq/log"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	. "firempq/api"
 )
 
 const (
@@ -27,7 +28,7 @@ type CommandServer struct {
 	waitGroup  sync.WaitGroup
 }
 
-func NewSimpleServer(listener net.Listener) iface.IServer {
+func NewSimpleServer(listener net.Listener) IServer {
 	return &CommandServer{
 		facade:     facade.CreateFacade(),
 		listener:   listener,

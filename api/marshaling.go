@@ -1,4 +1,4 @@
-package iface
+package api
 
 type MarshalToBin interface {
 	Marshal() (data []byte, err error)

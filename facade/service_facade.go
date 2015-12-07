@@ -3,23 +3,24 @@ package facade
 import (
 	"firempq/common"
 	"firempq/features"
-	"firempq/iface"
 	"firempq/log"
 	"strings"
 	"sync"
+
+	. "firempq/api"
 )
 
 type ServiceFacade struct {
-	allSvcs          map[string]iface.ISvc
+	allSvcs          map[string]ISvc
 	rwLock           sync.RWMutex
-	database         iface.DataStorage
+	database         DataStorage
 	serviceIdCounter uint64
 }
 
-func NewFacade(database iface.DataStorage) *ServiceFacade {
+func NewFacade(database DataStorage) *ServiceFacade {
 	f := ServiceFacade{
 		database:         database,
-		allSvcs:          make(map[string]iface.ISvc),
+		allSvcs:          make(map[string]ISvc),
 		serviceIdCounter: 0,
 	}
 	f.loadAllServices()
@@ -59,7 +60,7 @@ func (s *ServiceFacade) loadAllServices() {
 	}
 }
 
-func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) iface.IResponse {
+func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
 
@@ -82,7 +83,7 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 	return common.OK_RESPONSE
 }
 
-func (s *ServiceFacade) DropService(svcName string) iface.IResponse {
+func (s *ServiceFacade) DropService(svcName string) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
 	svc, ok := s.allSvcs[svcName]
@@ -96,7 +97,7 @@ func (s *ServiceFacade) DropService(svcName string) iface.IResponse {
 	return common.OK_RESPONSE
 }
 
-func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) iface.IResponse {
+func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) IResponse {
 
 	if svcType != "" {
 		_, ok := GetServiceConstructor(svcType)
@@ -121,7 +122,7 @@ func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) iface.IRe
 	return common.NewStrArrayResponse(services)
 }
 
-func (s *ServiceFacade) GetService(name string) (iface.ISvc, bool) {
+func (s *ServiceFacade) GetService(name string) (ISvc, bool) {
 	s.rwLock.RLock()
 	svc, ok := s.allSvcs[name]
 	s.rwLock.RUnlock()

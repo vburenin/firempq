@@ -2,10 +2,11 @@ package db
 
 import (
 	"firempq/db/ldb"
-	"firempq/iface"
 	"firempq/log"
 	"os"
 	"sync"
+
+	. "firempq/api"
 )
 
 var inmemory bool = false
@@ -18,17 +19,17 @@ func UseLevelDB() {
 	inmemory = false
 }
 
-var database iface.DataStorage = nil
+var database DataStorage = nil
 var lock sync.Mutex
 
 // GetDatabase returns DataStorage singleton.
-func GetDatabase() iface.DataStorage {
+func GetDatabase() DataStorage {
 	lock.Lock()
 	defer lock.Unlock()
 	return getDatabase()
 }
 
-func getDatabase() iface.DataStorage {
+func getDatabase() DataStorage {
 	var err error
 	if database == nil {
 		database, err = db.NewLevelDBStorage("databasedir")

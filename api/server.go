@@ -1,4 +1,4 @@
-package iface
+package api
 
 type IServer interface {
 	Start()

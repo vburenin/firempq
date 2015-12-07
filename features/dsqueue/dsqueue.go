@@ -5,7 +5,6 @@ import (
 	"firempq/conf"
 	"firempq/defs"
 	"firempq/features"
-	"firempq/iface"
 	"firempq/log"
 	"firempq/structs"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	. "firempq/api"
 )
 
 const (
@@ -84,7 +85,7 @@ type DSQueue struct {
 	msgSerialNumber uint64
 }
 
-func CreateDSQueue(desc *common.ServiceDescription, params []string) iface.ISvc {
+func CreateDSQueue(desc *common.ServiceDescription, params []string) ISvc {
 	return NewDSQueue(desc, 1000)
 }
 
@@ -145,7 +146,7 @@ func NewDSQueue(desc *common.ServiceDescription, size int64) *DSQueue {
 	return queue
 }
 
-func LoadDSQueue(desc *common.ServiceDescription) (iface.ISvc, error) {
+func LoadDSQueue(desc *common.ServiceDescription) (ISvc, error) {
 	conf := &DSQConfig{}
 	err := features.LoadServiceConfig(common.MakeServiceId(desc), conf)
 	if err != nil {
@@ -174,7 +175,7 @@ func (dsq *DSQueue) Size() int {
 	return len(dsq.allMessagesMap)
 }
 
-func (dsq *DSQueue) GetCurrentStatus(params []string) iface.IResponse {
+func (dsq *DSQueue) GetCurrentStatus(params []string) IResponse {
 	if len(params) > 0 {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
@@ -194,7 +195,7 @@ func (dsq *DSQueue) GetServiceId() string {
 }
 
 // Queue custom specific handler for the queue type specific features.
-func (dsq *DSQueue) Call(action string, params []string) iface.IResponse {
+func (dsq *DSQueue) Call(action string, params []string) IResponse {
 	handler, ok := dsq.actionHandlers[action]
 	if !ok {
 		return common.InvalidRequest("Unknown action: " + action)
@@ -263,7 +264,7 @@ func getMessageIdOnly(params []string) (string, *common.ErrorResponse) {
 	return msgId, nil
 }
 
-func (dsq *DSQueue) tsParamFunc(params []string, f func(int64) int64) iface.IResponse {
+func (dsq *DSQueue) tsParamFunc(params []string, f func(int64) int64) IResponse {
 	var err *common.ErrorResponse
 	var ts int64 = -1
 	for len(params) > 0 {
@@ -289,62 +290,62 @@ func (dsq *DSQueue) tsParamFunc(params []string, f func(int64) int64) iface.IRes
 	return common.NewIntResponse(f(ts))
 }
 
-func (dsq *DSQueue) ExpireItems(params []string) iface.IResponse {
+func (dsq *DSQueue) ExpireItems(params []string) IResponse {
 	return dsq.tsParamFunc(params, nil)
 }
 
-func (dsq *DSQueue) ReleaseInFlight(params []string) iface.IResponse {
+func (dsq *DSQueue) ReleaseInFlight(params []string) IResponse {
 	return dsq.tsParamFunc(params, nil)
 }
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) PushFront(params []string) iface.IResponse {
+func (dsq *DSQueue) PushFront(params []string) IResponse {
 	return dsq.push(params, QUEUE_DIRECTION_FRONT)
 }
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) PushBack(params []string) iface.IResponse {
+func (dsq *DSQueue) PushBack(params []string) IResponse {
 	return dsq.push(params, QUEUE_DIRECTION_BACK)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopLockFront(params []string) iface.IResponse {
+func (dsq *DSQueue) PopLockFront(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_FRONT, false)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopLockBack(params []string) iface.IResponse {
+func (dsq *DSQueue) PopLockBack(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, false)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopFront(params []string) iface.IResponse {
+func (dsq *DSQueue) PopFront(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_FRONT, true)
 }
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) PopBack(params []string) iface.IResponse {
+func (dsq *DSQueue) PopBack(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, true)
 }
 
 // Return already locked message to the front of the queue
-func (dsq *DSQueue) ReturnFront(params []string) iface.IResponse {
+func (dsq *DSQueue) ReturnFront(params []string) IResponse {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_FRONT)
 }
 
 // Return already locked message to the back of the queue
-func (dsq *DSQueue) ReturnBack(params []string) iface.IResponse {
+func (dsq *DSQueue) ReturnBack(params []string) IResponse {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_BACK)
 }
 
 // Delete non-locked message from the queue by message's ID
-func (dsq *DSQueue) DeleteById(params []string) iface.IResponse {
+func (dsq *DSQueue) DeleteById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -368,7 +369,7 @@ func (dsq *DSQueue) DeleteById(params []string) iface.IResponse {
 }
 
 // Delete message locked or unlocked from the queue by message's ID
-func (dsq *DSQueue) ForceDelete(params []string) iface.IResponse {
+func (dsq *DSQueue) ForceDelete(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -385,7 +386,7 @@ func (dsq *DSQueue) ForceDelete(params []string) iface.IResponse {
 }
 
 // Set a user defined message lock timeout. Only locked message timeout can be set.
-func (dsq *DSQueue) SetLockTimeout(params []string) iface.IResponse {
+func (dsq *DSQueue) SetLockTimeout(params []string) IResponse {
 	var err *common.ErrorResponse
 	var msgId string
 	var lockTimeout int64 = -1
@@ -429,7 +430,7 @@ func (dsq *DSQueue) SetLockTimeout(params []string) iface.IResponse {
 }
 
 // Delete locked message by id.
-func (dsq *DSQueue) DeleteLockedById(params []string) iface.IResponse {
+func (dsq *DSQueue) DeleteLockedById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -448,7 +449,7 @@ func (dsq *DSQueue) DeleteLockedById(params []string) iface.IResponse {
 
 // Unlock locked message by id.
 // Message will be returned to the front/back of the queue based on Pop operation type (pop front/back)
-func (dsq *DSQueue) UnlockMessageById(params []string) iface.IResponse {
+func (dsq *DSQueue) UnlockMessageById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -493,7 +494,7 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 	return nil
 }
 
-func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) iface.IResponse {
+func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) IResponse {
 	if _, ok := dsq.allMessagesMap[msg.Id]; ok {
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
@@ -517,7 +518,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) iface.IRespons
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) push(params []string, direction int32) iface.IResponse {
+func (dsq *DSQueue) push(params []string, direction int32) IResponse {
 	var err *common.ErrorResponse
 	var msgId string
 	var payload string = ""
@@ -607,23 +608,23 @@ func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMessage
 
 // Pop first available message.
 // Will return nil if there are no messages available.
-func (dsq *DSQueue) popMessage(direction int32, permanentPop bool) iface.IResponse {
+func (dsq *DSQueue) popMessage(direction int32, permanentPop bool) IResponse {
 
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
 	msg := dsq.popMetaMessage(direction, permanentPop)
 	if msg == nil {
-		return common.NewItemsResponse([]iface.IItem{})
+		return common.NewItemsResponse([]IItem{})
 	}
 	retMsg := NewMsgItem(msg, dsq.GetPayloadFromDB(msg.Id))
 	if permanentPop {
 		dsq.deleteMessageById(msg.Id)
 	}
-	return common.NewItemsResponse([]iface.IItem{retMsg})
+	return common.NewItemsResponse([]IItem{retMsg})
 }
 
-func (dsq *DSQueue) returnMessageTo(params []string, place int32) iface.IResponse {
+func (dsq *DSQueue) returnMessageTo(params []string, place int32) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
 		return retData
@@ -919,4 +920,4 @@ func (dsq *DSQueue) loadAllMessages() {
 	log.Debug("Messages in high prioity/unlocked back: %d", dsq.highPriorityBackMsgs.Len())
 }
 
-var _ iface.ISvc = &DSQueue{}
+var _ ISvc = &DSQueue{}

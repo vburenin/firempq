@@ -1,10 +1,11 @@
 package common
 
 import (
-	. "firempq/iface"
 	"fmt"
 	"strconv"
 	"strings"
+
+	. "firempq/api"
 )
 
 type CallFuncType func([]string) IResponse

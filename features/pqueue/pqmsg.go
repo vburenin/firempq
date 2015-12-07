@@ -1,8 +1,10 @@
 package pqueue
 
-import "firempq/common"
-import "firempq/iface"
-import "firempq/log"
+import (
+	. "firempq/api"
+	"firempq/common"
+	"firempq/log"
+)
 
 const (
 	MAX_MESSAGE_ID_LENGTH = 64
@@ -47,5 +49,5 @@ func (m *MsgItem) GetPayload() string {
 	return m.payload
 }
 
-var _ iface.IItem = &MsgItem{}
-var _ iface.IItemMetaData = &PQMessage{}
+var _ IItem = &MsgItem{}
+var _ IItemMetaData = &PQMessage{}

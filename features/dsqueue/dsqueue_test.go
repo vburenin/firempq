@@ -1,15 +1,12 @@
 package dsqueue
 
 import (
+	"firempq/common"
+	"firempq/db"
+	"strconv"
 	"testing"
 
-	"firempq/common"
-
 	. "firempq/testutils"
-
-	"strconv"
-
-	"firempq/db"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

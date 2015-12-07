@@ -2,8 +2,9 @@ package common
 
 import (
 	"bytes"
-	"firempq/iface"
 	"strconv"
+
+	. "firempq/api"
 
 	"github.com/op/go-logging"
 )
@@ -11,11 +12,11 @@ import (
 // Error translator
 var log = logging.MustGetLogger("firempq")
 
-func TranslateError(err error) iface.IResponse {
+func TranslateError(err error) IResponse {
 	if err == nil {
 		return OK_RESPONSE
 	}
-	if resp, ok := err.(iface.IResponse); ok {
+	if resp, ok := err.(IResponse); ok {
 		return resp
 	} else {
 		log.Error(err.Error())
@@ -82,8 +83,8 @@ func (r *StrArrayResponse) GetResponse() string {
 }
 
 // Predefined commonly used responses.
-var RESP_PONG iface.IResponse = NewStrResponse("PONG")
+var RESP_PONG IResponse = NewStrResponse("PONG")
 
 // Test interface.
-var _ iface.IResponse = NewStrResponse("test")
-var _ iface.IResponse = NewIntResponse(10)
+var _ IResponse = NewStrResponse("test")
+var _ IResponse = NewIntResponse(10)

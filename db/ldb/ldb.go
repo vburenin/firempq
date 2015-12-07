@@ -5,10 +5,11 @@ package db
 import (
 	"firempq/common"
 	"firempq/conf"
-	"firempq/iface"
 	"firempq/log"
 	"sync"
 	"time"
+
+	. "firempq/api"
 
 	"github.com/jmhodges/levigo"
 )
@@ -154,7 +155,7 @@ func (ds *LevelDBStorage) flushCache() {
 
 // IterServiceItems returns new over all service item metadata.
 // Service name used as a prefix to file all service items.
-func (ds *LevelDBStorage) IterData(prefix string) iface.ItemIterator {
+func (ds *LevelDBStorage) IterData(prefix string) ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
 	return makeItemIterator(iter, common.UnsafeStringToBytes(prefix))
 }

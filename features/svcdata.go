@@ -3,8 +3,9 @@ package features
 import (
 	"firempq/common"
 	"firempq/db"
-	"firempq/iface"
 	"firempq/log"
+
+	. "firempq/api"
 )
 
 const ServiceConfigPrefix = ":config:"
@@ -18,7 +19,7 @@ func descKey(serviceId string) string {
 	return ServiceDescPrefix + serviceId
 }
 
-func LoadServiceConfig(serviceId string, cfg iface.Marshalable) error {
+func LoadServiceConfig(serviceId string, cfg Marshalable) error {
 	db := db.GetDatabase()
 	data := db.GetData(cfgKey(serviceId))
 	if data == nil {
@@ -33,7 +34,7 @@ func LoadServiceConfig(serviceId string, cfg iface.Marshalable) error {
 }
 
 // SaveServiceConfig saves service config into database.
-func SaveServiceConfig(serviceId string, conf iface.MarshalToBin) error {
+func SaveServiceConfig(serviceId string, conf MarshalToBin) error {
 	db := db.GetDatabase()
 	data, _ := conf.Marshal()
 	err := db.StoreData(cfgKey(serviceId), data)

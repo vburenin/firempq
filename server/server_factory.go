@@ -2,12 +2,13 @@ package server
 
 import (
 	"errors"
-	"firempq/iface"
 	"firempq/log"
 	"net"
+
+	. "firempq/api"
 )
 
-func GetServer(serverClass string, serverAddress string) (iface.IServer, error) {
+func GetServer(serverClass string, serverAddress string) (IServer, error) {
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
 		return nil, err
