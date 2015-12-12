@@ -74,9 +74,8 @@ func GetServiceDescription(serviceId string) *common.ServiceDescription {
 // SaveServiceConfig saves service config into database.
 func SaveServiceDescription(desc *common.ServiceDescription) error {
 	db := db.GetDatabase()
-	key := descKey(common.MakeServiceId(desc))
 	data, _ := desc.Marshal()
-	return db.StoreData(key, data)
+	return db.StoreData(desc.ServiceId, data)
 }
 
 func DeleteServiceData(serviceId string) {
