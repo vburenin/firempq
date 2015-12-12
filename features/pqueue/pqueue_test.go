@@ -2,11 +2,14 @@ package pqueue
 
 import (
 	"firempq/common"
+	"firempq/db"
+	"firempq/testutils"
 	"testing"
 	"time"
 )
 
 func CreateTestQueue() *PQueue {
+	db.SetDatabase(testutils.NewInMemDBService())
 	desc := common.NewServiceDescription(common.STYPE_PRIORITY_QUEUE, 54634673456, "name")
 	return NewPQueue(desc, 100, 1000)
 }

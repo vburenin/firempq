@@ -11,6 +11,9 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+func CleanDB() {
+	db.SetDatabase(NewInMemDBService())
+}
 func CreateTestQueue() *DSQueue {
 	desc := common.NewServiceDescription(common.STYPE_DOUBLE_SIDED_QUEUE, 15243523452345, "dsqueue-test")
 	return NewDSQueue(desc, 1000)
@@ -29,8 +32,8 @@ func itemId(itemId string) []string {
 }
 
 func TestPopLockDelete(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 	Convey("Poplock and delete messages should work", t, func() {
@@ -62,8 +65,8 @@ func TestPopLockDelete(t *testing.T) {
 }
 
 func TestPushAndPopFromFront(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 	Convey("Data should be pushed and popped in stack order", t, func() {
@@ -81,8 +84,8 @@ func TestPushAndPopFromFront(t *testing.T) {
 }
 
 func TestPushFrontDelayed(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 
@@ -105,8 +108,8 @@ func TestPushFrontDelayed(t *testing.T) {
 }
 
 func TestPushAndPopFromBack(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 
@@ -125,8 +128,8 @@ func TestPushAndPopFromBack(t *testing.T) {
 }
 
 func TestPushBackDelayed(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 
@@ -149,8 +152,8 @@ func TestPushBackDelayed(t *testing.T) {
 }
 
 func TestAutoExpiration(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 	q.conf.MsgTtl = 10
@@ -174,8 +177,8 @@ func TestAutoExpiration(t *testing.T) {
 }
 
 func TestLockExpiration(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	defer q.Close()
 	defer q.Clear()
 
@@ -205,8 +208,8 @@ func TestLockExpiration(t *testing.T) {
 }
 
 func TestLoadDataFromDatabase(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	Convey("Push different items into database", t, func() {
 		VerifyOk(q.PushBack(newItem("d1", "p1")))
 		VerifyOk(q.PushFront(newItem("d2", "p1")))
@@ -218,7 +221,6 @@ func TestLoadDataFromDatabase(t *testing.T) {
 		VerifySize(q, 7)
 	})
 	q.Close()
-	db.GetDatabase().Close()
 
 	q = CreateTestQueue()
 	Convey("Data should be loaded correctly", t, func() {
@@ -236,8 +238,8 @@ func TestLoadDataFromDatabase(t *testing.T) {
 }
 
 func TestGetStatus(t *testing.T) {
+	CleanDB()
 	q := CreateTestQueue()
-	q.Clear()
 	q.conf.MsgTtl = 100000
 	q.conf.DeliveryDelay = 0
 	q.conf.PopLockTimeout = 1000
