@@ -57,9 +57,6 @@ type PQueue struct {
 	newMsgNotification chan bool
 
 	msgSerialNumber uint64
-
-	payloadPrefix string
-	messagePrefix string
 }
 
 func CreatePQueue(desc *common.ServiceDescription, params []string) ISvc {
@@ -76,14 +73,8 @@ func initPQueue(desc *common.ServiceDescription, config *PQConfig) *PQueue {
 		inFlightHeap:       structs.NewIndexedPriorityQueue(),
 		newMsgNotification: make(chan bool, 1),
 		msgSerialNumber:    0,
-		serviceId:          common.MakeServiceId(desc),
 	}
-	pq.InitServiceDB(pq.serviceId)
-
-	// Pre-initialize prefixes.
-	pq.payloadPrefix = features.MakePayloadPrefix(pq.serviceId)
-	pq.messagePrefix = features.MakeItemPrefix(pq.serviceId)
-
+	pq.InitServiceDB(desc.ServiceId)
 	pq.loadAllMessages()
 	return &pq
 }
@@ -109,7 +100,7 @@ func NewPQueue(desc *common.ServiceDescription, priorities int64, size int64) *P
 
 func LoadPQueue(desc *common.ServiceDescription) (ISvc, error) {
 	config := &PQConfig{}
-	err := features.LoadServiceConfig(common.MakeServiceId(desc), config)
+	err := features.LoadServiceConfig(desc.ServiceId, config)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +176,7 @@ func (pq *PQueue) Call(cmd string, params []string) IResponse {
 	return common.InvalidRequest("Unknown action: " + cmd)
 }
 
-// Delete all messages in the queue. It includes all type of messages
+// Clear drops all locked and unlocked messages in the queue.
 func (pq *PQueue) Clear() {
 	total := 0
 	for {
@@ -504,7 +495,8 @@ func (pq *PQueue) DeleteById(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Set a user defined message lock timeout. Only locked message timeout can be set.
+// SetLockTimeout sets a user defined message lock timeout.
+// It works only for locked messages.
 func (pq *PQueue) SetLockTimeout(params []string) IResponse {
 	var err *common.ErrorResponse
 	var msgId string
@@ -548,7 +540,7 @@ func (pq *PQueue) SetLockTimeout(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Delete locked message by id.
+// DeleteLockedById deletes locked message by id.
 func (pq *PQueue) DeleteLockedById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
@@ -686,7 +678,7 @@ func (pq *PQueue) update(ts int64) bool {
 	return false
 }
 
-// Database related data management.
+// MessageSlice data type to sort messages.
 type MessageSlice []*PQMessage
 
 func (p MessageSlice) Len() int           { return len(p) }

@@ -98,13 +98,12 @@ func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 		highPriorityBackMsgs:  structs.NewListQueue(),
 		expireHeap:            structs.NewIndexedPriorityQueue(),
 		inFlightHeap:          structs.NewIndexedPriorityQueue(),
-		serviceId:             common.MakeServiceId(desc),
 		conf:                  conf,
 		newMsgNotification:    make(chan bool),
 		msgSerialNumber:       0,
 	}
 
-	dsq.InitServiceDB(dsq.serviceId)
+	dsq.InitServiceDB(desc.ServiceId)
 
 	dsq.actionHandlers = map[string](common.CallFuncType){
 		ACTION_DELETE_LOCKED_BY_ID: dsq.DeleteLockedById,
@@ -148,7 +147,7 @@ func NewDSQueue(desc *common.ServiceDescription, size int64) *DSQueue {
 
 func LoadDSQueue(desc *common.ServiceDescription) (ISvc, error) {
 	conf := &DSQConfig{}
-	err := features.LoadServiceConfig(common.MakeServiceId(desc), conf)
+	err := features.LoadServiceConfig(desc.ServiceId, conf)
 	if err != nil {
 		return nil, err
 	}

@@ -8,4 +8,5 @@ message ServiceDescription {
 	required int64 create_ts = 4;
 	required bool disabled = 5;
 	required bool to_delete = 6;
+	required string service_id = 7;
 }

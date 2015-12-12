@@ -17,6 +17,7 @@ func NewServiceDescription(sType string, exportId uint64, name string) *ServiceD
 		CreateTs: Uts(),
 		Disabled: false,
 		ToDelete: false,
+		ServiceId: MakeServiceId(exportId),
 	}
 }
 
@@ -36,6 +37,6 @@ func (p ServiceDescriptionList) Less(i, j int) bool { return p[i].ExportId < p[j
 func (p ServiceDescriptionList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 // MakeServiceId creates a string value of service INT id.
-func MakeServiceId(desc *ServiceDescription) string {
-	return strconv.FormatUint(desc.ExportId, 36)
+func MakeServiceId(exportId uint64) string {
+	return strconv.FormatUint(exportId, 36)
 }
