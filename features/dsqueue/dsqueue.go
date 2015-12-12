@@ -193,7 +193,7 @@ func (dsq *DSQueue) GetServiceId() string {
 	return dsq.serviceId
 }
 
-// Queue custom specific handler for the queue type specific features.
+// Call is the queue custom specific handler for the queue type specific features.
 func (dsq *DSQueue) Call(action string, params []string) IResponse {
 	handler, ok := dsq.actionHandlers[action]
 	if !ok {
@@ -204,7 +204,7 @@ func (dsq *DSQueue) Call(action string, params []string) IResponse {
 
 const CLEAN_BATCH_SIZE = 1000
 
-// Delete all messages in the queue. It includes all type of messages
+// Clear removes all locked and unlocked messages.
 func (dsq *DSQueue) Clear() {
 	total := 0
 	for {
@@ -297,53 +297,47 @@ func (dsq *DSQueue) ReleaseInFlight(params []string) IResponse {
 	return dsq.tsParamFunc(params, nil)
 }
 
-// Push message to the queue.
-// Pushing message automatically enables auto expiration.
+// PushFront pushes message to the front of the queue.
 func (dsq *DSQueue) PushFront(params []string) IResponse {
 	return dsq.push(params, QUEUE_DIRECTION_FRONT)
 }
 
-// Push message to the queue.
-// Pushing message automatically enables auto expiration.
+// PushBack pushes message to the back of the queue.
 func (dsq *DSQueue) PushBack(params []string) IResponse {
 	return dsq.push(params, QUEUE_DIRECTION_BACK)
 }
 
-// Pop first available message.
-// Will return nil if there are no messages available.
+// PopLockFront pops and locks first available message in the front.
 func (dsq *DSQueue) PopLockFront(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_FRONT, false)
 }
 
-// Pop first available message.
-// Will return nil if there are no messages available.
+// PopLockBack pops and locks first available message in the back.
 func (dsq *DSQueue) PopLockBack(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, false)
 }
 
-// Pop first available message.
-// Will return nil if there are no messages available.
+// PopFront pops first available message in the front removing message fron the queue.
 func (dsq *DSQueue) PopFront(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_FRONT, true)
 }
 
-// Pop first available message.
-// Will return nil if there are no messages available.
+// PopBack pops first available message in the back removing message fron the queue.
 func (dsq *DSQueue) PopBack(params []string) IResponse {
 	return dsq.popMessage(QUEUE_DIRECTION_BACK, true)
 }
 
-// Return already locked message to the front of the queue
+// ReturnFront returns locked message to the front of the queue.
 func (dsq *DSQueue) ReturnFront(params []string) IResponse {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_FRONT)
 }
 
-// Return already locked message to the back of the queue
+// ReturnBack returns locked message to the back of the queue.
 func (dsq *DSQueue) ReturnBack(params []string) IResponse {
 	return dsq.returnMessageTo(params, QUEUE_DIRECTION_BACK)
 }
 
-// Delete non-locked message from the queue by message's ID
+// DeleteById deletes non-locked message from the queue by message's ID
 func (dsq *DSQueue) DeleteById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
@@ -367,7 +361,7 @@ func (dsq *DSQueue) DeleteById(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Delete message locked or unlocked from the queue by message's ID
+// ForceDelete deletes message locked or unlocked from the queue by message's ID
 func (dsq *DSQueue) ForceDelete(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
@@ -384,7 +378,7 @@ func (dsq *DSQueue) ForceDelete(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Set a user defined message lock timeout. Only locked message timeout can be set.
+// SetLockTimeout set lock timeout for the message that already locked.
 func (dsq *DSQueue) SetLockTimeout(params []string) IResponse {
 	var err *common.ErrorResponse
 	var msgId string
@@ -428,7 +422,7 @@ func (dsq *DSQueue) SetLockTimeout(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Delete locked message by id.
+// DeleteLockedById deletes locked message by id.
 func (dsq *DSQueue) DeleteLockedById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
 	if retData != nil {
@@ -446,7 +440,7 @@ func (dsq *DSQueue) DeleteLockedById(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Unlock locked message by id.
+// UnlockMessageById unlock locked message by id.
 // Message will be returned to the front/back of the queue based on Pop operation type (pop front/back)
 func (dsq *DSQueue) UnlockMessageById(params []string) IResponse {
 	msgId, retData := getMessageIdOnly(params)
@@ -811,7 +805,7 @@ func (dsq *DSQueue) update(ts int64) bool {
 	return delivered > 0 || cleaned > 0 || unlocked > 0
 }
 
-// Database related data management.
+// List of messages to sort them.
 type MessageSlice []*DSQMessage
 
 func (p MessageSlice) Len() int           { return len(p) }

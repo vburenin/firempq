@@ -29,19 +29,20 @@ func MakePayloadPrefix(serviceId string) string {
 	return serviceId + "\x02"
 }
 
+// StoreItemBodyInDB stores only message metadata in the database.
 func (d *DBService) StoreItemBodyInDB(item IItemMetaData) {
 	key := d.itemPrefix + item.GetId()
 	itemData, _ := item.Marshal()
 	d.database.FastStoreData(key, itemData)
 }
 
-// Returns message payload.
+// GetPayloadFromDB returns message payload.
 func (d *DBService) GetPayloadFromDB(itemId string) string {
 	payloadId := d.payloadPrefix + itemId
 	return common.UnsafeBytesToString(d.database.GetData(payloadId))
 }
 
-// storeFullMessage Stores messages data and payload data into database.
+// StoreFullItemInDB stores messages data and payload data into database.
 func (d *DBService) StoreFullItemInDB(item IItemMetaData, payload string) {
 	id := item.GetId()
 	itemKey := d.itemPrefix + id
@@ -51,12 +52,14 @@ func (d *DBService) StoreFullItemInDB(item IItemMetaData, payload string) {
 	d.database.FastStoreData2(itemKey, itemData, payloadKey, payloadData)
 }
 
+// DeleteItemFromDB removes item from database including its payload.
 func (d *DBService) DeleteItemFromDB(itemId string) {
 	itemKey := d.itemPrefix + itemId
 	payloadKey := d.payloadPrefix + itemId
 	d.database.FastDeleteData(itemKey, payloadKey)
 }
 
+// GetItemIterator returns an iterator over items which are matching provided prefix.
 func (d *DBService) GetItemIterator() ItemIterator {
 	return d.database.IterData(d.itemPrefix)
 }
