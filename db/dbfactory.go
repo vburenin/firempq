@@ -9,16 +9,6 @@ import (
 	. "firempq/api"
 )
 
-var inmemory bool = false
-
-func UseMemoryDB() {
-	inmemory = true
-}
-
-func UseLevelDB() {
-	inmemory = false
-}
-
 var database DataStorage = nil
 var lock sync.Mutex
 
@@ -27,6 +17,10 @@ func GetDatabase() DataStorage {
 	lock.Lock()
 	defer lock.Unlock()
 	return getDatabase()
+}
+
+func SetDatabase(ds DataStorage) {
+	database = ds
 }
 
 func getDatabase() DataStorage {
