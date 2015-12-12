@@ -22,11 +22,11 @@ func descKey(serviceId string) string {
 func LoadServiceConfig(serviceId string, cfg Marshalable) error {
 	db := db.GetDatabase()
 	data := db.GetData(cfgKey(serviceId))
-	if data == nil {
+	if data == "" {
 		return common.NotFoundRequest("No service settings found: " + serviceId)
 	}
 
-	if err := cfg.Unmarshal(data); err != nil {
+	if err := cfg.Unmarshal([]byte(data)); err != nil {
 		log.Error("Error in '%s' service settings: %s", serviceId, err.Error())
 		return common.ServerError("Service settings error: " + serviceId)
 	}
@@ -37,7 +37,7 @@ func LoadServiceConfig(serviceId string, cfg Marshalable) error {
 func SaveServiceConfig(serviceId string, conf MarshalToBin) error {
 	db := db.GetDatabase()
 	data, _ := conf.Marshal()
-	err := db.StoreData(cfgKey(serviceId), data)
+	err := db.StoreData(cfgKey(serviceId), string(data))
 	if err != nil {
 		log.Error("Failed to save config: %s", err.Error())
 		return common.ServerError("Can not save service data: " + serviceId)
@@ -53,7 +53,7 @@ func GetServiceDescriptions() common.ServiceDescriptionList {
 	defer descIter.Close()
 
 	for ; descIter.Valid(); descIter.Next() {
-		svcDesc, err := common.NewServiceDescriptionFromBinary(descIter.GetValue())
+		svcDesc, err := common.UnmarshalServiceDesc([]byte(descIter.GetValue()))
 		if err != nil {
 			log.Error("Coudn't read service '%s' description: %s", descIter.GetTrimKey(), err.Error())
 			continue
@@ -67,15 +67,15 @@ func GetServiceDescriptions() common.ServiceDescriptionList {
 func GetServiceDescription(serviceId string) *common.ServiceDescription {
 	db := db.GetDatabase()
 	data := db.GetData(descKey(serviceId))
-	desc, _ := common.NewServiceDescriptionFromBinary(data)
+	desc, _ := common.UnmarshalServiceDesc([]byte(data))
 	return desc
 }
 
-// SaveServiceConfig saves service config into database.
+// SaveServiceDescription saves service config into database.
 func SaveServiceDescription(desc *common.ServiceDescription) error {
 	db := db.GetDatabase()
 	data, _ := desc.Marshal()
-	return db.StoreData(desc.ServiceId, data)
+	return db.StoreData(desc.ServiceId, string(data))
 }
 
 func DeleteServiceData(serviceId string) {

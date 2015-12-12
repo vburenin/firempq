@@ -1,7 +1,6 @@
 package features
 
 import (
-	"firempq/common"
 	"firempq/db"
 
 	. "firempq/api"
@@ -31,15 +30,12 @@ func MakePayloadPrefix(serviceId string) string {
 
 // StoreItemBodyInDB stores only message metadata in the database.
 func (d *DBService) StoreItemBodyInDB(item IItemMetaData) {
-	key := d.itemPrefix + item.GetId()
-	itemData, _ := item.Marshal()
-	d.database.FastStoreData(key, itemData)
+	d.database.CachedStore(d.itemPrefix+item.GetId(), item.StringMarshal())
 }
 
 // GetPayloadFromDB returns message payload.
 func (d *DBService) GetPayloadFromDB(itemId string) string {
-	payloadId := d.payloadPrefix + itemId
-	return common.UnsafeBytesToString(d.database.GetData(payloadId))
+	return d.database.GetData(d.payloadPrefix + itemId)
 }
 
 // StoreFullItemInDB stores messages data and payload data into database.
@@ -47,16 +43,12 @@ func (d *DBService) StoreFullItemInDB(item IItemMetaData, payload string) {
 	id := item.GetId()
 	itemKey := d.itemPrefix + id
 	payloadKey := d.payloadPrefix + id
-	itemData, _ := item.Marshal()
-	payloadData := common.UnsafeStringToBytes(payload)
-	d.database.FastStoreData2(itemKey, itemData, payloadKey, payloadData)
+	d.database.StoreData(itemKey, item.StringMarshal(), payloadKey, payload)
 }
 
 // DeleteItemFromDB removes item from database including its payload.
 func (d *DBService) DeleteItemFromDB(itemId string) {
-	itemKey := d.itemPrefix + itemId
-	payloadKey := d.payloadPrefix + itemId
-	d.database.FastDeleteData(itemKey, payloadKey)
+	d.database.CachedDeleteData(d.itemPrefix+itemId, d.payloadPrefix+itemId)
 }
 
 // GetItemIterator returns an iterator over items which are matching provided prefix.

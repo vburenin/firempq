@@ -6,7 +6,7 @@ import (
 
 type IItemMetaData interface {
 	GetId() string
-	Marshal() (data []byte, err error)
+	StringMarshal() string
 }
 
 type IItem interface {
@@ -14,9 +14,11 @@ type IItem interface {
 	GetPayload() string
 }
 
-// All responses returned to the client must follow this interface.
+// IResponse is a standard interface to return as a response.
 type IResponse interface {
+	// GetResponse returns serialized string of data that can be returned to the client.
 	GetResponse() string
+	// IsError tells if this response is actually an error.
 	IsError() bool
 }
 

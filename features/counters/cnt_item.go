@@ -88,29 +88,8 @@ func (c *IntLinearCounter) correctLimits() {
 	}
 }
 
-func (c *IntLinearCounter) Marshal() ([]byte, error) {
-	buf := make([]byte, 6*8+1)
-	buf[0] = byte(c.CounterType)
-
-	offset := 1
-	binary.BigEndian.PutUint64(buf[offset:], uint64(c.Value))
-
-	offset += 8
-	binary.BigEndian.PutUint64(buf[offset:], uint64(c.MinValue))
-
-	offset += 8
-	binary.BigEndian.PutUint64(buf[offset:], uint64(c.MaxValue))
-
-	offset += 8
-	binary.BigEndian.PutUint64(buf[offset:], math.Float64bits(c.CountRate))
-
-	offset += 8
-	binary.BigEndian.PutUint64(buf[offset:], uint64(c.LastUpdateNanoTs))
-
-	offset += 8
-	binary.BigEndian.PutUint64(buf[offset:], uint64(c.InactiveTTL))
-
-	return buf, nil
+func (c *IntLinearCounter) StringMarshal() string {
+	return ""
 }
 
 func IntLinearCountersFromBytes(itemId string, data []byte) *IntLinearCounter {

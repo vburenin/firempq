@@ -67,7 +67,7 @@ type DSQueue struct {
 	// All locked messages and messages with delivery interval > 0
 	inFlightHeap *structs.IndexedPriorityQueue
 	// Just a message map message id to the full message data.
-	allMessagesMap map[string]*DSQMessage
+	allMessagesMap map[string]*DSQMetaMessage
 
 	lock sync.Mutex
 
@@ -92,7 +92,7 @@ func CreateDSQueue(desc *common.ServiceDescription, params []string) ISvc {
 func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 	dsq := DSQueue{
 		desc:                  desc,
-		allMessagesMap:        make(map[string]*DSQMessage),
+		allMessagesMap:        make(map[string]*DSQMetaMessage),
 		availableMsgs:         structs.NewListQueue(),
 		highPriorityFrontMsgs: structs.NewListQueue(),
 		highPriorityBackMsgs:  structs.NewListQueue(),
@@ -468,7 +468,7 @@ func (dsq *DSQueue) UnlockMessageById(params []string) IResponse {
 // Internal subroutines
 //
 
-func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
+func (dsq *DSQueue) addMessageToQueue(msg *DSQMetaMessage) error {
 
 	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT:
@@ -487,7 +487,7 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMessage) error {
 	return nil
 }
 
-func (dsq *DSQueue) storeMessage(msg *DSQMessage, payload string) IResponse {
+func (dsq *DSQueue) storeMessage(msg *DSQMetaMessage, payload string) IResponse {
 	if _, ok := dsq.allMessagesMap[msg.Id]; ok {
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
@@ -543,7 +543,7 @@ func (dsq *DSQueue) push(params []string, direction int32) IResponse {
 
 	dsq.conf.LastPushTs = common.Uts()
 
-	msg := NewDSQMessage(msgId)
+	msg := NewDSQMetaMessage(msgId)
 	if deliveryDelay > 0 {
 		msg.DeliveryTs = common.Uts() + deliveryDelay
 	}
@@ -559,7 +559,7 @@ func (dsq *DSQueue) push(params []string, direction int32) IResponse {
 	return dsq.storeMessage(msg, payload)
 }
 
-func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMessage {
+func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMetaMessage {
 	var msgId = ""
 
 	if dsq.availableMsgs.Empty() && dsq.highPriorityFrontMsgs.Empty() && dsq.highPriorityBackMsgs.Empty() {
@@ -610,7 +610,7 @@ func (dsq *DSQueue) popMessage(direction int32, permanentPop bool) IResponse {
 	if msg == nil {
 		return common.NewItemsResponse([]IItem{})
 	}
-	retMsg := NewMsgItem(msg, dsq.GetPayloadFromDB(msg.Id))
+	retMsg := NewMsgItem(msg.Id, dsq.GetPayloadFromDB(msg.Id))
 	if permanentPop {
 		dsq.deleteMessageById(msg.Id)
 	}
@@ -638,7 +638,7 @@ func (dsq *DSQueue) returnMessageTo(params []string, place int32) IResponse {
 	return common.OK_RESPONSE
 }
 
-func (dsq *DSQueue) lockMessage(msg *DSQMessage) {
+func (dsq *DSQueue) lockMessage(msg *DSQMetaMessage) {
 	nowTs := common.Uts()
 	dsq.conf.LastPopTs = nowTs
 
@@ -649,7 +649,7 @@ func (dsq *DSQueue) lockMessage(msg *DSQMessage) {
 }
 
 // Remove message id from In Flight message heap.
-func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMessage, *common.ErrorResponse) {
+func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMetaMessage, *common.ErrorResponse) {
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
 		return nil, common.ERR_MSG_NOT_EXIST
@@ -666,7 +666,7 @@ func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMessage, *common.ErrorRes
 }
 
 // Delete message from the queue
-func (dsq *DSQueue) deleteMessage(msg *DSQMessage) {
+func (dsq *DSQueue) deleteMessage(msg *DSQMetaMessage) {
 	if msg == nil {
 		return
 	}
@@ -694,7 +694,7 @@ func (dsq *DSQueue) deleteMessageById(msgId string) bool {
 }
 
 // Adds message into expiration heap. Not thread safe!
-func (dsq *DSQueue) trackExpiration(msg *DSQMessage) {
+func (dsq *DSQueue) trackExpiration(msg *DSQMetaMessage) {
 	ok := dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(dsq.conf.MsgTtl))
 	if !ok {
 		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
@@ -703,7 +703,7 @@ func (dsq *DSQueue) trackExpiration(msg *DSQMessage) {
 
 // Attempts to return a message into the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
-func (dsq *DSQueue) returnTo(msg *DSQMessage, place int32) *common.ErrorResponse {
+func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResponse {
 	lim := dsq.conf.PopCountLimit
 	if lim > 0 {
 		if lim <= msg.PopCount {
@@ -720,7 +720,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMessage, place int32) *common.ErrorResponse
 }
 
 // Finish message delivery to the queue.
-func (dsq *DSQueue) completeDelivery(msg *DSQMessage) {
+func (dsq *DSQueue) completeDelivery(msg *DSQMetaMessage) {
 	dsq.addMessageToQueue(msg)
 	dsq.StoreItemBodyInDB(msg)
 }
@@ -806,7 +806,7 @@ func (dsq *DSQueue) update(ts int64) bool {
 }
 
 // List of messages to sort them.
-type MessageSlice []*DSQMessage
+type MessageSlice []*DSQMetaMessage
 
 func (p MessageSlice) Len() int           { return len(p) }
 func (p MessageSlice) Less(i, j int) bool { return p[i].SerialNumber < p[j].SerialNumber }
@@ -825,7 +825,7 @@ func (dsq *DSQueue) loadAllMessages() {
 	cfg := dsq.conf
 	for ; iter.Valid(); iter.Next() {
 		msgId := common.UnsafeBytesToString(iter.GetTrimKey())
-		msg := UnmarshalDSQMessage(msgId, iter.GetValue())
+		msg := UnmarshalDSQMetaMessage(msgId, iter.GetValue())
 		if msg == nil {
 			continue
 		}

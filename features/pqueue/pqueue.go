@@ -39,7 +39,7 @@ type PQueue struct {
 	// All locked messages
 	inFlightHeap *structs.IndexedPriorityQueue
 	// Just a message map message id to the full message data.
-	msgMap map[string]*PQMessage
+	msgMap map[string]*PQMsgMetaData
 
 	// Set as True if the service is closed.
 	closedState common.BoolFlag
@@ -67,7 +67,7 @@ func initPQueue(desc *common.ServiceDescription, config *PQConfig) *PQueue {
 	pq := PQueue{
 		desc:               desc,
 		config:             config,
-		msgMap:             make(map[string]*PQMessage),
+		msgMap:             make(map[string]*PQMsgMetaData),
 		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
 		expireHeap:         structs.NewIndexedPriorityQueue(),
 		inFlightHeap:       structs.NewIndexedPriorityQueue(),
@@ -268,11 +268,11 @@ func (pq *PQueue) Push(params []string) IResponse {
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 	pq.msgSerialNumber += 1
-	msg := NewPQMessage(msgId, priority, pq.msgSerialNumber)
+	msg := NewPQMsgMetaData(msgId, priority, pq.msgSerialNumber)
 	return pq.storeMessage(msg, payload)
 }
 
-func (pq *PQueue) storeMessage(msg *PQMessage, payload string) IResponse {
+func (pq *PQueue) storeMessage(msg *PQMsgMetaData, payload string) IResponse {
 	if _, ok := pq.msgMap[msg.Id]; ok {
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
@@ -381,7 +381,7 @@ func (pq *PQueue) PopWait(params []string) IResponse {
 	return common.NewItemsResponse(pq.popWaitItems(lockTimeout, popWaitTimeout, limit))
 }
 
-func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
+func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMsgMetaData {
 	if pq.availMsgs.Empty() {
 		return nil
 	}
@@ -399,7 +399,7 @@ func (pq *PQueue) popMetaMessage(lockTimeout int64) *PQMessage {
 }
 
 func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []IItem {
-	var msgsMeta []*PQMessage
+	var msgsMeta []*PQMsgMetaData
 	pq.lock.Lock()
 	for int64(len(msgsMeta)) < limit {
 		mm := pq.popMetaMessage(lockTimeout)
@@ -413,7 +413,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64) []IItem {
 
 	var msgs []IItem
 	for _, mm := range msgsMeta {
-		msgs = append(msgs, NewMsgItem(mm, pq.GetPayloadFromDB(mm.Id)))
+		msgs = append(msgs, NewMsgPayloadData(mm.Id, pq.GetPayloadFromDB(mm.Id)))
 	}
 
 	return msgs
@@ -451,7 +451,7 @@ func (pq *PQueue) popWaitItems(lockTimeout, popWaitTimeout, limit int64) []IItem
 	}
 }
 
-func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
+func (pq *PQueue) lockMessage(msg *PQMsgMetaData, lockTimeout int64) {
 	nowTs := common.Uts()
 	pq.config.LastPopTs = nowTs
 	// Increase number of pop attempts.
@@ -462,7 +462,7 @@ func (pq *PQueue) lockMessage(msg *PQMessage, lockTimeout int64) {
 }
 
 // Remove message id from In Flight message heap.
-func (pq *PQueue) unflightMessage(msgId string) (*PQMessage, *common.ErrorResponse) {
+func (pq *PQueue) unflightMessage(msgId string) (*PQMsgMetaData, *common.ErrorResponse) {
 	msg, ok := pq.msgMap[msgId]
 	if !ok {
 		return nil, common.ERR_MSG_NOT_EXIST
@@ -592,7 +592,7 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 }
 
 // Adds message into expiration heap. Not thread safe!
-func (pq *PQueue) trackExpiration(msg *PQMessage) {
+func (pq *PQueue) trackExpiration(msg *PQMsgMetaData) {
 	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.config.MsgTtl))
 	if !ok {
 		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
@@ -601,7 +601,7 @@ func (pq *PQueue) trackExpiration(msg *PQMessage) {
 
 // Attempts to return a message into the front of the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
-func (pq *PQueue) returnToFront(msg *PQMessage) *common.ErrorResponse {
+func (pq *PQueue) returnToFront(msg *PQMsgMetaData) *common.ErrorResponse {
 	lim := pq.config.PopCountLimit
 	if lim > 0 {
 		if lim <= msg.PopCount {
@@ -679,7 +679,7 @@ func (pq *PQueue) update(ts int64) bool {
 }
 
 // MessageSlice data type to sort messages.
-type MessageSlice []*PQMessage
+type MessageSlice []*PQMsgMetaData
 
 func (p MessageSlice) Len() int           { return len(p) }
 func (p MessageSlice) Less(i, j int) bool { return p[i].SerialNumber < p[j].SerialNumber }
@@ -695,7 +695,7 @@ func (pq *PQueue) loadAllMessages() {
 	cfg := pq.config
 	for ; msgIter.Valid(); msgIter.Next() {
 		msgId := common.UnsafeBytesToString(msgIter.GetTrimKey())
-		pqmsg := UnmarshalPQMessage(msgId, msgIter.GetValue())
+		pqmsg := UnmarshalPQMsgMetaData(msgId, msgIter.GetValue())
 
 		// Message data has errors.
 		if pqmsg == nil {

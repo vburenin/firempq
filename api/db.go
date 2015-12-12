@@ -11,14 +11,13 @@ type ItemIterator interface {
 
 type DataStorage interface {
 	WaitFlush()
-	FastStoreData(id string, data []byte)
-	FastStoreData2(id1 string, data1 []byte, id2 string, data2 []byte)
+	CachedStore(data ...string)
 	DeleteDataWithPrefix(prefix string) int
-	StoreData(id string, data []byte) error
-	DeleteData(id string)
-	FastDeleteData(id ...string)
+	StoreData(data ...string) error
+	DeleteData(id ...string)
+	CachedDeleteData(id ...string)
 	IterData(prefix string) ItemIterator
-	GetData(id string) []byte
+	GetData(id string) string
 	Close()
 	IsClosed() bool
 }

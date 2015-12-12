@@ -20,14 +20,14 @@ var defaultReadOptions = levigo.NewReadOptions()
 // Default LevelDB write options.
 var defaultWriteOptions = levigo.NewWriteOptions()
 
-// DataStorage A high level structure on top of LevelDB.
+// LevelDBStorage A high level cached structure on top of LevelDB.
 // It caches item storing them into database
 // as multiple large batches later.
 type LevelDBStorage struct {
 	db             *levigo.DB        // Pointer the the instance of level db.
 	dbName         string            // LevelDB database name.
-	itemCache      map[string][]byte // Active cache for item metadata.
-	tmpItemCache   map[string][]byte // Active cache during flush operation.
+	itemCache      map[string]string // Active cache for item metadata.
+	tmpItemCache   map[string]string // Active cache during flush operation.
 	cacheLock      sync.Mutex        // Used for caches access.
 	flushLock      sync.Mutex        // Used to prevent double flush.
 	closed         bool
@@ -35,11 +35,11 @@ type LevelDBStorage struct {
 	forceFlushChan chan bool
 }
 
-// NewDataStorage is a constructor of DataStorage.
+// NewLevelDBStorage is a constructor of DataStorage.
 func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
 	ds := LevelDBStorage{
 		dbName:         dbName,
-		itemCache:      make(map[string][]byte),
+		itemCache:      make(map[string]string),
 		tmpItemCache:   nil,
 		closed:         false,
 		forceFlushChan: make(chan bool, 1),
@@ -92,21 +92,18 @@ func (ds *LevelDBStorage) WaitFlush() {
 }
 
 // CachedStoreItem stores data into the cache.
-func (ds *LevelDBStorage) FastStoreData(id string, data []byte) {
+func (ds *LevelDBStorage) CachedStore(data ...string) {
+	if len(data)%2 != 0 {
+		panic("Number of arguments must be even!")
+	}
 	ds.cacheLock.Lock()
-	ds.itemCache[id] = data
+	for i := 0; i < len(data); i += 2 {
+		ds.itemCache[data[i]] = data[i+1]
+	}
 	ds.cacheLock.Unlock()
 }
 
-// CachedStoreItemWithPayload stores data into the cache.
-func (ds *LevelDBStorage) FastStoreData2(id1 string, data1 []byte, id2 string, data2 []byte) {
-	ds.cacheLock.Lock()
-	ds.itemCache[id1] = data1
-	ds.itemCache[id2] = data2
-	ds.cacheLock.Unlock()
-}
-
-// DeleteServiceData deletes all service data such as service metadata, items and payloads.
+// DeleteDataWithPrefix deletes all service data such as service metadata, items and payloads.
 func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 	ds.flushLock.Lock()
 	defer ds.flushLock.Unlock()
@@ -138,42 +135,50 @@ func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 func (ds *LevelDBStorage) flushCache() {
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = ds.itemCache
-	ds.itemCache = make(map[string][]byte)
+	ds.itemCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
 	wb := levigo.NewWriteBatch()
 	for k, v := range ds.tmpItemCache {
 		key := common.UnsafeStringToBytes(k)
-		if v == nil {
+		if v == "" {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, v)
+			wb.Put(key, common.UnsafeStringToBytes(v))
 		}
 	}
 	ds.db.Write(defaultWriteOptions, wb)
 }
 
-// IterServiceItems returns new over all service item metadata.
-// Service name used as a prefix to file all service items.
+// IterData returns an iterator over all data with prefix.
 func (ds *LevelDBStorage) IterData(prefix string) ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
 	return makeItemIterator(iter, common.UnsafeStringToBytes(prefix))
 }
 
-// SaveServiceMeta stores service metadata into database.
-func (ds *LevelDBStorage) StoreData(id string, data []byte) error {
-	return ds.db.Put(defaultWriteOptions, common.UnsafeStringToBytes(id), data)
+// StoreData data directly into the database stores service metadata into database.
+func (ds *LevelDBStorage) StoreData(data ...string) error {
+	if len(data)%2 != 0 {
+		panic("Number of arguments must be even!")
+	}
+	wb := levigo.NewWriteBatch()
+	for i := 0; i < len(data); i += 2 {
+		wb.Put(common.UnsafeStringToBytes(data[i]),
+			common.UnsafeStringToBytes(data[i+1]))
+	}
+	return ds.db.Write(defaultWriteOptions, wb)
 }
 
-func (ds *LevelDBStorage) DeleteData(id string) {
-	ds.db.Delete(defaultWriteOptions, common.UnsafeStringToBytes(id))
+func (ds *LevelDBStorage) DeleteData(id ...string) {
+	wb := levigo.NewWriteBatch()
+	for _, i := range id {
+		wb.Delete(common.UnsafeStringToBytes(i))
+	}
+	ds.db.Write(defaultWriteOptions, wb)
 }
 
-// GetPayload returns item payload. Three places are checked:
-// 1. Top level cache.
-// 2. Temp cache while data is getting flushed into db.
-// 3. If not found in cache, will mane a DB lookup.
-func (ds *LevelDBStorage) GetData(id string) []byte {
+// GetData looks data looks for and item going through each layer of cache finally looking into database.
+func (ds *LevelDBStorage) GetData(id string) string {
 	ds.cacheLock.Lock()
 	data, ok := ds.itemCache[id]
 	if ok {
@@ -187,14 +192,14 @@ func (ds *LevelDBStorage) GetData(id string) []byte {
 	}
 	ds.cacheLock.Unlock()
 	value, _ := ds.db.Get(defaultReadOptions, common.UnsafeStringToBytes(id))
-	return value
+	return common.UnsafeBytesToString(value)
 }
 
-// DeleteItem deletes item metadata and payload, affects cache only until flushed.
-func (ds *LevelDBStorage) FastDeleteData(id ...string) {
+// CachedDeleteData deletes item metadata and payload, affects cache only until flushed.
+func (ds *LevelDBStorage) CachedDeleteData(id ...string) {
 	ds.cacheLock.Lock()
 	for _, i := range id {
-		ds.itemCache[i] = nil
+		ds.itemCache[i] = ""
 	}
 	ds.cacheLock.Unlock()
 }

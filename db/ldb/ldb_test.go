@@ -16,21 +16,21 @@ func TestPutGetData(t *testing.T) {
 			d, err := NewLevelDBStorage(DBDir)
 			So(err, ShouldBeNil)
 
-			d.FastStoreData2("id1", []byte("data1"), "id2", []byte("data2"))
+			d.CachedStore("id1", "data1", "id2", "data2")
 			d.Close()
 
 			d, err = NewLevelDBStorage(DBDir)
 			So(err, ShouldBeNil)
 			data1 := d.GetData("id1")
 			data2 := d.GetData("id2")
-			So(data1, ShouldResemble, []byte("data1"))
-			So(data2, ShouldResemble, []byte("data2"))
+			So(data1, ShouldEqual, "data1")
+			So(data2, ShouldEqual, "data2")
 
 			total := d.DeleteDataWithPrefix("id")
 			So(total, ShouldEqual, 2)
 
 			data1 = d.GetData("id1")
-			So(data1, ShouldBeNil)
+			So(data1, ShouldEqual, "")
 			d.Close()
 			os.RemoveAll(DBDir)
 		})
@@ -40,17 +40,17 @@ func TestPutGetData(t *testing.T) {
 			d, err := NewLevelDBStorage(DBDir)
 
 			So(err, ShouldBeNil)
-			d.StoreData("key1", []byte("keydata"))
+			d.StoreData("key1", "keydata")
 			d.Close()
 
 			d, err = NewLevelDBStorage(DBDir)
 			So(err, ShouldBeNil)
 			data := d.GetData("key1")
-			So(data, ShouldResemble, []byte("keydata"))
+			So(data, ShouldEqual, "keydata")
 
-			d.FastDeleteData("key1")
+			d.CachedDeleteData("key1")
 			data = d.GetData("key1")
-			So(data, ShouldBeNil)
+			So(data, ShouldEqual, "")
 
 			d.Close()
 
@@ -58,7 +58,7 @@ func TestPutGetData(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			data = d.GetData("key1")
-			So(data, ShouldBeNil)
+			So(data, ShouldEqual, "")
 
 			d.Close()
 			os.RemoveAll(DBDir)
@@ -72,10 +72,10 @@ func TestPutGetData(t *testing.T) {
 			}
 			So(err, ShouldBeNil)
 
-			d.StoreData("key1", []byte("keydata"))
-			d.StoreData("key2", []byte("keydata"))
-			d.StoreData("key3", []byte("keydata"))
-			d.StoreData("eee3", []byte("keydata"))
+			d.StoreData("key1", "keydata")
+			d.StoreData("key2", "keydata")
+			d.StoreData("key3", "keydata")
+			d.StoreData("eee3", "keydata")
 
 			i := d.IterData("key")
 			So(i.Valid(), ShouldBeTrue)

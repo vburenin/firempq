@@ -10,13 +10,13 @@ import (
 
 type InMemDBService struct {
 	mutex   sync.Mutex
-	mapData map[string][]byte
+	mapData map[string]string
 	closed  bool
 }
 
 func NewInMemDBService() *InMemDBService {
 	return &InMemDBService{
-		mapData: make(map[string][]byte),
+		mapData: make(map[string]string),
 	}
 }
 
@@ -24,16 +24,14 @@ func (d *InMemDBService) WaitFlush()     {}
 func (d *InMemDBService) Close()         { d.closed = true }
 func (d *InMemDBService) IsClosed() bool { return d.closed }
 
-func (d *InMemDBService) FastStoreData(id string, data []byte) {
+func (d *InMemDBService) CachedStore(data ...string) {
+	if len(data)%2 != 0 {
+		panic("Number of arguments should be even!")
+	}
 	d.mutex.Lock()
-	d.mapData[id] = data
-	d.mutex.Unlock()
-}
-
-func (d *InMemDBService) FastStoreData2(id1 string, data1 []byte, id2 string, data2 []byte) {
-	d.mutex.Lock()
-	d.mapData[id1] = data1
-	d.mapData[id2] = data2
+	for i := 0; i < len(data); i += 2 {
+		d.mapData[data[i]] = data[i+1]
+	}
 	d.mutex.Unlock()
 }
 
@@ -52,18 +50,12 @@ func (d *InMemDBService) DeleteDataWithPrefix(prefix string) int {
 	return len(keys)
 }
 
-func (d *InMemDBService) StoreData(id string, data []byte) error {
-	d.FastStoreData(id, data)
+func (d *InMemDBService) StoreData(data ...string) error {
+	d.CachedStore(data...)
 	return nil
 }
 
-func (d *InMemDBService) DeleteData(id string) {
-	d.mutex.Lock()
-	delete(d.mapData, id)
-	d.mutex.Unlock()
-}
-
-func (d *InMemDBService) FastDeleteData(id ...string) {
+func (d *InMemDBService) DeleteData(id ...string) {
 	d.mutex.Lock()
 	for _, k := range id {
 		delete(d.mapData, k)
@@ -71,11 +63,15 @@ func (d *InMemDBService) FastDeleteData(id ...string) {
 	d.mutex.Unlock()
 }
 
+func (d *InMemDBService) CachedDeleteData(id ...string) {
+	d.DeleteData(id...)
+}
+
 func (d *InMemDBService) IterData(prefix string) ItemIterator {
 	return NewInMemIterator(d.mapData, prefix)
 }
 
-func (d *InMemDBService) GetData(id string) []byte {
+func (d *InMemDBService) GetData(id string) string {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	return d.mapData[id]
@@ -85,12 +81,12 @@ type InMemIterator struct {
 	keyList []string
 	curPos  int
 	prefix  string
-	data    map[string][]byte
+	data    map[string]string
 }
 
-func NewInMemIterator(data map[string][]byte, prefix string) *InMemIterator {
+func NewInMemIterator(data map[string]string, prefix string) *InMemIterator {
 	keylist := make([]string, 0, 100)
-	dataCopy := make(map[string][]byte)
+	dataCopy := make(map[string]string)
 	for k, v := range data {
 		if strings.HasPrefix(k, prefix) {
 			keylist = append(keylist, k)
@@ -116,7 +112,7 @@ func (iter *InMemIterator) Valid() bool {
 }
 
 func (iter *InMemIterator) GetValue() []byte {
-	return iter.data[iter.keyList[iter.curPos]]
+	return []byte(iter.data[iter.keyList[iter.curPos]])
 }
 
 func (iter *InMemIterator) GetKey() []byte {

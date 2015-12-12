@@ -10,17 +10,17 @@ const (
 	MAX_MESSAGE_ID_LENGTH = 64
 )
 
-type PQMessage struct {
+type PQMsgMetaData struct {
 	Id string
 	PQueueMsgData
 }
 
-func NewPQMessage(id string, priority int64, serialNumber uint64) *PQMessage {
-	return &PQMessage{id, PQueueMsgData{priority, common.Uts(), 0, 0, serialNumber}}
+func NewPQMsgMetaData(id string, priority int64, serialNumber uint64) *PQMsgMetaData {
+	return &PQMsgMetaData{id, PQueueMsgData{priority, common.Uts(), 0, 0, serialNumber}}
 }
 
-func UnmarshalPQMessage(msgId string, buf []byte) *PQMessage {
-	p := PQMessage{Id: msgId}
+func UnmarshalPQMsgMetaData(msgId string, buf []byte) *PQMsgMetaData {
+	p := PQMsgMetaData{Id: msgId}
 	if err := p.Unmarshal(buf); err != nil {
 		log.Error("Could not unmarshal message: %s", msgId)
 		return nil
@@ -28,26 +28,31 @@ func UnmarshalPQMessage(msgId string, buf []byte) *PQMessage {
 	return &p
 }
 
-func (self *PQMessage) GetId() string {
+func (self *PQMsgMetaData) GetId() string {
 	return self.Id
 }
 
-type MsgItem struct {
-	msgMeta *PQMessage
+func (self *PQMsgMetaData) StringMarshal() string {
+	data, _ := self.Marshal()
+	return common.UnsafeBytesToString(data)
+}
+
+type PQPayloadData struct {
+	Id      string
 	payload string
 }
 
-func NewMsgItem(pqMsg *PQMessage, payload string) *MsgItem {
-	return &MsgItem{pqMsg, payload}
+func NewMsgPayloadData(id string, payload string) *PQPayloadData {
+	return &PQPayloadData{id, payload}
 }
 
-func (m *MsgItem) GetId() string {
-	return m.msgMeta.GetId()
+func (m *PQPayloadData) GetId() string {
+	return m.Id
 }
 
-func (m *MsgItem) GetPayload() string {
+func (m *PQPayloadData) GetPayload() string {
 	return m.payload
 }
 
-var _ IItem = &MsgItem{}
-var _ IItemMetaData = &PQMessage{}
+var _ IItem = &PQPayloadData{}
+var _ IItemMetaData = &PQMsgMetaData{}

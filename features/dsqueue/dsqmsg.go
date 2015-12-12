@@ -10,41 +10,46 @@ const (
 	MAX_MESSAGE_ID_LENGTH = 64
 )
 
-type DSQMessage struct {
+type DSQMetaMessage struct {
 	Id string
 	DSQueueMsgData
 }
 
-func NewDSQMessage(id string) *DSQMessage {
-	return &DSQMessage{id, DSQueueMsgData{common.Uts(), 0, 0, 0, 0, 0}}
+func NewDSQMetaMessage(id string) *DSQMetaMessage {
+	return &DSQMetaMessage{id, DSQueueMsgData{common.Uts(), 0, 0, 0, 0, 0}}
 }
 
-func UnmarshalDSQMessage(msgId string, buf []byte) *DSQMessage {
-	msg := DSQMessage{msgId, DSQueueMsgData{}}
+func UnmarshalDSQMetaMessage(msgId string, buf []byte) *DSQMetaMessage {
+	msg := DSQMetaMessage{msgId, DSQueueMsgData{}}
 	msg.Unmarshal(buf)
 	return &msg
 }
 
-func (m *DSQMessage) GetId() string {
+func (m *DSQMetaMessage) GetId() string {
 	return m.Id
 }
 
-type MsgItem struct {
-	msgMeta *DSQMessage
+func (m *DSQMetaMessage) StringMarshal() string {
+	data, _ := m.Marshal()
+	return common.UnsafeBytesToString(data)
+}
+
+type DSQPayloadData struct {
+	Id      string
 	payload string
 }
 
-func NewMsgItem(pqMsg *DSQMessage, payload string) *MsgItem {
-	return &MsgItem{pqMsg, payload}
+func NewMsgItem(id string, payload string) *DSQPayloadData {
+	return &DSQPayloadData{id, payload}
 }
 
-func (m *MsgItem) GetId() string {
-	return m.msgMeta.GetId()
+func (m *DSQPayloadData) GetId() string {
+	return m.Id
 }
 
-func (m *MsgItem) GetPayload() string {
+func (m *DSQPayloadData) GetPayload() string {
 	return m.payload
 }
 
-var _ IItem = &MsgItem{}
-var _ IItemMetaData = &DSQMessage{}
+var _ IItem = &DSQPayloadData{}
+var _ IItemMetaData = &DSQMetaMessage{}

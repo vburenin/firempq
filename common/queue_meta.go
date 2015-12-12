@@ -11,17 +11,17 @@ const (
 
 func NewServiceDescription(sType string, exportId uint64, name string) *ServiceDescription {
 	return &ServiceDescription{
-		ExportId: exportId,
-		SType:    sType,
-		Name:     name,
-		CreateTs: Uts(),
-		Disabled: false,
-		ToDelete: false,
+		ExportId:  exportId,
+		SType:     sType,
+		Name:      name,
+		CreateTs:  Uts(),
+		Disabled:  false,
+		ToDelete:  false,
 		ServiceId: MakeServiceId(exportId),
 	}
 }
 
-func NewServiceDescriptionFromBinary(data []byte) (*ServiceDescription, error) {
+func UnmarshalServiceDesc(data []byte) (*ServiceDescription, error) {
 	sd := ServiceDescription{}
 	err := sd.Unmarshal(data)
 	if err != nil {

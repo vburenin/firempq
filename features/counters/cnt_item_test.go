@@ -5,45 +5,6 @@ import (
 	"time"
 )
 
-func TestBinary(t *testing.T) {
-	cnt := NewIntLinearCounter("id", 100, 0, 20, 30.222, 200)
-	data, _ := cnt.Marshal()
-
-	cntCopy := IntLinearCountersFromBytes("id", data)
-
-	if cnt.Id != cntCopy.Id {
-		t.Fatal("Id failed!")
-	}
-
-	if cntCopy.CounterType != CNT_INT_COUNTER {
-		t.Fatal("Type Failed!")
-	}
-
-	if cnt.Value != cntCopy.Value {
-		t.Fatal("Value Failed!")
-	}
-
-	if cnt.MinValue != cntCopy.MinValue {
-		t.Fatal("Min Value Failed!")
-	}
-
-	if cnt.MaxValue != cntCopy.MaxValue {
-		t.Fatal("Max Value Failed!")
-	}
-
-	if cnt.CountRate != cntCopy.CountRate {
-		t.Fatal("Count rate failed!")
-	}
-
-	if cnt.LastUpdateNanoTs != cntCopy.LastUpdateNanoTs {
-		t.Fatal("Update ts failed")
-	}
-
-	if cnt.InactiveTTL != cntCopy.InactiveTTL {
-		t.Fatal("Inactive TTL!")
-	}
-}
-
 func TestAutoDecrement(t *testing.T) {
 	cnt := NewIntLinearCounter("id", 1000, 0, 10000, -100.0, 200)
 
