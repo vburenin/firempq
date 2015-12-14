@@ -21,6 +21,8 @@ type PQueueConfigData struct {
 	UnlockBatchSize      int64
 	MaxPopWaitTimeout    int64
 	MaxPopBatchSize      int64
+	MaxLockTimeout       int64
+	MaxDeliveryTimeout   int64
 }
 
 // DSQueueConfigData a config specific to a DSQueue
@@ -33,6 +35,8 @@ type DSQueueConfigData struct {
 	UnlockBatchSize      int64
 	MaxPopWaitTimeout    int64
 	MaxPopBatchSize      int64
+	MaxLockTimeout       int64
+	MaxDeliveryTimeout   int64
 }
 
 // Config is a generic service config type.
@@ -50,6 +54,14 @@ type Config struct {
 	BinaryLogBufferSize int
 	BinaryLogPageSize   uint64
 	BinaryLogFrameSize  uint64
+}
+
+var CFG *Config
+var CFG_PQ *PQueueConfigData
+var CFG_DSQ *DSQueueConfigData
+
+func init() {
+	NewDefaultConfig()
 }
 
 func NewDefaultConfig() *Config {
@@ -72,6 +84,8 @@ func NewDefaultConfig() *Config {
 			UnlockBatchSize:      1000,
 			MaxPopWaitTimeout:    30000,
 			MaxPopBatchSize:      10,
+			MaxLockTimeout:       3600 * 1000,
+			MaxDeliveryTimeout:   3600 * 1000 * 12,
 		},
 		DSQueueConfig: DSQueueConfigData{
 			DefaultMessageTtl:    10 * 60 * 1000,
@@ -82,12 +96,15 @@ func NewDefaultConfig() *Config {
 			UnlockBatchSize:      1000,
 			MaxPopWaitTimeout:    30000,
 			MaxPopBatchSize:      10,
+			MaxLockTimeout:       3600 * 1000,
+			MaxDeliveryTimeout:   3600 * 1000 * 12,
 		},
 	}
+	CFG = &cfg
+	CFG_PQ = &(cfg.PQueueConfig)
+	CFG_DSQ = &(cfg.DSQueueConfig)
 	return &cfg
 }
-
-var CFG *Config = NewDefaultConfig()
 
 func getErrorLine(data []byte, byteOffset int64) (int64, int64, string) {
 	var lineNum int64 = 1
@@ -138,5 +155,7 @@ func ReadConfig() error {
 		return err
 	}
 	CFG = cfg
+	CFG_PQ = &(cfg.PQueueConfig)
+	CFG_DSQ = &(cfg.DSQueueConfig)
 	return nil
 }

@@ -30,7 +30,12 @@ type ISvc interface {
 	GetType() defs.ServiceType
 	GetTypeName() string
 	GetServiceId() string
-	Call(string, []string) IResponse
+	NewContext() ServiceContext
 	Clear()
 	Close()
+}
+
+type ServiceContext interface {
+	Call(cmd string, params []string) IResponse
+	Finish()
 }

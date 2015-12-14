@@ -20,7 +20,7 @@ type SessionHandler struct {
 	tokenizer    *common.Tokenizer
 	mainHandlers map[string]FuncHandler
 	active       bool
-	ctx          ISvc
+	ctx          ServiceContext
 	svcs         *facade.ServiceFacade
 	quitChan     chan bool
 }
@@ -45,7 +45,6 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade, quitChan c
 	sh.mainHandlers[CMD_CREATE_SVC] = sh.createServiceHandler
 	sh.mainHandlers[CMD_DROP_SVC] = sh.dropServiceHandler
 	sh.mainHandlers[CMD_LIST] = sh.listServicesHandler
-	sh.mainHandlers[CMD_CTX] = sh.ctxHandler
 	return sh
 }
 
@@ -120,18 +119,6 @@ func (s *SessionHandler) writeResponse(resp IResponse) error {
 	return nil
 }
 
-func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
-	if len(tokens) < 2 {
-		return common.ERR_SVC_CTX
-	}
-	svcName := tokens[0]
-	svc, exists := s.svcs.GetService(svcName)
-	if !exists {
-		return common.ERR_NO_SVC
-	}
-	return svc.Call(tokens[1], tokens[2:])
-}
-
 // Handler that creates a service.
 func (s *SessionHandler) createServiceHandler(tokens []string) IResponse {
 	if len(tokens) < 2 {
@@ -177,7 +164,7 @@ func (s *SessionHandler) setCtxHandler(tokens []string) IResponse {
 	if !exists {
 		return common.ERR_NO_SVC
 	}
-	s.ctx = svc
+	s.ctx = svc.NewContext()
 	return common.OK_RESPONSE
 }
 

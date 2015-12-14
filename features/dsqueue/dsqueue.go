@@ -8,7 +8,6 @@ import (
 	"firempq/log"
 	"firempq/structs"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -89,6 +88,10 @@ func CreateDSQueue(desc *common.ServiceDescription, params []string) ISvc {
 	return NewDSQueue(desc, 1000)
 }
 
+func (dsq *DSQueue) NewContext() ServiceContext {
+	return &DSQContext{dsq, 0}
+}
+
 func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 	dsq := DSQueue{
 		desc:                  desc,
@@ -104,28 +107,7 @@ func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 	}
 
 	dsq.InitServiceDB(desc.ServiceId)
-
-	dsq.actionHandlers = map[string](common.CallFuncType){
-		ACTION_DELETE_LOCKED_BY_ID: dsq.DeleteLockedById,
-		ACTION_DELETE_BY_ID:        dsq.DeleteById,
-		ACTION_FORCE_DELETE_BY_ID:  dsq.ForceDelete,
-		ACTION_SET_LOCK_TIMEOUT:    dsq.SetLockTimeout,
-		ACTION_UNLOCK_BY_ID:        dsq.UnlockMessageById,
-		ACTION_PUSH_FRONT:          dsq.PushFront,
-		ACTION_POP_LOCK_FRONT:      dsq.PopLockFront,
-		ACTION_POP_FRONT:           dsq.PopFront,
-		ACTION_RETURN_FRONT:        dsq.ReturnFront,
-		ACTION_PUSH_BACK:           dsq.PushBack,
-		ACTION_POP_LOCK_BACK:       dsq.PopLockBack,
-		ACTION_POP_BACK:            dsq.PopBack,
-		ACTION_RETURN_BACK:         dsq.ReturnBack,
-		ACTION_STATUS:              dsq.GetCurrentStatus,
-		ACTION_RELEASE_IN_FLIGHT:   dsq.ReleaseInFlight,
-		ACTION_EXPIRE:              dsq.ExpireItems,
-	}
-
 	dsq.loadAllMessages()
-
 	return &dsq
 }
 
@@ -174,10 +156,7 @@ func (dsq *DSQueue) Size() int {
 	return len(dsq.allMessagesMap)
 }
 
-func (dsq *DSQueue) GetCurrentStatus(params []string) IResponse {
-	if len(params) > 0 {
-		return common.ERR_CMD_WITH_NO_PARAMS
-	}
+func (dsq *DSQueue) GetCurrentStatus() IResponse {
 	return common.NewDictResponse(dsq.GetStatus())
 }
 
@@ -191,15 +170,6 @@ func (dsq *DSQueue) GetTypeName() string {
 
 func (dsq *DSQueue) GetServiceId() string {
 	return dsq.serviceId
-}
-
-// Call is the queue custom specific handler for the queue type specific features.
-func (dsq *DSQueue) Call(action string, params []string) IResponse {
-	handler, ok := dsq.actionHandlers[action]
-	if !ok {
-		return common.InvalidRequest("Unknown action: " + action)
-	}
-	return handler(params)
 }
 
 const CLEAN_BATCH_SIZE = 1000
@@ -241,108 +211,19 @@ func makeUnknownParamResponse(paramName string) *common.ErrorResponse {
 	return common.InvalidRequest(fmt.Sprintf("Unknown parameter: %s", paramName))
 }
 
-func getMessageIdOnly(params []string) (string, *common.ErrorResponse) {
-	var err *common.ErrorResponse
-	var msgId string
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = common.ParseStringParam(params, 1, 128)
-		default:
-			return "", makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return "", err
-		}
-	}
-
-	if len(msgId) == 0 {
-		return "", common.ERR_MSG_ID_NOT_DEFINED
-	}
-	return msgId, nil
+func (dsq *DSQueue) ExpireItems(cutOffTs int64) IResponse {
+	return nil
 }
 
-func (dsq *DSQueue) tsParamFunc(params []string, f func(int64) int64) IResponse {
-	var err *common.ErrorResponse
-	var ts int64 = -1
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_TIMESTAMP:
-			params, ts, err = common.ParseInt64Params(params, 0, math.MaxInt64)
-		default:
-			return makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return err
-		}
-	}
-	if ts < 0 {
-		return common.ERR_TS_PARAMETER_NEEDED
-	}
-
-	dsq.lock.Lock()
-	defer dsq.lock.Unlock()
-	if f == nil {
-		return common.OK_RESPONSE
-	}
-	return common.NewIntResponse(f(ts))
-}
-
-func (dsq *DSQueue) ExpireItems(params []string) IResponse {
-	return dsq.tsParamFunc(params, nil)
-}
-
-func (dsq *DSQueue) ReleaseInFlight(params []string) IResponse {
-	return dsq.tsParamFunc(params, nil)
-}
-
-// PushFront pushes message to the front of the queue.
-func (dsq *DSQueue) PushFront(params []string) IResponse {
-	return dsq.push(params, QUEUE_DIRECTION_FRONT)
-}
-
-// PushBack pushes message to the back of the queue.
-func (dsq *DSQueue) PushBack(params []string) IResponse {
-	return dsq.push(params, QUEUE_DIRECTION_BACK)
-}
-
-// PopLockFront pops and locks first available message in the front.
-func (dsq *DSQueue) PopLockFront(params []string) IResponse {
-	return dsq.popMessage(QUEUE_DIRECTION_FRONT, false)
-}
-
-// PopLockBack pops and locks first available message in the back.
-func (dsq *DSQueue) PopLockBack(params []string) IResponse {
-	return dsq.popMessage(QUEUE_DIRECTION_BACK, false)
-}
-
-// PopFront pops first available message in the front removing message fron the queue.
-func (dsq *DSQueue) PopFront(params []string) IResponse {
-	return dsq.popMessage(QUEUE_DIRECTION_FRONT, true)
-}
-
-// PopBack pops first available message in the back removing message fron the queue.
-func (dsq *DSQueue) PopBack(params []string) IResponse {
-	return dsq.popMessage(QUEUE_DIRECTION_BACK, true)
-}
-
-// ReturnFront returns locked message to the front of the queue.
-func (dsq *DSQueue) ReturnFront(params []string) IResponse {
-	return dsq.returnMessageTo(params, QUEUE_DIRECTION_FRONT)
-}
-
-// ReturnBack returns locked message to the back of the queue.
-func (dsq *DSQueue) ReturnBack(params []string) IResponse {
-	return dsq.returnMessageTo(params, QUEUE_DIRECTION_BACK)
+func (dsq *DSQueue) ReleaseInFlight(cutOffTs int64) IResponse {
+	return nil
 }
 
 // DeleteById deletes non-locked message from the queue by message's ID
-func (dsq *DSQueue) DeleteById(params []string) IResponse {
-	msgId, retData := getMessageIdOnly(params)
-	if retData != nil {
-		return retData
-	}
+func (dsq *DSQueue) DeleteById(msgId string) IResponse {
+	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
+
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
 		return common.ERR_MSG_NOT_EXIST
@@ -361,13 +242,8 @@ func (dsq *DSQueue) DeleteById(params []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// ForceDelete deletes message locked or unlocked from the queue by message's ID
-func (dsq *DSQueue) ForceDelete(params []string) IResponse {
-	msgId, retData := getMessageIdOnly(params)
-	if retData != nil {
-		return retData
-	}
-
+// ForceDeleteById deletes message locked or unlocked from the queue by message's ID
+func (dsq *DSQueue) ForceDeleteById(msgId string) IResponse {
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
@@ -379,33 +255,7 @@ func (dsq *DSQueue) ForceDelete(params []string) IResponse {
 }
 
 // SetLockTimeout set lock timeout for the message that already locked.
-func (dsq *DSQueue) SetLockTimeout(params []string) IResponse {
-	var err *common.ErrorResponse
-	var msgId string
-	var lockTimeout int64 = -1
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = common.ParseStringParam(params, 1, 128)
-		case PRM_LOCK_TIMEOUT:
-			params, lockTimeout, err = common.ParseInt64Params(params, 0, 24*1000*3600)
-		default:
-			return makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	if len(msgId) == 0 {
-		return common.ERR_MSG_ID_NOT_DEFINED
-	}
-
-	if lockTimeout < 0 {
-		return common.ERR_MSG_TIMEOUT_NOT_DEFINED
-	}
-
+func (dsq *DSQueue) SetLockTimeout(msgId string, lockTimeout int64) IResponse {
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
@@ -423,12 +273,7 @@ func (dsq *DSQueue) SetLockTimeout(params []string) IResponse {
 }
 
 // DeleteLockedById deletes locked message by id.
-func (dsq *DSQueue) DeleteLockedById(params []string) IResponse {
-	msgId, retData := getMessageIdOnly(params)
-	if retData != nil {
-		return retData
-	}
-
+func (dsq *DSQueue) DeleteLockedById(msgId string) IResponse {
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
@@ -442,12 +287,7 @@ func (dsq *DSQueue) DeleteLockedById(params []string) IResponse {
 
 // UnlockMessageById unlock locked message by id.
 // Message will be returned to the front/back of the queue based on Pop operation type (pop front/back)
-func (dsq *DSQueue) UnlockMessageById(params []string) IResponse {
-	msgId, retData := getMessageIdOnly(params)
-	if retData != nil {
-		return retData
-	}
-
+func (dsq *DSQueue) UnlockMessageById(msgId string) IResponse {
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 
@@ -469,7 +309,6 @@ func (dsq *DSQueue) UnlockMessageById(params []string) IResponse {
 //
 
 func (dsq *DSQueue) addMessageToQueue(msg *DSQMetaMessage) error {
-
 	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT:
 		dsq.availableMsgs.PushFront(msg.Id)
@@ -511,35 +350,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMetaMessage, payload string) IResponse 
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (dsq *DSQueue) push(params []string, direction int32) IResponse {
-	var err *common.ErrorResponse
-	var msgId string
-	var payload string = ""
-	var deliveryDelay = dsq.conf.DeliveryDelay
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = common.ParseStringParam(params, 1, 128)
-		case PRM_PAYLOAD:
-			params, payload, err = common.ParseStringParam(params, 1, 512*1024)
-		case PRM_DELAY:
-			params, deliveryDelay, err = common.ParseInt64Params(params, 0, 3600*1000)
-		default:
-			return makeUnknownParamResponse(params[0])
-		}
-		if err != nil {
-			return err
-		}
-	}
-	if len(msgId) == 0 {
-		msgId = common.GenRandMsgId()
-	}
-
-	if deliveryDelay < 0 || deliveryDelay > int64(defs.TIMEOUT_MAX_DELIVERY) ||
-		dsq.conf.MsgTtl < deliveryDelay {
-		return common.ERR_MSG_BAD_DELIVERY_TIMEOUT
-	}
+func (dsq *DSQueue) Push(msgId string, payload string, deliveryDelay int64, direction int32) IResponse {
 
 	dsq.conf.LastPushTs = common.Uts()
 
@@ -550,11 +361,10 @@ func (dsq *DSQueue) push(params []string, direction int32) IResponse {
 	msg.PushAt = direction
 
 	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
+
 	dsq.msgSerialNumber += 1
 	msg.SerialNumber = dsq.msgSerialNumber
-
-	// Update stats
-	defer dsq.lock.Unlock()
 
 	return dsq.storeMessage(msg, payload)
 }
@@ -667,9 +477,6 @@ func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMetaMessage, *common.Erro
 
 // Delete message from the queue
 func (dsq *DSQueue) deleteMessage(msg *DSQMetaMessage) {
-	if msg == nil {
-		return
-	}
 	switch msg.PushAt {
 	case QUEUE_DIRECTION_FRONT_UNLOCKED:
 		dsq.highPriorityFrontMsgs.RemoveById(msg.Id)
@@ -679,9 +486,9 @@ func (dsq *DSQueue) deleteMessage(msg *DSQMetaMessage) {
 		dsq.availableMsgs.RemoveById(msg.Id)
 	}
 	delete(dsq.allMessagesMap, msg.Id)
-	dsq.DeleteItemFromDB(msg.Id)
 	dsq.expireHeap.PopById(msg.Id)
 	dsq.inFlightHeap.PopById(msg.Id)
+	dsq.DeleteItemFromDB(msg.Id)
 }
 
 // Delete message from the queue by Id
@@ -726,13 +533,17 @@ func (dsq *DSQueue) completeDelivery(msg *DSQMetaMessage) {
 }
 
 // Unlocks all items which exceeded their lock/delivery time.
-func (dsq *DSQueue) releaseInFlight(ts int64) (int64, int64) {
+func (dsq *DSQueue) releaseInFlight(ts int64) int64 {
 	ifHeap := dsq.inFlightHeap
 	var i int64 = 0
 	var returned int64 = 0
 	var delivered int64 = 0
 
 	bs := conf.CFG.DSQueueConfig.UnlockBatchSize
+
+	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
+
 	for !(ifHeap.Empty()) && ifHeap.MinElement() <= ts && i < bs {
 		i += 1
 		hi := ifHeap.PopItem()
@@ -747,7 +558,7 @@ func (dsq *DSQueue) releaseInFlight(ts int64) (int64, int64) {
 			log.Error("Error! Wrong delivery/unlock interval specified for msg: %s", msg.Id)
 		}
 	}
-	return returned, delivered
+	return returned + delivered
 }
 
 // Remove all items which are completely expired.
@@ -756,6 +567,10 @@ func (dsq *DSQueue) cleanExpiredItems(ts int64) int64 {
 
 	var i int64 = 0
 	bs := conf.CFG.DSQueueConfig.UnlockBatchSize
+
+	dsq.lock.Lock()
+	defer dsq.lock.Unlock()
+
 	for !(eh.Empty()) && eh.MinElement() < ts && i < bs {
 		i++
 		hi := eh.PopItem()
@@ -767,42 +582,34 @@ func (dsq *DSQueue) cleanExpiredItems(ts int64) int64 {
 
 // StartUpdate runs a loop of periodic data updates.
 func (dsq *DSQueue) StartUpdate() {
-	go dsq.updateLoop()
-}
-
-func (dsq *DSQueue) updateLoop() {
-	for dsq.closedState.IsFalse() {
-		if dsq.update(common.Uts()) {
-			time.Sleep(time.Millisecond)
-		} else {
-			time.Sleep(conf.CFG.UpdateInterval * 1000)
+	go func() {
+		for dsq.closedState.IsFalse() {
+			if dsq.update(common.Uts()) {
+				time.Sleep(time.Millisecond)
+			} else {
+				time.Sleep(conf.CFG.UpdateInterval * 1000)
+			}
 		}
-	}
+	}()
 }
 
 // Remove expired items. Should be running as a thread.
 func (dsq *DSQueue) update(ts int64) bool {
 	var delivered, unlocked, cleaned int64
-	dsq.lock.Lock()
-	unlocked, delivered = dsq.releaseInFlight(ts)
-	dsq.lock.Unlock()
 
-	if delivered > 0 {
-		log.Debug("%d messages delivered to the queue %s.", delivered, dsq.serviceId)
-	}
-	if unlocked > 0 {
-		log.Debug("%d messages returned to the queue %s.", unlocked, dsq.serviceId)
+	released := dsq.releaseInFlight(ts)
+
+	if released > 0 {
+		log.Debug("%d messages released to the queue %s.", unlocked, dsq.serviceId)
 	}
 
-	dsq.lock.Lock()
 	cleaned = dsq.cleanExpiredItems(ts)
-	dsq.lock.Unlock()
 
 	if cleaned > 0 {
 		log.Debug("%d items expired.", cleaned)
 	}
 
-	return delivered > 0 || cleaned > 0 || unlocked > 0
+	return delivered+released > 0
 }
 
 // List of messages to sort them.

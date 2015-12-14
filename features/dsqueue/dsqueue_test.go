@@ -14,9 +14,10 @@ import (
 func CleanDB() {
 	db.SetDatabase(NewInMemDBService())
 }
-func CreateTestQueue() *DSQueue {
+func CreateTestQueue() *DSQContext {
 	desc := common.NewServiceDescription(common.STYPE_DOUBLE_SIDED_QUEUE, 15243523452345, "dsqueue-test")
-	return NewDSQueue(desc, 1000)
+	dsq := NewDSQueue(desc, 1000)
+	return &DSQContext{dsq, 0}
 }
 
 func newItem(itemId, payload string) []string {
@@ -34,14 +35,15 @@ func itemId(itemId string) []string {
 func TestPopLockDelete(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 	Convey("Poplock and delete messages should work", t, func() {
 
 		Convey("Two messages should be pushed into the queue", func() {
+
 			VerifyOk(q.PushFront(newItem("data1", "p1")))
 			VerifyOk(q.PushFront(newItem("data2", "p2")))
-			VerifySize(q, 2)
+			VerifySize(q.dsq, 2)
 		})
 
 		Convey("Pop and lock one message from the front of the queue and try to delete it", func() {
@@ -51,7 +53,7 @@ func TestPopLockDelete(t *testing.T) {
 		})
 
 		Convey("Make sure queue contains one element", func() {
-			VerifySize(q, 1)
+			VerifySize(q.dsq, 1)
 		})
 
 		Convey("Poplock and delete last message", func() {
@@ -59,7 +61,7 @@ func TestPopLockDelete(t *testing.T) {
 			VerifyOk(q.DeleteLockedById(itemId("data1")))
 		})
 		Convey("Make sure queue is empty now", func() {
-			VerifySize(q, 0)
+			VerifySize(q.dsq, 0)
 		})
 	})
 }
@@ -67,8 +69,8 @@ func TestPopLockDelete(t *testing.T) {
 func TestPushAndPopFromFront(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 	Convey("Data should be pushed and popped in stack order", t, func() {
 
 		Convey("Messages should be pushed", func() {
@@ -86,8 +88,8 @@ func TestPushAndPopFromFront(t *testing.T) {
 func TestPushFrontDelayed(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 
 	Convey("Test message delivered with delay", t, func() {
 
@@ -97,11 +99,11 @@ func TestPushFrontDelayed(t *testing.T) {
 		})
 
 		Convey("data1 should be first because of delay", func() {
-			q.update(common.Uts() + 50)
+			q.dsq.update(common.Uts() + 50)
 			VerifyItem(q.PopFront(nil), "data1", "p1")
-			q.update(common.Uts() + 30)
+			q.dsq.update(common.Uts() + 30)
 			VerifyItemsResponse(q.PopFront(nil), 0)
-			q.update(common.Uts() + 250)
+			q.dsq.update(common.Uts() + 250)
 			VerifyItem(q.PopFront(nil), "data2", "p2")
 		})
 	})
@@ -110,8 +112,8 @@ func TestPushFrontDelayed(t *testing.T) {
 func TestPushAndPopFromBack(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 
 	Convey("Data should be pushed and popped in stack order", t, func() {
 
@@ -130,8 +132,8 @@ func TestPushAndPopFromBack(t *testing.T) {
 func TestPushBackDelayed(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 
 	Convey("Test message delivered with delay", t, func() {
 
@@ -141,11 +143,11 @@ func TestPushBackDelayed(t *testing.T) {
 		})
 
 		Convey("data1 should be first because of delay", func() {
-			q.update(common.Uts() + 50)
+			q.dsq.update(common.Uts() + 50)
 			VerifyItem(q.PopBack(nil), "data1", "p1")
-			q.update(common.Uts() + 30)
+			q.dsq.update(common.Uts() + 30)
 			VerifyItemsResponse(q.PopBack(nil), 0)
-			q.update(common.Uts() + 250)
+			q.dsq.update(common.Uts() + 250)
 			VerifyItem(q.PopBack(nil), "data2", "p2")
 		})
 	})
@@ -154,22 +156,22 @@ func TestPushBackDelayed(t *testing.T) {
 func TestAutoExpiration(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
-	q.conf.MsgTtl = 10
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
+	q.dsq.conf.MsgTtl = 10
 
 	Convey("Test message expiration", t, func() {
 		Convey("Messages should be pushed", func() {
 			VerifyOk(q.PushBack(newItem("data1", "p1")))
 			VerifyOk(q.PushFront(newItem("data3", "p3")))
 			VerifyOk(q.PushBack(newDelayItem("data2", "p2", 9)))
-			VerifySize(q, 3)
+			VerifySize(q.dsq, 3)
 		})
 		Convey("Expire messages", func() {
-			So(q.update(common.Uts()+2000), ShouldBeTrue)
+			So(q.dsq.update(common.Uts()+2000), ShouldBeTrue)
 		})
 		Convey("Nothing should left", func() {
-			VerifySize(q, 0)
+			VerifySize(q.dsq, 0)
 			VerifyItemsResponse(q.PopFront(nil), 0)
 			VerifyItemsResponse(q.PopBack(nil), 0)
 		})
@@ -179,30 +181,30 @@ func TestAutoExpiration(t *testing.T) {
 func TestLockExpiration(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 
 	Convey("Test message lock expiration", t, func() {
 		Convey("Messages should be pushed", func() {
 			VerifyOk(q.PushBack(newItem("data1", "p1")))
 			VerifyOk(q.PushBack(newItem("data2", "p2")))
-			VerifySize(q, 2)
+			VerifySize(q.dsq, 2)
 		})
 
 		Convey("Messages should be popped and locked", func() {
 			VerifyItem(q.PopLockFront(nil), "data1", "p1")
 			VerifyItem(q.PopLockFront(nil), "data2", "p2")
-			VerifySize(q, 2)
+			VerifySize(q.dsq, 2)
 		})
 
 		Convey("Expire message lock", func() {
-			So(q.update(common.Uts()+2000), ShouldBeTrue)
+			So(q.dsq.update(common.Uts()+2000), ShouldBeTrue)
 		})
 		Convey("Nothing should left", func() {
-			VerifySize(q, 2)
+			VerifySize(q.dsq, 2)
 			VerifyItem(q.PopFront(nil), "data1", "p1")
 			VerifyItem(q.PopFront(nil), "data2", "p2")
-			VerifySize(q, 0)
+			VerifySize(q.dsq, 0)
 		})
 	})
 }
@@ -218,13 +220,13 @@ func TestLoadDataFromDatabase(t *testing.T) {
 		VerifyOk(q.PushBack(newItem("d5", "p1")))
 		VerifyOk(q.PushFront(newItem("d6", "p1")))
 		VerifyOk(q.PushBack(newItem("d7", "p1")))
-		VerifySize(q, 7)
+		VerifySize(q.dsq, 7)
 	})
-	q.Close()
+	q.dsq.Close()
 
 	q = CreateTestQueue()
 	Convey("Data should be loaded correctly", t, func() {
-		VerifySize(q, 7)
+		VerifySize(q.dsq, 7)
 		VerifyItem(q.PopFront(nil), "d6", "p1")
 		VerifyItem(q.PopFront(nil), "d4", "p1")
 		VerifyItem(q.PopFront(nil), "d2", "p1")
@@ -233,29 +235,29 @@ func TestLoadDataFromDatabase(t *testing.T) {
 		VerifyItem(q.PopFront(nil), "d5", "p1")
 		VerifyItem(q.PopFront(nil), "d7", "p1")
 	})
-	q.Clear()
-	q.Close()
+	q.dsq.Clear()
+	q.dsq.Close()
 }
 
 func TestGetStatus(t *testing.T) {
 	CleanDB()
 	q := CreateTestQueue()
-	q.conf.MsgTtl = 100000
-	q.conf.DeliveryDelay = 0
-	q.conf.PopLockTimeout = 1000
-	q.conf.PopCountLimit = 2
-	q.conf.MaxSize = 100
-	q.desc.CreateTs = 2000
+	q.dsq.conf.MsgTtl = 100000
+	q.dsq.conf.DeliveryDelay = 0
+	q.dsq.conf.PopLockTimeout = 1000
+	q.dsq.conf.PopCountLimit = 2
+	q.dsq.conf.MaxSize = 100
+	q.dsq.desc.CreateTs = 2000
 
-	defer q.Close()
-	defer q.Clear()
+	defer q.dsq.Close()
+	defer q.dsq.Clear()
 
 	Convey("Test Queue Status", t, func() {
 		Convey("Messages should be pushed", func() {
 			VerifyOk(q.PushBack(newItem("data1", "p1")))
 			VerifyOk(q.PushBack(newItem("data2", "p2")))
 			VerifyItem(q.PopLockFront(nil), "data1", "p1")
-			VerifySize(q, 2)
+			VerifySize(q.dsq, 2)
 		})
 
 		Convey("Messages should be popped and locked", func() {

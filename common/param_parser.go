@@ -10,7 +10,7 @@ func makeIntDesc(valName string, minValue, maxValue int64) string {
 		valName, minValue, maxValue)
 }
 
-func ParseInt64Params(params []string, minValue, maxValue int64) ([]string, int64, *ErrorResponse) {
+func ParseInt64Param(params []string, minValue, maxValue int64) ([]string, int64, *ErrorResponse) {
 	valName := params[0]
 	if len(params) < 2 {
 		return nil, 0, InvalidRequest(makeIntDesc(valName, minValue, maxValue))
