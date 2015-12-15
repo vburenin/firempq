@@ -3,10 +3,8 @@ package common
 import "strconv"
 
 const (
-	STYPE_PRIORITY_QUEUE      = "pqueue"    // Highest priority goes first.
-	STYPE_DOUBLE_SIDED_QUEUE  = "dsqueue"   // Double sided queue
-	STYPE_COUNTERS            = "counters"  // Atomic counters.
-	STYPE_FAIR_PRIORITY_QUEUE = "fairqueue" // POPs are fairly distributed across all priorities.
+	STYPE_PRIORITY_QUEUE     = "pqueue"  // High priority goes first.
+	STYPE_DOUBLE_SIDED_QUEUE = "dsqueue" // Double sided queue
 )
 
 func NewServiceDescription(sType string, exportId uint64, name string) *ServiceDescription {
