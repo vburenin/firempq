@@ -16,27 +16,6 @@ import (
 )
 
 const (
-	ACTION_UNLOCK_BY_ID        = "UNLOCK"
-	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
-	ACTION_DELETE_BY_ID        = "DEL"
-	ACTION_SET_LOCK_TIMEOUT    = "SETLOCKTIMEOUT"
-	ACTION_PUSH_FRONT          = "PUSHFRONT"
-	ACTION_RETURN_FRONT        = "RETURNFRONT"
-	ACTION_POP_FRONT           = "POPFRONT"
-	ACTION_POP_LOCK_FRONT      = "POPLOCK"
-	ACTION_PUSH_BACK           = "PUSHBACK"
-	ACTION_RETURN_BACK         = "RETURNBACK"
-	ACTION_POP_BACK            = "POPBACK"
-	ACTION_POP_LOCK_BACK       = "POPLOCKBACK"
-	ACTION_FORCE_DELETE_BY_ID  = "FORCEDELETE"
-	ACTION_SET_QPARAM          = "SETQP"
-	ACTION_SET_MPARAM          = "SETMP"
-	ACTION_STATUS              = "STATUS"
-	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
-	ACTION_EXPIRE              = "EXPIRE"
-)
-
-const (
 	QUEUE_DIRECTION_NONE           = 0
 	QUEUE_DIRECTION_FRONT          = 1
 	QUEUE_DIRECTION_BACK           = 2
@@ -53,7 +32,6 @@ const (
 
 type DSQueue struct {
 	features.DBService
-	serviceId string
 	// Messages which are waiting to be picked up
 	availableMsgs *structs.IndexList
 
@@ -123,7 +101,7 @@ func NewDSQueue(desc *common.ServiceDescription, size int64) *DSQueue {
 		InactivityTtl:  0,
 	}
 	queue := initDSQueue(desc, conf)
-	features.SaveServiceConfig(queue.serviceId, conf)
+	features.SaveServiceConfig(desc.ServiceId, conf)
 	return queue
 }
 
@@ -169,7 +147,7 @@ func (dsq *DSQueue) GetTypeName() string {
 }
 
 func (dsq *DSQueue) GetServiceId() string {
-	return dsq.serviceId
+	return dsq.desc.ServiceId
 }
 
 const CLEAN_BATCH_SIZE = 1000
@@ -600,7 +578,7 @@ func (dsq *DSQueue) update(ts int64) bool {
 	released := dsq.releaseInFlight(ts)
 
 	if released > 0 {
-		log.Debug("%d messages released to the queue %s.", unlocked, dsq.serviceId)
+		log.Debug("Releasing %d messages back to the queue %s.", unlocked, dsq.desc.Name)
 	}
 
 	cleaned = dsq.cleanExpiredItems(ts)

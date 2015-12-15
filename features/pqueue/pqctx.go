@@ -12,6 +12,29 @@ type PQContext struct {
 	callsCount int64
 }
 
+const (
+	ACTION_UNLOCK_BY_ID        = "UNLOCK"
+	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
+	ACTION_DELETE_BY_ID        = "DEL"
+	ACTION_SET_LOCK_TIMEOUT    = "SETLOCKTIMEOUT"
+	ACTION_PUSH                = "PUSH"
+	ACTION_POP                 = "POP"
+	ACTION_STATUS              = "STATUS"
+	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
+	ACTION_EXPIRE              = "EXPIRE"
+)
+
+const (
+	PRM_ID               = "ID"
+	PRM_POP_WAIT_TIMEOUT = "WAITTIMEOUT"
+	PRM_LOCK_TIMEOUT     = "LOCKTIMEOUT"
+	PRM_PRIORITY         = "PRIORITY"
+	PRM_LIMIT            = "LIMIT"
+	PRM_PAYLOAD          = "PL"
+	PRM_DELAY            = "DELAY"
+	PRM_TIMESTAMP        = "TS"
+)
+
 // Call dispatches to the command handler to process necessary parameters.
 func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	ctx.callsCount += 1
@@ -109,6 +132,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	var msgId string
 	var priority int64 = ctx.pq.config.MaxPriority - 1
 	var payload string = ""
+	var delay int64
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -118,6 +142,8 @@ func (ctx *PQContext) Push(params []string) IResponse {
 			params, priority, err = ParseInt64Param(params, 0, ctx.pq.config.MaxPriority-1)
 		case PRM_PAYLOAD:
 			params, payload, err = ParseStringParam(params, 1, 512*1024)
+		case PRM_DELAY:
+			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryTimeout)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -126,7 +152,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		}
 	}
 
-	return ctx.pq.Push(msgId, payload, priority)
+	return ctx.pq.Push(msgId, payload, delay, priority)
 }
 
 // SetLockTimeout sets a user defined message lock timeout.

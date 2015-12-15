@@ -1,9 +1,0 @@
-package dsqueue
-
-const PRM_ID = "ID"
-const PRM_POP_WAIT_TIMEOUT = "WAITTIMEOUT"
-const PRM_LOCK_TIMEOUT = "LOCKTIMEOUT"
-const PRM_LIMIT = "LIMIT"
-const PRM_PAYLOAD = "PL"
-const PRM_DELAY = "DELAY"
-const PRM_TIMESTAMP = "TS"

@@ -12,6 +12,38 @@ type DSQContext struct {
 	callsCount int64
 }
 
+const (
+	ACTION_UNLOCK_BY_ID        = "UNLOCK"
+	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
+	ACTION_DELETE_BY_ID        = "DEL"
+	ACTION_SET_LOCK_TIMEOUT    = "SETLOCKTIMEOUT"
+
+	ACTION_PUSH_FRONT     = "PUSHFRONT"
+	ACTION_RETURN_FRONT   = "RETURNFRONT"
+	ACTION_POP_FRONT      = "POPFRONT"
+	ACTION_POP_LOCK_FRONT = "POPLOCK"
+
+	ACTION_PUSH_BACK     = "PUSHBACK"
+	ACTION_RETURN_BACK   = "RETURNBACK"
+	ACTION_POP_BACK      = "POPBACK"
+	ACTION_POP_LOCK_BACK = "POPLOCKBACK"
+
+	ACTION_FORCE_DELETE_BY_ID = "FORCEDELETE"
+	ACTION_STATUS             = "STATUS"
+	ACTION_RELEASE_IN_FLIGHT  = "RELEASE"
+	ACTION_EXPIRE             = "EXPIRE"
+)
+
+const (
+	PRM_ID               = "ID"
+	PRM_POP_WAIT_TIMEOUT = "WAITTIMEOUT"
+	PRM_LOCK_TIMEOUT     = "LOCKTIMEOUT"
+	PRM_LIMIT            = "LIMIT"
+	PRM_PAYLOAD          = "PL"
+	PRM_DELAY            = "DELAY"
+	PRM_TIMESTAMP        = "TS"
+)
+
 // Call dispatches to the command handler to process necessary parameters.
 func (ctx *DSQContext) Call(cmd string, params []string) IResponse {
 	ctx.callsCount += 1

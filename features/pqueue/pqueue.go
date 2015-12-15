@@ -16,19 +16,6 @@ import (
 	. "firempq/conf"
 )
 
-const (
-	ACTION_UNLOCK_BY_ID        = "UNLOCK"
-	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
-	ACTION_DELETE_BY_ID        = "DEL"
-	ACTION_SET_LOCK_TIMEOUT    = "SETLOCKTIMEOUT"
-	ACTION_PUSH                = "PUSH"
-	ACTION_POP                 = "POP"
-	ACTION_POP_WAIT            = "POPWAIT"
-	ACTION_STATUS              = "STATUS"
-	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
-	ACTION_EXPIRE              = "EXPIRE"
-)
-
 type PQueue struct {
 	features.DBService
 	// Currently available messages to be popped.
@@ -50,8 +37,6 @@ type PQueue struct {
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *common.ServiceDescription
 	// Shorter version of service name to identify this service.
-	serviceId string
-
 	lock               sync.Mutex
 	newMsgNotification chan bool
 
@@ -92,7 +77,7 @@ func NewPQueue(desc *common.ServiceDescription, priorities int64, size int64) *P
 	}
 
 	queue := initPQueue(desc, config)
-	features.SaveServiceConfig(queue.serviceId, config)
+	features.SaveServiceConfig(desc.ServiceId, config)
 	return queue
 }
 
@@ -132,7 +117,7 @@ func (pq *PQueue) GetCurrentStatus() IResponse {
 }
 
 func (pq *PQueue) GetServiceId() string {
-	return pq.serviceId
+	return pq.desc.ServiceId
 }
 
 func (pq *PQueue) Size() int {
@@ -291,12 +276,13 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 	return common.OK_RESPONSE
 }
 
-func (pq *PQueue) Push(msgId string, payload string, priority int64) IResponse {
+func (pq *PQueue) Push(msgId, payload string, delay, priority int64) IResponse {
 	if len(msgId) == 0 {
 		msgId = common.GenRandMsgId()
 	}
 
-	pq.config.LastPushTs = common.Uts()
+	nowTs := common.Uts()
+	pq.config.LastPushTs = nowTs
 
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
@@ -309,13 +295,18 @@ func (pq *PQueue) Push(msgId string, payload string, priority int64) IResponse {
 	}
 	queueLen := pq.availMsgs.Len()
 	pq.msgMap[msg.Id] = msg
-	pq.trackExpiration(msg)
-	pq.availMsgs.Push(msg.Id, msg.Priority)
-	if 0 == queueLen {
-		select {
-		case pq.newMsgNotification <- true:
-		default: // allows non blocking channel usage if there are no users awaiting wor the message
+	if delay == 0 {
+		pq.trackExpiration(msg)
+		pq.availMsgs.Push(msg.Id, msg.Priority)
+		if 0 == queueLen {
+			select {
+			case pq.newMsgNotification <- true:
+			default: // allows non blocking channel usage if there are no users awaiting wor the message
+			}
 		}
+	} else {
+		msg.UnlockTs = nowTs + delay
+		pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 	}
 	pq.StoreFullItemInDB(msg, payload)
 	return common.OK_RESPONSE
