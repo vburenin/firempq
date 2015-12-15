@@ -57,7 +57,7 @@ type DSQueue struct {
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *common.ServiceDescription
 
-	newMsgNotification chan bool
+	newMsgNotification chan struct{}
 
 	msgSerialNumber uint64
 }
@@ -80,7 +80,7 @@ func initDSQueue(desc *common.ServiceDescription, conf *DSQConfig) *DSQueue {
 		expireHeap:            structs.NewIndexedPriorityQueue(),
 		inFlightHeap:          structs.NewIndexedPriorityQueue(),
 		conf:                  conf,
-		newMsgNotification:    make(chan bool),
+		newMsgNotification:    make(chan struct{}),
 		msgSerialNumber:       0,
 	}
 
@@ -208,11 +208,7 @@ func (dsq *DSQueue) DeleteById(msgId string) IResponse {
 	}
 
 	if dsq.inFlightHeap.ContainsId(msgId) {
-		if msg.DeliveryTs > 0 {
-			return common.ERR_MSG_NOT_DELIVERED
-		} else {
-			return common.ERR_MSG_IS_LOCKED
-		}
+		return common.ERR_MSG_IS_LOCKED
 	}
 
 	dsq.deleteMessage(msg)
@@ -300,7 +296,6 @@ func (dsq *DSQueue) addMessageToQueue(msg *DSQMetaMessage) error {
 		log.Error("Error! Wrong pushAt value %d for message %s", msg.PushAt, msg.Id)
 		return common.ERR_QUEUE_INTERNAL_ERROR
 	}
-	msg.DeliveryTs = 0
 	return nil
 }
 
@@ -308,21 +303,15 @@ func (dsq *DSQueue) storeMessage(msg *DSQMetaMessage, payload string) IResponse 
 	if _, ok := dsq.allMessagesMap[msg.Id]; ok {
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
-	queueLen := dsq.availableMsgs.Len()
 	dsq.allMessagesMap[msg.Id] = msg
 	dsq.trackExpiration(msg)
-	if msg.DeliveryTs > 0 {
-		dsq.inFlightHeap.PushItem(msg.Id, msg.DeliveryTs)
+	if msg.UnlockTs > 0 {
+		dsq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 	} else {
 		dsq.addMessageToQueue(msg)
-		if 0 == queueLen {
-			select {
-			case dsq.newMsgNotification <- true:
-			default: // allows non blocking channel usage if there are no users awaiting for the message
-			}
-		}
 	}
 	dsq.StoreFullItemInDB(msg, payload)
+	common.Notify(dsq.newMsgNotification)
 	return common.OK_RESPONSE
 }
 
@@ -334,7 +323,7 @@ func (dsq *DSQueue) Push(msgId string, payload string, deliveryDelay int64, dire
 
 	msg := NewDSQMetaMessage(msgId)
 	if deliveryDelay > 0 {
-		msg.DeliveryTs = common.Uts() + deliveryDelay
+		msg.UnlockTs = common.Uts() + deliveryDelay
 	}
 	msg.PushAt = direction
 
@@ -405,12 +394,7 @@ func (dsq *DSQueue) popMessage(direction int32, permanentPop bool) IResponse {
 	return common.NewItemsResponse([]IItem{retMsg})
 }
 
-func (dsq *DSQueue) returnMessageTo(params []string, place int32) IResponse {
-	msgId, retData := getMessageIdOnly(params)
-	if retData != nil {
-		return retData
-	}
-
+func (dsq *DSQueue) returnMessageTo(msgId string, place int32) IResponse {
 	dsq.lock.Lock()
 	defer dsq.lock.Unlock()
 	// Make sure message exists.
@@ -441,8 +425,6 @@ func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMetaMessage, *common.Erro
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
 		return nil, common.ERR_MSG_NOT_EXIST
-	} else if msg.DeliveryTs > 0 {
-		return nil, common.ERR_MSG_NOT_DELIVERED
 	}
 
 	hi := dsq.inFlightHeap.PopById(msgId)
@@ -501,6 +483,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResp
 	dsq.addMessageToQueue(msg)
 	dsq.trackExpiration(msg)
 	dsq.StoreItemBodyInDB(msg)
+	common.Notify(dsq.newMsgNotification)
 	return nil
 }
 
@@ -508,6 +491,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResp
 func (dsq *DSQueue) completeDelivery(msg *DSQMetaMessage) {
 	dsq.addMessageToQueue(msg)
 	dsq.StoreItemBodyInDB(msg)
+	common.Notify(dsq.newMsgNotification)
 }
 
 // Unlocks all items which exceeded their lock/delivery time.
@@ -526,7 +510,7 @@ func (dsq *DSQueue) releaseInFlight(ts int64) int64 {
 		i += 1
 		hi := ifHeap.PopItem()
 		msg := dsq.allMessagesMap[hi.Id]
-		if msg.DeliveryTs <= ts {
+		if msg.PopCount == 0 {
 			dsq.completeDelivery(msg)
 			delivered += 1
 		} else if msg.UnlockTs <= ts {
@@ -590,7 +574,7 @@ func (dsq *DSQueue) update(ts int64) bool {
 	return delivered+released > 0
 }
 
-// List of messages to sort them.
+// MessageSlice a list of messages to sort them.
 type MessageSlice []*DSQMetaMessage
 
 func (p MessageSlice) Len() int           { return len(p) }
@@ -656,23 +640,18 @@ func (dsq *DSQueue) loadAllMessages() {
 	}
 
 	sort.Sort(msgs)
-	inDelivery := 0
 	for _, msg := range msgs {
 		dsq.allMessagesMap[msg.Id] = msg
 		if msg.UnlockTs > nowTs {
 			dsq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
-			if msg.DeliveryTs > nowTs {
-				dsq.inFlightHeap.PushItem(msg.Id, msg.DeliveryTs)
-				inDelivery += 1
+			dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+cfg.MsgTtl)
+			if msg.PushAt == QUEUE_DIRECTION_FRONT {
+				dsq.availableMsgs.PushFront(msg.Id)
 			} else {
-				dsq.expireHeap.PushItem(msg.Id, msg.CreatedTs+cfg.MsgTtl)
-				if msg.PushAt == QUEUE_DIRECTION_FRONT {
-					dsq.availableMsgs.PushFront(msg.Id)
-				} else {
-					dsq.availableMsgs.PushBack(msg.Id)
-				}
+				dsq.availableMsgs.PushBack(msg.Id)
 			}
+
 		}
 	}
 
@@ -693,7 +672,6 @@ func (dsq *DSQueue) loadAllMessages() {
 
 	log.Debug("Messages available: %d", dsq.expireHeap.Len())
 	log.Debug("Messages in flight: %d", dsq.inFlightHeap.Len())
-	log.Debug("Messages in delivery (part of in flight): %d", inDelivery)
 	log.Debug("Messages in high prioity/unlocked front: %d", dsq.highPriorityFrontMsgs.Len())
 	log.Debug("Messages in high prioity/unlocked back: %d", dsq.highPriorityBackMsgs.Len())
 }

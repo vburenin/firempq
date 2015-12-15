@@ -26,8 +26,8 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	q.Clear()
 	defer q.Close()
 	defer q.Clear()
-	q.Push("data1", "p1", 12)
-	q.Push("data2", "p2", 12)
+	q.Push("data1", "p1", 0, 12)
+	q.Push("data2", "p2", 0, 12)
 
 	popMsg1 := q.Pop(10000, 0, 1).GetResponse()
 	popMsg2 := q.Pop(10000, 0, 1).GetResponse()
@@ -49,8 +49,8 @@ func TestAutoExpiration(t *testing.T) {
 	defer q.Clear()
 
 	q.config.MsgTtl = 10
-	q.Push("dd1", "p1", 12)
-	q.Push("dd2", "p2", 12)
+	q.Push("dd1", "p1", 0, 12)
+	q.Push("dd2", "p2", 0, 12)
 
 	// Wait for auto expiration.
 	q.update(common.Uts() + 1300)
@@ -68,8 +68,8 @@ func TestUnlockById(t *testing.T) {
 	defer q.Close()
 	defer q.Clear()
 
-	q.Push("dd1", "p1", 12)
-	q.Push("dd2", "p2", 12)
+	q.Push("dd1", "p1", 0, 12)
+	q.Push("dd2", "p2", 0, 12)
 
 	q.Pop(10000, 0, 10)
 	q.Pop(10000, 0, 10)
@@ -87,7 +87,7 @@ func TestDeleteById(t *testing.T) {
 
 	q.Clear()
 
-	q.Push("dd1", "p1", 12)
+	q.Push("dd1", "p1", 0, 12)
 
 	cmp(t, q.DeleteById("dd1").GetResponse(), "+OK")
 
@@ -106,7 +106,7 @@ func TestDeleteLockedById(t *testing.T) {
 
 	q.Clear()
 
-	q.Push("dd1", "p1", 12)
+	q.Push("dd1", "p1", 0, 12)
 
 	res := q.DeleteLockedById("dd1")
 	if !res.IsError() {
@@ -135,9 +135,9 @@ func TestPopWaitBatch(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Second / 10)
-		q.Push("dd1", "p1", 12)
-		q.Push("dd2", "p2", 12)
-		q.Push("dd3", "p3", 12)
+		q.Push("dd1", "p1", 0, 12)
+		q.Push("dd2", "p2", 0, 12)
+		q.Push("dd3", "p3", 0, 12)
 	}()
 
 	m := q.Pop(10000, 1, 10).GetResponse()

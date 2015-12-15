@@ -16,7 +16,7 @@ type DSQMetaMessage struct {
 }
 
 func NewDSQMetaMessage(id string) *DSQMetaMessage {
-	return &DSQMetaMessage{id, DSQueueMsgData{common.Uts(), 0, 0, 0, 0, 0}}
+	return &DSQMetaMessage{id, DSQueueMsgData{common.Uts(), 0, 0, 0, 0}}
 }
 
 func UnmarshalDSQMetaMessage(msgId string, buf []byte) *DSQMetaMessage {

@@ -88,8 +88,8 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 func (ctx *PQContext) Pop(params []string) IResponse {
 	var err *ErrorResponse
 	var limit int64 = 1
-	var popWaitTimeout int64 = CFG_PQ.MaxPopWaitTimeout
-	var lockTimeout int64 = 0
+	var popWaitTimeout int64 = 0
+	var lockTimeout int64 = ctx.pq.config.PopLockTimeout
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -98,7 +98,7 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 		case PRM_LIMIT:
 			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
 		case PRM_POP_WAIT_TIMEOUT:
-			params, popWaitTimeout, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopWaitTimeout)
+			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}

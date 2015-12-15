@@ -38,7 +38,7 @@ type PQueue struct {
 	desc *common.ServiceDescription
 	// Shorter version of service name to identify this service.
 	lock               sync.Mutex
-	newMsgNotification chan bool
+	newMsgNotification chan struct{}
 
 	msgSerialNumber uint64
 }
@@ -55,7 +55,7 @@ func initPQueue(desc *common.ServiceDescription, config *PQConfig) *PQueue {
 		availMsgs:          structs.NewActiveQueues(config.MaxPriority),
 		expireHeap:         structs.NewIndexedPriorityQueue(),
 		inFlightHeap:       structs.NewIndexedPriorityQueue(),
-		newMsgNotification: make(chan bool, 1),
+		newMsgNotification: make(chan struct{}),
 		msgSerialNumber:    0,
 	}
 	pq.InitServiceDB(desc.ServiceId)
@@ -285,30 +285,28 @@ func (pq *PQueue) Push(msgId, payload string, delay, priority int64) IResponse {
 	pq.config.LastPushTs = nowTs
 
 	pq.lock.Lock()
-	defer pq.lock.Unlock()
 
 	pq.msgSerialNumber += 1
 	msg := NewPQMsgMetaData(msgId, priority, pq.msgSerialNumber)
 
 	if _, ok := pq.msgMap[msg.Id]; ok {
+		pq.lock.Unlock()
 		return common.ERR_ITEM_ALREADY_EXISTS
 	}
-	queueLen := pq.availMsgs.Len()
 	pq.msgMap[msg.Id] = msg
 	if delay == 0 {
 		pq.trackExpiration(msg)
 		pq.availMsgs.Push(msg.Id, msg.Priority)
-		if 0 == queueLen {
-			select {
-			case pq.newMsgNotification <- true:
-			default: // allows non blocking channel usage if there are no users awaiting wor the message
-			}
-		}
+
 	} else {
 		msg.UnlockTs = nowTs + delay
 		pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 	}
 	pq.StoreFullItemInDB(msg, payload)
+
+	pq.lock.Unlock()
+	common.Notify(pq.newMsgNotification)
+
 	return common.OK_RESPONSE
 }
 
@@ -453,11 +451,18 @@ func (pq *PQueue) releaseInFlight(ts int64) int64 {
 	for !(ifHeap.Empty()) && ifHeap.MinElement() < ts && counter < CFG_PQ.UnlockBatchSize {
 		counter++
 		unlockedItem := ifHeap.PopItem()
-		pqmsg := pq.msgMap[unlockedItem.Id]
-		pq.returnToFront(pqmsg)
+		msg := pq.msgMap[unlockedItem.Id]
+		// Messages with popcount == 0 are messages with the delivery delay.
+		if msg.PopCount == 0 {
+			pq.trackExpiration(msg)
+			pq.availMsgs.Push(msg.Id, msg.Priority)
+		} else {
+			pq.returnToFront(msg)
+		}
+		common.Notify(pq.newMsgNotification)
 	}
 	if counter > 0 {
-		log.Debug("'%d' item(s) returned to the front of the queue.", counter)
+		log.Debug("%d item(s) returned to the front of the queue.", counter)
 	}
 	return counter
 }

@@ -224,11 +224,19 @@ func (ctx *DSQContext) PopBack(params []string) IResponse {
 }
 
 func (ctx *DSQContext) ReturnFront(params []string) IResponse {
-	return ctx.dsq.returnMessageTo(params, QUEUE_DIRECTION_FRONT)
+	return ctx.returnMessage(params, QUEUE_DIRECTION_FRONT)
 }
 
 func (ctx *DSQContext) ReturnBack(params []string) IResponse {
-	return ctx.dsq.returnMessageTo(params, QUEUE_DIRECTION_BACK)
+	return ctx.returnMessage(params, QUEUE_DIRECTION_BACK)
+}
+
+func (ctx *DSQContext) returnMessage(params []string, place int32) IResponse {
+	msgId, retData := getMessageIdOnly(params)
+	if retData != nil {
+		return retData
+	}
+	return ctx.dsq.returnMessageTo(msgId, place)
 }
 
 func (ctx *DSQContext) GetCurrentStatus(params []string) IResponse {

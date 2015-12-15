@@ -5,7 +5,6 @@ message DSQueueMsgData {
 	required int64 created_ts = 1;
 	required int64 pop_count = 2;
 	required int64 unlock_ts = 3;
-	required int64 delivery_ts = 4;
 	required int32 push_at = 5;
 	required uint64 serial_number = 6;
 }
