@@ -57,12 +57,12 @@ func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
 		return nil, err
 	}
 	ds.db = db
-	ds.flushSync.Add(1)
 	go ds.periodicCacheFlush()
 	return &ds, nil
 }
 
 func (ds *LevelDBStorage) periodicCacheFlush() {
+	ds.flushSync.Add(1)
 	for !ds.closed {
 		select {
 		case <-ds.forceFlushChan:
