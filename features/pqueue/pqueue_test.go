@@ -35,7 +35,7 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	cmp(t, popMsg1, "+DATA *1 %2 ID $5 data1 PL $2 p1")
 	cmp(t, popMsg2, "+DATA *1 %2 ID $5 data2 PL $2 p2")
 
-	q.SetLockTimeout("data1", 0)
+	q.UpdateLock("data1", 0)
 	q.update(common.Uts() + 110)
 
 	popMsg3 := q.Pop(10000, 0, 1).GetResponse()

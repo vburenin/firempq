@@ -204,7 +204,7 @@ func (dsq *DSQueue) DeleteById(msgId string) IResponse {
 
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
-		return common.ERR_MSG_NOT_EXIST
+		return common.ERR_MSG_NOT_FOUND
 	}
 
 	if dsq.inFlightHeap.ContainsId(msgId) {
@@ -222,7 +222,7 @@ func (dsq *DSQueue) ForceDeleteById(msgId string) IResponse {
 	defer dsq.lock.Unlock()
 
 	if !dsq.deleteMessageById(msgId) {
-		return common.ERR_MSG_NOT_EXIST
+		return common.ERR_MSG_NOT_FOUND
 	}
 
 	return common.OK_RESPONSE
@@ -311,7 +311,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMetaMessage, payload string) IResponse 
 		dsq.addMessageToQueue(msg)
 	}
 	dsq.StoreFullItemInDB(msg, payload)
-	common.Notify(dsq.newMsgNotification)
+	common.NewMessageNotify(dsq.newMsgNotification)
 	return common.OK_RESPONSE
 }
 
@@ -424,7 +424,7 @@ func (dsq *DSQueue) lockMessage(msg *DSQMetaMessage) {
 func (dsq *DSQueue) unflightMessage(msgId string) (*DSQMetaMessage, *common.ErrorResponse) {
 	msg, ok := dsq.allMessagesMap[msgId]
 	if !ok {
-		return nil, common.ERR_MSG_NOT_EXIST
+		return nil, common.ERR_MSG_NOT_FOUND
 	}
 
 	hi := dsq.inFlightHeap.PopById(msgId)
@@ -483,7 +483,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResp
 	dsq.addMessageToQueue(msg)
 	dsq.trackExpiration(msg)
 	dsq.StoreItemBodyInDB(msg)
-	common.Notify(dsq.newMsgNotification)
+	common.NewMessageNotify(dsq.newMsgNotification)
 	return nil
 }
 
@@ -491,7 +491,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResp
 func (dsq *DSQueue) completeDelivery(msg *DSQMetaMessage) {
 	dsq.addMessageToQueue(msg)
 	dsq.StoreItemBodyInDB(msg)
-	common.Notify(dsq.newMsgNotification)
+	common.NewMessageNotify(dsq.newMsgNotification)
 }
 
 // Unlocks all items which exceeded their lock/delivery time.

@@ -192,7 +192,7 @@ func (ctx *DSQContext) push(params []string, direction int32) IResponse {
 		msgId = GenRandMsgId()
 	}
 
-	if deliveryDelay < 0 || deliveryDelay > CFG_DSQ.MaxDeliveryTimeout || ctx.dsq.conf.MsgTtl < deliveryDelay {
+	if deliveryDelay < 0 || deliveryDelay > CFG_DSQ.MaxDeliveryDelay || ctx.dsq.conf.MsgTtl < deliveryDelay {
 		return ERR_MSG_BAD_DELIVERY_TIMEOUT
 	}
 	return ctx.dsq.Push(msgId, payload, deliveryDelay, direction)
@@ -256,9 +256,9 @@ func (ctx *DSQContext) funcItems(params []string, f func(int64) int64) IResponse
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
-	}
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 	if ts < 0 {
 		return ERR_TS_PARAMETER_NEEDED

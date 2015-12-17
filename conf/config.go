@@ -22,7 +22,7 @@ type PQueueConfigData struct {
 	MaxPopWaitTimeout    int64
 	MaxPopBatchSize      int64
 	MaxLockTimeout       int64
-	MaxDeliveryTimeout   int64
+	MaxDeliveryDelay     int64
 }
 
 // DSQueueConfigData a config specific to a DSQueue
@@ -36,7 +36,7 @@ type DSQueueConfigData struct {
 	MaxPopWaitTimeout    int64
 	MaxPopBatchSize      int64
 	MaxLockTimeout       int64
-	MaxDeliveryTimeout   int64
+	MaxDeliveryDelay     int64
 }
 
 // Config is a generic service config type.
@@ -85,7 +85,7 @@ func NewDefaultConfig() *Config {
 			MaxPopWaitTimeout:    30000,
 			MaxPopBatchSize:      10,
 			MaxLockTimeout:       3600 * 1000,
-			MaxDeliveryTimeout:   3600 * 1000 * 12,
+			MaxDeliveryDelay:     3600 * 1000 * 12,
 		},
 		DSQueueConfig: DSQueueConfigData{
 			DefaultMessageTtl:    10 * 60 * 1000,
@@ -97,7 +97,7 @@ func NewDefaultConfig() *Config {
 			MaxPopWaitTimeout:    30000,
 			MaxPopBatchSize:      10,
 			MaxLockTimeout:       3600 * 1000,
-			MaxDeliveryTimeout:   3600 * 1000 * 12,
+			MaxDeliveryDelay:     3600 * 1000 * 12,
 		},
 	}
 	CFG = &cfg

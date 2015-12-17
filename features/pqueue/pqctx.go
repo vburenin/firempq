@@ -16,12 +16,14 @@ const (
 	ACTION_UNLOCK_BY_ID        = "UNLOCK"
 	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
 	ACTION_DELETE_BY_ID        = "DEL"
-	ACTION_SET_LOCK_TIMEOUT    = "SETLOCKTIMEOUT"
+	ACTION_SET_LOCK_TIMEOUT    = "UPDLOCK"
 	ACTION_PUSH                = "PUSH"
 	ACTION_POP                 = "POP"
+	ACTION_MSG_INFO            = "MSGINFO"
 	ACTION_STATUS              = "STATUS"
 	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
 	ACTION_EXPIRE              = "EXPIRE"
+	ACTION_SET_PARAM           = "SET"
 )
 
 const (
@@ -35,12 +37,21 @@ const (
 	PRM_TIMESTAMP        = "TS"
 )
 
+const (
+	CPRM_MSG_TTL              = "MSGTTL"
+	CPRM_MAX_SIZE             = "MAXSIZE"
+	CPRM_QUEUE_INACTIVITY_TTL = "QTTL"
+	CPRM_DELIVERY_DELAY       = "DELAY"
+)
+
 // Call dispatches to the command handler to process necessary parameters.
 func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	ctx.callsCount += 1
 	switch cmd {
 	case ACTION_POP:
 		return ctx.Pop(params)
+	case ACTION_MSG_INFO:
+		return ctx.GetMessageInfo(params)
 	case ACTION_DELETE_LOCKED_BY_ID:
 		return ctx.DeleteLockedById(params)
 	case ACTION_DELETE_BY_ID:
@@ -48,7 +59,7 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	case ACTION_PUSH:
 		return ctx.Push(params)
 	case ACTION_SET_LOCK_TIMEOUT:
-		return ctx.SetLockTimeout(params)
+		return ctx.UpdateLock(params)
 	case ACTION_UNLOCK_BY_ID:
 		return ctx.UnlockMessageById(params)
 	case ACTION_STATUS:
@@ -57,6 +68,8 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.ReleaseInFlight(params)
 	case ACTION_EXPIRE:
 		return ctx.ExpireItems(params)
+	case ACTION_SET_PARAM:
+		return ctx.SetParamValue(params)
 	}
 	return InvalidRequest("Unknown action: " + cmd)
 }
@@ -109,6 +122,15 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 	return ctx.pq.Pop(lockTimeout, popWaitTimeout, limit)
 }
 
+
+func (ctx *PQContext) GetMessageInfo(params []string) IResponse {
+	msgId, retData := parseMessageIdOnly(params)
+	if retData != nil {
+		return retData
+	}
+	return ctx.pq.GetMessageInfo(msgId)
+}
+
 func (ctx *PQContext) DeleteLockedById(params []string) IResponse {
 	msgId, retData := parseMessageIdOnly(params)
 	if retData != nil {
@@ -131,8 +153,8 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	var err *ErrorResponse
 	var msgId string
 	var priority int64 = ctx.pq.config.MaxPriority - 1
+	var delay int64 = ctx.pq.config.DeliveryDelay
 	var payload string = ""
-	var delay int64
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -143,7 +165,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		case PRM_PAYLOAD:
 			params, payload, err = ParseStringParam(params, 1, 512*1024)
 		case PRM_DELAY:
-			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryTimeout)
+			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -155,9 +177,9 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	return ctx.pq.Push(msgId, payload, delay, priority)
 }
 
-// SetLockTimeout sets a user defined message lock timeout.
+// UpdateLock sets a user defined message lock timeout.
 // It works only for locked messages.
-func (ctx *PQContext) SetLockTimeout(params []string) IResponse {
+func (ctx *PQContext) UpdateLock(params []string) IResponse {
 	var err *ErrorResponse
 	var msgId string
 	var lockTimeout int64 = -1
@@ -183,7 +205,7 @@ func (ctx *PQContext) SetLockTimeout(params []string) IResponse {
 	if lockTimeout < 0 {
 		return ERR_MSG_TIMEOUT_NOT_DEFINED
 	}
-	return ctx.pq.SetLockTimeout(msgId, lockTimeout)
+	return ctx.pq.UpdateLock(msgId, lockTimeout)
 }
 
 func (ctx *PQContext) UnlockMessageById(params []string) IResponse {
@@ -211,9 +233,9 @@ func (ctx *PQContext) funcItems(params []string, f func(int64) IResponse) IRespo
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
-	}
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 	if ts < 0 {
 		return ERR_TS_PARAMETER_NEEDED
@@ -227,6 +249,34 @@ func (ctx *PQContext) ReleaseInFlight(params []string) IResponse {
 
 func (ctx *PQContext) ExpireItems(params []string) IResponse {
 	return ctx.funcItems(params, ctx.pq.ExpireItems)
+}
+
+func (ctx *PQContext) SetParamValue(params []string) IResponse {
+	var err *ErrorResponse
+	cfg := ctx.pq.config
+	msgTtl := cfg.MsgTtl
+	maxSize := cfg.MaxSize
+	queueTtl := cfg.InactivityTtl
+	deliveryDelay := cfg.DeliveryDelay
+
+	for len(params) > 0 {
+		switch params[0] {
+		case CPRM_MSG_TTL:
+			params, msgTtl, err = ParseInt64Param(params, 1, 128)
+		case CPRM_MAX_SIZE:
+			params, maxSize, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
+		case CPRM_DELIVERY_DELAY:
+			params, deliveryDelay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
+		case CPRM_QUEUE_INACTIVITY_TTL:
+			params, deliveryDelay, err = ParseInt64Param(params, 0, math.MaxInt64)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return ctx.pq.SetParams(msgTtl, maxSize, queueTtl, deliveryDelay)
 }
 
 func (ctx *PQContext) Finish() {}
