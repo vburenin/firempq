@@ -25,7 +25,7 @@ type SessionHandler struct {
 	quitChan     chan bool
 }
 
-func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade, quitChan chan bool) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
 
 	handlerMap := map[string]FuncHandler{
 		CMD_PING:    pingHandler,
@@ -38,30 +38,30 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade, quitChan c
 		ctx:          nil,
 		active:       true,
 		svcs:         services,
-		quitChan:     quitChan,
 	}
 	sh.mainHandlers[CMD_QUIT] = sh.quitHandler
-	sh.mainHandlers[CMD_SETCTX] = sh.setCtxHandler
+	sh.mainHandlers[CMD_CTX] = sh.setCtxHandler
 	sh.mainHandlers[CMD_CREATE_SVC] = sh.createServiceHandler
 	sh.mainHandlers[CMD_DROP_SVC] = sh.dropServiceHandler
 	sh.mainHandlers[CMD_LIST] = sh.listServicesHandler
 	return sh
 }
 
-func (s *SessionHandler) quitListenter() {
-	for {
-		select {
-		case <-s.quitChan:
-			s.Stop()
-			s.conn.Close()
-			return
+func (s *SessionHandler) QuitListener(quitChan chan struct{}) {
+	go func() {
+		for {
+			select {
+			case <-quitChan:
+				s.Stop()
+				s.conn.Close()
+				return
+			}
 		}
-	}
+	}()
 }
 
-// Connection dispatcher. Entry point to start connection handling.
+// DispatchConn dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
-	go s.quitListenter()
 	addr := s.conn.RemoteAddr().String()
 	log.Info("Client connected: %s", addr)
 	s.writeResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
@@ -78,7 +78,9 @@ func (s *SessionHandler) DispatchConn() {
 			break
 		}
 	}
+	s.conn.Close()
 	log.Debug("Client disconnected: %s", addr)
+
 }
 
 // Basic token processing that looks for global commands,
@@ -168,7 +170,7 @@ func (s *SessionHandler) setCtxHandler(tokens []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-// Set stop active flag to false that will case an exit from the processing loop.
+// Stop the processing loop.
 func (s *SessionHandler) Stop() {
 	s.active = false
 }

@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	ENDL          = "\n"
-	ENDL_BYTE     = '\n'
 	SIMPLE_SERVER = "simple"
 )
 
@@ -23,7 +21,7 @@ type QueueOpFunc func(req []string) error
 type CommandServer struct {
 	facade     *facade.ServiceFacade
 	listener   net.Listener
-	quitChan   chan bool
+	quitChan   chan struct{}
 	signalChan chan os.Signal
 	waitGroup  sync.WaitGroup
 }
@@ -32,7 +30,7 @@ func NewSimpleServer(listener net.Listener) IServer {
 	return &CommandServer{
 		facade:     facade.CreateFacade(),
 		listener:   listener,
-		quitChan:   make(chan bool, 1),
+		quitChan:   make(chan struct{}),
 		signalChan: make(chan os.Signal, 1),
 	}
 }
@@ -61,7 +59,7 @@ func (this *CommandServer) Start() {
 
 func (this *CommandServer) Shutdown() {
 	this.waitGroup.Wait()
-	log.Info("Closing database...")
+	log.Info("Closing queues...")
 	this.facade.Close()
 	log.Info("Server stopped.")
 }
@@ -89,6 +87,7 @@ func (this *CommandServer) handleConnection(conn net.Conn) {
 	defer this.waitGroup.Done()
 
 	this.waitGroup.Add(1)
-	session_handler := NewSessionHandler(conn, this.facade, this.quitChan)
+	session_handler := NewSessionHandler(conn, this.facade)
+	session_handler.QuitListener(this.quitChan)
 	session_handler.DispatchConn()
 }
