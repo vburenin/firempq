@@ -215,9 +215,12 @@ func (ds *LevelDBStorage) Close() {
 	ds.flushLock.Lock()
 	defer ds.flushLock.Unlock()
 	if !ds.closed {
+		log.Info("Flushing database cache")
 		ds.flushCache()
 		ds.closed = true
+		log.Info("Closing the database")
 		ds.db.Close()
+		log.Info("The database has been closed.")
 	} else {
 		log.Error("Attempt to close database more than once!")
 	}
