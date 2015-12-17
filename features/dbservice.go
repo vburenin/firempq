@@ -46,8 +46,8 @@ func (d *DBService) StoreFullItemInDB(item IItemMetaData, payload string) {
 	d.database.StoreData(itemKey, item.StringMarshal(), payloadKey, payload)
 }
 
-// DeleteItemFromDB removes item from database including its payload.
-func (d *DBService) DeleteItemFromDB(itemId string) {
+// DeleteFullItemFromDB removes item from database including its payload.
+func (d *DBService) DeleteFullItemFromDB(itemId string) {
 	d.database.CachedDeleteData(d.itemPrefix+itemId, d.payloadPrefix+itemId)
 }
 

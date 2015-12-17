@@ -448,7 +448,7 @@ func (dsq *DSQueue) deleteMessage(msg *DSQMetaMessage) {
 	delete(dsq.allMessagesMap, msg.Id)
 	dsq.expireHeap.PopById(msg.Id)
 	dsq.inFlightHeap.PopById(msg.Id)
-	dsq.DeleteItemFromDB(msg.Id)
+	dsq.DeleteFullItemFromDB(msg.Id)
 }
 
 // Delete message from the queue by Id
@@ -622,7 +622,7 @@ func (dsq *DSQueue) loadAllMessages() {
 	if len(delIds) > 0 {
 		log.Debug("%d messages are expired", len(delIds))
 		for _, msgId := range delIds {
-			dsq.DeleteItemFromDB(msgId)
+			dsq.DeleteFullItemFromDB(msgId)
 		}
 	}
 

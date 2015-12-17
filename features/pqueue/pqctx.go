@@ -13,12 +13,13 @@ type PQContext struct {
 }
 
 const (
-	ACTION_UNLOCK_BY_ID        = "UNLOCK"
+	ACTION_UNLOCK_BY_ID        = "UNLCK"
 	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
 	ACTION_DELETE_BY_ID        = "DEL"
 	ACTION_SET_LOCK_TIMEOUT    = "UPDLOCK"
 	ACTION_PUSH                = "PUSH"
 	ACTION_POP                 = "POP"
+	ACTION_POPLOCK             = "POPLCK"
 	ACTION_MSG_INFO            = "MSGINFO"
 	ACTION_STATUS              = "STATUS"
 	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
@@ -48,6 +49,8 @@ const (
 func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	ctx.callsCount += 1
 	switch cmd {
+	case ACTION_POPLOCK:
+		return ctx.PopLock(params)
 	case ACTION_POP:
 		return ctx.Pop(params)
 	case ACTION_MSG_INFO:
@@ -64,12 +67,12 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.UnlockMessageById(params)
 	case ACTION_STATUS:
 		return ctx.GetCurrentStatus(params)
+	case ACTION_SET_PARAM:
+		return ctx.SetParamValue(params)
 	case ACTION_RELEASE_IN_FLIGHT:
 		return ctx.ReleaseInFlight(params)
 	case ACTION_EXPIRE:
 		return ctx.ExpireItems(params)
-	case ACTION_SET_PARAM:
-		return ctx.SetParamValue(params)
 	}
 	return InvalidRequest("Unknown action: " + cmd)
 }
@@ -97,8 +100,8 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 	return msgId, nil
 }
 
-// Pop get message from the queue.
-func (ctx *PQContext) Pop(params []string) IResponse {
+// PopLock gets message from the queue setting lock timeout.
+func (ctx *PQContext) PopLock(params []string) IResponse {
 	var err *ErrorResponse
 	var limit int64 = 1
 	var popWaitTimeout int64 = 0
@@ -119,9 +122,30 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 			return err
 		}
 	}
-	return ctx.pq.Pop(lockTimeout, popWaitTimeout, limit)
+	return ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, true)
 }
 
+// Pop message from queue completely removing it.
+func (ctx *PQContext) Pop(params []string) IResponse {
+	var err *ErrorResponse
+	var limit int64 = 1
+	var popWaitTimeout int64 = 0
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_LIMIT:
+			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
+		case PRM_POP_WAIT_TIMEOUT:
+			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
+		default:
+			return makeUnknownParamResponse(params[0])
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return ctx.pq.Pop(0, popWaitTimeout, limit, false)
+}
 
 func (ctx *PQContext) GetMessageInfo(params []string) IResponse {
 	msgId, retData := parseMessageIdOnly(params)
