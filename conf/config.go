@@ -19,10 +19,12 @@ type PQueueConfigData struct {
 	DefaultPopCountLimit int64
 	ExpirationBatchSize  int64
 	UnlockBatchSize      int64
-	MaxPopWaitTimeout    int64
-	MaxPopBatchSize      int64
-	MaxLockTimeout       int64
-	MaxDeliveryDelay     int64
+
+	MaxPopWaitTimeout int64
+	MaxPopBatchSize   int64
+	MaxLockTimeout    int64
+	MaxDeliveryDelay  int64
+	MaxMessageTtl     int64
 }
 
 // DSQueueConfigData a config specific to a DSQueue
@@ -37,6 +39,7 @@ type DSQueueConfigData struct {
 	MaxPopBatchSize      int64
 	MaxLockTimeout       int64
 	MaxDeliveryDelay     int64
+	MaxMessageTtl        int64
 }
 
 // Config is a generic service config type.
@@ -76,28 +79,48 @@ func NewDefaultConfig() *Config {
 		BinaryLogBufferSize: 128,
 		BinaryLogPageSize:   2 * 1024 * 1024 * 1025, // 2Gb
 		PQueueConfig: PQueueConfigData{
-			DefaultMessageTtl:    10 * 60 * 1000,
+			// 10 minutes
+			DefaultMessageTtl: 10 * 60 * 1000,
+			// No delay
 			DefaultDeliveryDelay: 0,
-			DefaultLockTimeout:   60 * 1000,
-			DefaultPopCountLimit: 0,
-			ExpirationBatchSize:  1000,
-			UnlockBatchSize:      1000,
-			MaxPopWaitTimeout:    30000,
-			MaxPopBatchSize:      10,
-			MaxLockTimeout:       3600 * 1000,
-			MaxDeliveryDelay:     3600 * 1000 * 12,
+			// Locked by default 60 seconds.
+			DefaultLockTimeout: 60 * 1000,
+			// Do not expire more than 1000 messages at once.
+			ExpirationBatchSize: 1000,
+			// Do not unlock more than 1000 messages at once.
+			UnlockBatchSize: 1000,
+			// Pop wait can not be set larger than 30 seconds.
+			MaxPopWaitTimeout: 30000,
+			// Max Pop Batch size limit is 10
+			MaxPopBatchSize: 10,
+			// Max Lock timeout is two hours.
+			MaxLockTimeout: 3600000 * 2,
+			// Max delivery message delay is 12 hours.
+			MaxDeliveryDelay: 3600000 * 12,
+			// Max Message TTL is 14 days.
+			MaxMessageTtl: 3600000 * 24 * 14,
 		},
 		DSQueueConfig: DSQueueConfigData{
-			DefaultMessageTtl:    10 * 60 * 1000,
+			// 10 minutes
+			DefaultMessageTtl: 10 * 60 * 1000,
+			// No delay
 			DefaultDeliveryDelay: 0,
-			DefaultLockTimeout:   60 * 1000,
-			DefaultPopCountLimit: 0,
-			ExpirationBatchSize:  1000,
-			UnlockBatchSize:      1000,
-			MaxPopWaitTimeout:    30000,
-			MaxPopBatchSize:      10,
-			MaxLockTimeout:       3600 * 1000,
-			MaxDeliveryDelay:     3600 * 1000 * 12,
+			// Locked by default 60 seconds.
+			DefaultLockTimeout: 60 * 1000,
+			// Do not expire more than 1000 messages at once.
+			ExpirationBatchSize: 1000,
+			// Do not unlock more than 1000 messages at once.
+			UnlockBatchSize: 1000,
+			// Pop wait can not be set larger than 30 seconds.
+			MaxPopWaitTimeout: 30000,
+			// Max Pop Batch size limit is 10
+			MaxPopBatchSize: 10,
+			// Max Lock timeout is two hours.
+			MaxLockTimeout: 3600000 * 2,
+			// Max delivery message delay is 12 hours.
+			MaxDeliveryDelay: 3600000 * 12,
+			// Max Message TTL is 14 days.
+			MaxMessageTtl: 3600000 * 24 * 14,
 		},
 	}
 	CFG = &cfg
