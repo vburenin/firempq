@@ -12,6 +12,8 @@ type PQContext struct {
 	callsCount int64
 }
 
+const MAX_MESSAGE_ID_LENGTH = 128
+
 const (
 	ACTION_UNLOCK_BY_ID        = "UNLCK"
 	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
@@ -85,7 +87,7 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_ID:
-			params, msgId, err = ParseStringParam(params, 1, 128)
+			params, msgId, err = ParseStringParam(params, 1, MAX_MESSAGE_ID_LENGTH)
 		default:
 			return "", makeUnknownParamResponse(params[0])
 		}
@@ -110,7 +112,7 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_LOCK_TIMEOUT:
-			params, lockTimeout, err = ParseInt64Param(params, 0, 24*1000*3600)
+			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		case PRM_LIMIT:
 			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
 		case PRM_POP_WAIT_TIMEOUT:
@@ -286,7 +288,7 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case CPRM_MSG_TTL:
-			params, msgTtl, err = ParseInt64Param(params, 1, 128)
+			params, msgTtl, err = ParseInt64Param(params, 1, CFG_PQ.MaxMessageTtl)
 		case CPRM_MAX_SIZE:
 			params, maxSize, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		case CPRM_DELIVERY_DELAY:
