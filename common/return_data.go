@@ -43,6 +43,12 @@ func (self *DictResponse) GetResponse() string {
 		case int64:
 			data = append(data, ":")
 			data = append(data, strconv.Itoa(int(t)))
+		case bool:
+			if t {
+				data = append(data, "?t")
+			} else {
+				data = append(data, "?f")
+			}
 		}
 	}
 	return strings.Join(data, "")
