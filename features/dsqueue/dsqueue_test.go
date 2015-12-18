@@ -3,6 +3,7 @@ package dsqueue
 import (
 	"firempq/common"
 	"firempq/db"
+	"firempq/log"
 	"strconv"
 	"testing"
 
@@ -15,6 +16,7 @@ func CleanDB() {
 	db.SetDatabase(NewInMemDBService())
 }
 func CreateTestQueue() *DSQContext {
+	log.SetLevel(0)
 	desc := common.NewServiceDescription(common.STYPE_DOUBLE_SIDED_QUEUE, 15243523452345, "dsqueue-test")
 	dsq := NewDSQueue(desc, 1000)
 	return &DSQContext{dsq, 0}
