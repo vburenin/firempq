@@ -6,17 +6,13 @@ import (
 	"firempq/log"
 )
 
-const (
-	MAX_MESSAGE_ID_LENGTH = 64
-)
-
 type PQMsgMetaData struct {
 	Id string
 	PQueueMsgData
 }
 
-func NewPQMsgMetaData(id string, priority int64, serialNumber uint64) *PQMsgMetaData {
-	return &PQMsgMetaData{id, PQueueMsgData{priority, common.Uts(), 0, 0, serialNumber}}
+func NewPQMsgMetaData(id string, priority int64, ttl int64, serialNumber uint64) *PQMsgMetaData {
+	return &PQMsgMetaData{id, PQueueMsgData{priority, ttl, 0, 0, serialNumber}}
 }
 
 func UnmarshalPQMsgMetaData(msgId string, buf []byte) *PQMsgMetaData {

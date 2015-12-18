@@ -176,10 +176,12 @@ func (ctx *PQContext) DeleteById(params []string) IResponse {
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
 func (ctx *PQContext) Push(params []string) IResponse {
+	cfg := ctx.pq.config
 	var err *ErrorResponse
 	var msgId string
-	var priority int64 = ctx.pq.config.MaxPriority - 1
-	var delay int64 = ctx.pq.config.DeliveryDelay
+	var msgTtl int64 = cfg.MsgTtl
+	var priority int64 = cfg.MaxPriority - 1
+	var delay int64 = cfg.DeliveryDelay
 	var payload string = ""
 
 	for len(params) > 0 {
@@ -187,7 +189,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		case PRM_ID:
 			params, msgId, err = ParseStringParam(params, 1, 128)
 		case PRM_PRIORITY:
-			params, priority, err = ParseInt64Param(params, 0, ctx.pq.config.MaxPriority-1)
+			params, priority, err = ParseInt64Param(params, 0, cfg.MaxPriority-1)
 		case PRM_PAYLOAD:
 			params, payload, err = ParseStringParam(params, 1, 512*1024)
 		case PRM_DELAY:
@@ -200,7 +202,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		}
 	}
 
-	return ctx.pq.Push(msgId, payload, delay, priority)
+	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 }
 
 // UpdateLock sets a user defined message lock timeout.

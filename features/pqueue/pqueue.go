@@ -241,12 +241,12 @@ func (pq *PQueue) GetMessageInfo(msgId string) IResponse {
 		unlockTs = msgInfo.UnlockTs
 	}
 	data := map[string]interface{}{
-		"Id":        msgId,
-		"Locked":    locked,
-		"UnlockTs":  unlockTs,
-		"PopCount":  msgInfo.PopCount,
-		"Priority":  msgInfo.Priority,
-		"CreatedTs": msgInfo.CreatedTs,
+		"Id":       msgId,
+		"Locked":   locked,
+		"UnlockTs": unlockTs,
+		"PopCount": msgInfo.PopCount,
+		"Priority": msgInfo.Priority,
+		"ExpireTs": msgInfo.ExpireTs,
 	}
 	pq.lock.Unlock()
 	return NewDictResponse(data)
@@ -279,7 +279,7 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 	return OK_RESPONSE
 }
 
-func (pq *PQueue) Push(msgId, payload string, delay, priority int64) IResponse {
+func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
 	if len(msgId) == 0 {
 		msgId = GenRandMsgId()
 	}
@@ -293,12 +293,13 @@ func (pq *PQueue) Push(msgId, payload string, delay, priority int64) IResponse {
 		pq.lock.Unlock()
 		return ERR_ITEM_ALREADY_EXISTS
 	}
-	pq.msgSerialNumber += 1
-	msg := NewPQMsgMetaData(msgId, priority, pq.msgSerialNumber)
+
+	pq.msgSerialNumber++
+	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl, pq.msgSerialNumber)
 
 	pq.msgMap[msg.Id] = msg
 	if delay == 0 {
-		pq.trackExpiration(msg)
+		pq.expireHeap.PushItem(msg.Id, msg.ExpireTs)
 		pq.availMsgs.Push(msgId, msg.Priority)
 	} else {
 		msg.UnlockTs = nowTs + delay
@@ -418,14 +419,6 @@ func (pq *PQueue) deleteMessage(msgId string) bool {
 	return false
 }
 
-// Adds message into expiration heap. Not thread safe!
-func (pq *PQueue) trackExpiration(msg *PQMsgMetaData) {
-	ok := pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+int64(pq.config.MsgTtl))
-	if !ok {
-		log.Error("Error! Item already exists in the expire heap: %s", msg.Id)
-	}
-}
-
 // Attempts to return a message into the front of the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
 func (pq *PQueue) returnToFront(msg *PQMsgMetaData) *ErrorResponse {
@@ -438,7 +431,7 @@ func (pq *PQueue) returnToFront(msg *PQMsgMetaData) *ErrorResponse {
 	}
 	msg.UnlockTs = 0
 	pq.availMsgs.PushFront(msg.Id)
-	pq.trackExpiration(msg)
+	pq.expireHeap.PushItem(msg.Id, msg.ExpireTs)
 	pq.StoreItemBodyInDB(msg)
 	return nil
 }
@@ -453,7 +446,7 @@ func (pq *PQueue) releaseInFlight(ts int64) int64 {
 		msg := pq.msgMap[unlockedItem.Id]
 		// Messages with popcount == 0 are messages with the delivery delay.
 		if msg.PopCount == 0 {
-			pq.trackExpiration(msg)
+			pq.expireHeap.PushItem(msg.Id, msg.ExpireTs)
 			pq.availMsgs.Push(msg.Id, msg.Priority)
 		} else {
 			pq.returnToFront(msg)
@@ -470,7 +463,6 @@ func (pq *PQueue) releaseInFlight(ts int64) int64 {
 func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
 	var counter int64 = 0
 	eh := pq.expireHeap
-
 	for !(eh.Empty()) && eh.MinElement() < ts && counter < CFG_PQ.ExpirationBatchSize {
 		counter++
 		pq.deleteMessage(eh.PopItem().Id)
@@ -533,7 +525,7 @@ func (pq *PQueue) loadAllMessages() {
 		}
 
 		// Store list if message IDs that should be removed.
-		if pqmsg.CreatedTs+cfg.MsgTtl < nowTs ||
+		if pqmsg.ExpireTs < nowTs ||
 			(pqmsg.PopCount >= cfg.PopCountLimit &&
 				cfg.PopCountLimit > 0) {
 			delIds = append(delIds, pqmsg.Id)
@@ -563,7 +555,7 @@ func (pq *PQueue) loadAllMessages() {
 		if msg.UnlockTs > nowTs {
 			pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
-			pq.expireHeap.PushItem(msg.Id, msg.CreatedTs+cfg.MsgTtl)
+			pq.expireHeap.PushItem(msg.Id, msg.ExpireTs)
 			pq.availMsgs.Push(msg.Id, msg.Priority)
 		}
 	}
