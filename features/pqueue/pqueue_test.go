@@ -120,10 +120,33 @@ func TestDeliveryDelay(t *testing.T) {
 	q.StartUpdate()
 	Convey("Message delivery delay should be delayed at least for 0.1 seconds", t, func() {
 		q.Push("data1", "p1", 10000, 120, 12)
-		startTs := time.Now().Nanosecond()
+		startTs := time.Now().UnixNano()
 		VerifyItems(q.Pop(10000, 1000, 10, true), 1, "data1", "p1")
-		finishTs := time.Now().Nanosecond()
+		finishTs := time.Now().UnixNano()
 		So(finishTs-startTs, ShouldBeGreaterThan, time.Second/10)
+	})
+	q.Close()
+}
+
+func TestPushLotsOfMessages(t *testing.T) {
+	q := CreateTestQueue()
+	q.StartUpdate()
+	totalMsg := 10000
+	Convey("10k messages should be pushed and received", t, func() {
+		for i := 0; i < totalMsg; i++ {
+			q.Push("", " ", 100000, 0, 10)
+		}
+		counter := 0
+		loops := 0
+		for counter < totalMsg && loops < totalMsg {
+			resp, ok := q.Pop(0, 10, 10, false).(*common.ItemsResponse)
+			if !ok {
+				break
+			}
+			counter += len(resp.GetItems())
+		}
+		So(counter, ShouldEqual, totalMsg)
+
 	})
 	q.Close()
 }
