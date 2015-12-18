@@ -20,6 +20,10 @@ func fixLogger() {
 	Logger.ExtraCalldepth = 1
 }
 
+func SetLevel(l logging.Level) {
+	logging.SetLevel(l, "firempq")
+}
+
 var Logger = logging.MustGetLogger("firempq")
 
 var Error func(string, ...interface{}) = Logger.Error
