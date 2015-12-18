@@ -132,7 +132,7 @@ func TestPushLotsOfMessages(t *testing.T) {
 	q := CreateTestQueue()
 	q.StartUpdate()
 	totalMsg := 10000
-	Convey("10k messages should be pushed and received", t, func() {
+	Convey("10k messages should be pushed and received being removed", t, func() {
 		for i := 0; i < totalMsg; i++ {
 			q.Push("", " ", 100000, 0, 10)
 		}
@@ -146,6 +146,7 @@ func TestPushLotsOfMessages(t *testing.T) {
 			counter += len(resp.GetItems())
 		}
 		So(counter, ShouldEqual, totalMsg)
+		VerifyServiceSize(q, 0)
 
 	})
 	q.Close()
