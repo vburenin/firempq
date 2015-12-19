@@ -297,6 +297,10 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 
 func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
 
+	if int64(len(pq.msgMap)) >= pq.config.MaxSize {
+		return ERR_SIZE_EXCEEDED
+	}
+
 	if priority >= pq.config.MaxPriority {
 		return ERR_PRIORITY_OUT_OF_RANGE
 	}
@@ -575,7 +579,11 @@ func (pq *PQueue) loadAllMessages() {
 			pq.inFlightHeap.PushItem(msg.Id, msg.UnlockTs)
 		} else {
 			pq.expireHeap.PushItem(msg.Id, msg.ExpireTs)
-			pq.availMsgs.Push(msg.Id, msg.Priority)
+			if msg.PopCount > 0 {
+				pq.availMsgs.PushFront(msg.Id)
+			} else {
+				pq.availMsgs.Push(msg.Id, msg.Priority)
+			}
 		}
 	}
 
