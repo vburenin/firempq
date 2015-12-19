@@ -55,4 +55,4 @@ var ERR_UNKNOWN_ERROR *ErrorResponse = NewError("Unknown server error", 500)
 
 var ERR_TS_PARAMETER_NEEDED *ErrorResponse = InvalidRequest("TS parameters must be provided")
 
-var ERR_SIZE_EXCEEDED = TemporaryError("Service reached size limit")
+var ERR_SIZE_EXCEEDED = TemporaryError("Service capacity reached its limit")
