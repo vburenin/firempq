@@ -35,11 +35,10 @@ var ERR_ITEM_ALREADY_EXISTS *ErrorResponse = ConflictRequest("Message exists alr
 var ERR_UNEXPECTED_PRIORITY *ErrorResponse = InvalidRequest("Incrorrect priority")
 var ERR_MSG_NOT_LOCKED *ErrorResponse = InvalidRequest("Message is not locked")
 var ERR_MSG_NOT_FOUND *ErrorResponse = NotFoundRequest("Message not found")
-var ERR_MSG_NOT_DELIVERED *ErrorResponse = InvalidRequest("Message isn't delivered to the queue")
 var ERR_MSG_IS_LOCKED *ErrorResponse = ConflictRequest("Message is locked")
 var ERR_MSG_POP_ATTEMPTS_EXCEEDED *ErrorResponse = NewError("Message exceded the number of pop attempts", CODE_GONE)
 var ERR_QUEUE_INTERNAL_ERROR *ErrorResponse = ServerError("Internal error/data integrity failure")
-var ERR_SVC_CTX *ErrorResponse = InvalidRequest("CTX must be followed by a service name and at least one service command")
+var ERR_PRIORITY_OUT_OF_RANGE = InvalidRequest("The priority is out of range")
 
 // Param errors
 var ERR_MSG_ID_NOT_DEFINED *ErrorResponse = InvalidRequest("Message ID is not defined")

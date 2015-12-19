@@ -5,7 +5,6 @@ import (
 	"firempq/features"
 	"firempq/log"
 	"firempq/structs"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -57,6 +56,7 @@ func initPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
 		newMsgNotification: make(chan struct{}),
 		msgSerialNumber:    0,
 	}
+	// Init inherited service db.
 	pq.InitServiceDB(desc.ServiceId)
 	pq.loadAllMessages()
 	return &pq
@@ -94,20 +94,37 @@ func (pq *PQueue) NewContext() ServiceContext {
 	return &PQContext{pq, 0}
 }
 
+const (
+	PQ_STATUS_MAX_PRIORITY     = "MaxPriority"
+	PQ_STATUS_MAX_SIZE         = "MaxSize"
+	PQ_STATUS_MSG_TTL          = "MsgTtl"
+	PQ_STATUS_DELIVERY_DELAY   = "DeliveryDelay"
+	PQ_STATUS_POP_LOCK_TIMEOUT = "PopLockTimeout"
+	PQ_STATUS_POP_COUNT_LIMIT  = "PopCountLimit"
+	PQ_STATUS_CREATE_TS        = "CreateTs"
+	PQ_STATUS_LAST_PUSH_TS     = "LastPushTs"
+	PQ_STATUS_LAST_POP_TS      = "LastPopTs"
+	PQ_STATUS_INACTIVITY_TTL   = "InactivityTtl"
+	PQ_STATUS_TOTAL_MSGS       = "TotalMessages"
+	PQ_STATUS_IN_FLIGHT_MSG    = "InFlightMessages"
+	PQ_STATUS_AVAILABLE_MSGS   = "AvailableMessages"
+)
+
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
-	res["MaxPriority"] = pq.config.GetMaxPriority()
-	res["MaxSize"] = pq.config.GetMaxSize()
-	res["MsgTtl"] = pq.config.GetMsgTtl()
-	res["DeliveryDelay"] = pq.config.GetDeliveryDelay()
-	res["PopLockTimeout"] = pq.config.GetPopLockTimeout()
-	res["PopCountLimit"] = pq.config.GetPopCountLimit()
-	res["CreateTs"] = pq.desc.GetCreateTs()
-	res["LastPushTs"] = pq.config.GetLastPushTs()
-	res["LastPopTs"] = pq.config.GetLastPopTs()
-	res["InactivityTtl"] = pq.config.GetInactivityTtl()
-	res["TotalMessages"] = pq.Size()
-	res["InFlightSize"] = pq.inFlightHeap.Len()
+	res[PQ_STATUS_MAX_PRIORITY] = pq.config.GetMaxPriority()
+	res[PQ_STATUS_MAX_SIZE] = pq.config.GetMaxSize()
+	res[PQ_STATUS_MSG_TTL] = pq.config.GetMsgTtl()
+	res[PQ_STATUS_DELIVERY_DELAY] = pq.config.GetDeliveryDelay()
+	res[PQ_STATUS_POP_LOCK_TIMEOUT] = pq.config.GetPopLockTimeout()
+	res[PQ_STATUS_POP_COUNT_LIMIT] = pq.config.GetPopCountLimit()
+	res[PQ_STATUS_CREATE_TS] = pq.desc.GetCreateTs()
+	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.GetLastPushTs()
+	res[PQ_STATUS_LAST_POP_TS] = pq.config.GetLastPopTs()
+	res[PQ_STATUS_INACTIVITY_TTL] = pq.config.GetInactivityTtl()
+	res[PQ_STATUS_TOTAL_MSGS] = pq.Size()
+	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.inFlightHeap.Len()
+	res[PQ_STATUS_AVAILABLE_MSGS] = pq.Size() - pq.inFlightHeap.Len()
 	return res
 }
 
@@ -176,10 +193,6 @@ func (pq *PQueue) IsClosed() bool {
 	return pq.closedState.IsTrue()
 }
 
-func makeUnknownParamResponse(paramName string) *ErrorResponse {
-	return InvalidRequest(fmt.Sprintf("Unknown parameter: %s", paramName))
-}
-
 func (pq *PQueue) ExpireItems(cutOffTs int64) IResponse {
 	var total int64
 	pq.lock.Lock()
@@ -227,26 +240,35 @@ func (pq *PQueue) Pop(lockTimeout, popWaitTimeout, limit int64, lock bool) IResp
 	}
 }
 
+const (
+	MSG_INFO_ID        = "Id"
+	MSG_INFO_LOCKED    = "Locked"
+	MSG_INFO_UNLOCK_TS = "UnlockTs"
+	MSG_INFO_POP_COUNT = "PopCount"
+	MSG_INFO_PRIORITY  = "Priority"
+	MSG_INFO_EXPIRE_TS = "ExpireTs"
+)
+
 func (pq *PQueue) GetMessageInfo(msgId string) IResponse {
 	var unlockTs int64
 	pq.lock.Lock()
 	msgInfo, ok := pq.msgMap[msgId]
 
 	if !ok {
-		return ERR_MSG_NOT_FOUND
 		pq.lock.Unlock()
+		return ERR_MSG_NOT_FOUND
 	}
 	locked := pq.inFlightHeap.ContainsId(msgId)
 	if locked {
 		unlockTs = msgInfo.UnlockTs
 	}
 	data := map[string]interface{}{
-		"Id":       msgId,
-		"Locked":   locked,
-		"UnlockTs": unlockTs,
-		"PopCount": msgInfo.PopCount,
-		"Priority": msgInfo.Priority,
-		"ExpireTs": msgInfo.ExpireTs,
+		MSG_INFO_ID:        msgId,
+		MSG_INFO_LOCKED:    locked,
+		MSG_INFO_UNLOCK_TS: unlockTs,
+		MSG_INFO_POP_COUNT: msgInfo.PopCount,
+		MSG_INFO_PRIORITY:  msgInfo.Priority,
+		MSG_INFO_EXPIRE_TS: msgInfo.ExpireTs,
 	}
 	pq.lock.Unlock()
 	return NewDictResponse(data)
@@ -280,6 +302,11 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 }
 
 func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
+
+	if priority >= pq.config.MaxPriority {
+		return ERR_PRIORITY_OUT_OF_RANGE
+	}
+
 	if len(msgId) == 0 {
 		msgId = GenRandMsgId()
 	}
@@ -426,7 +453,7 @@ func (pq *PQueue) returnToFront(msg *PQMsgMetaData) *ErrorResponse {
 	if lim > 0 {
 		if lim <= msg.PopCount {
 			pq.deleteMessage(msg.Id)
-			return ERR_MSG_POP_ATTEMPTS_EXCEEDED
+			return nil
 		}
 	}
 	msg.UnlockTs = 0
@@ -525,9 +552,7 @@ func (pq *PQueue) loadAllMessages() {
 		}
 
 		// Store list if message IDs that should be removed.
-		if pqmsg.ExpireTs < nowTs ||
-			(pqmsg.PopCount >= cfg.PopCountLimit &&
-				cfg.PopCountLimit > 0) {
+		if pqmsg.ExpireTs <= nowTs || (pqmsg.PopCount >= cfg.PopCountLimit && cfg.PopCountLimit > 0) {
 			delIds = append(delIds, pqmsg.Id)
 		} else {
 			msgs = append(msgs, pqmsg)
@@ -562,6 +587,7 @@ func (pq *PQueue) loadAllMessages() {
 
 	log.Debug("Messages available: %d", pq.expireHeap.Len())
 	log.Debug("Messages are in flight: %d", pq.inFlightHeap.Len())
+
 }
 
 var _ ISvc = &PQueue{}

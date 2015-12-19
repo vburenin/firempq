@@ -4,6 +4,7 @@ import (
 	. "firempq/api"
 	. "firempq/common"
 	. "firempq/conf"
+	"fmt"
 	"math"
 )
 
@@ -100,6 +101,10 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 		return "", ERR_MSG_ID_NOT_DEFINED
 	}
 	return msgId, nil
+}
+
+func makeUnknownParamResponse(paramName string) *ErrorResponse {
+	return InvalidRequest(fmt.Sprintf("Unknown parameter: %s", paramName))
 }
 
 // PopLock gets message from the queue setting lock timeout.
