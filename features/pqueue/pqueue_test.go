@@ -412,3 +412,20 @@ func TestPopCountExpiration(t *testing.T) {
 		VerifyServiceSize(q, 0)
 	})
 }
+
+func TestSize(t *testing.T) {
+	Convey("Size of different structures should be valid", t, func() {
+		q := CreateNewTestQueue()
+		q.Push("d1", "p", 10000, 0, 11)
+		q.Push("d2", "p", 10000, 0, 11)
+		q.Push("d3", "p", 10000, 0, 11)
+		q.Push("d4", "p", 10000, 0, 11)
+		q.Push("d5", "p", 10000, 0, 11)
+		q.Pop(0, 0, 2, true)
+
+		VerifyServiceSize(q, 5)
+		So(q.availMsgs.Len(), ShouldEqual, 3)
+		So(q.inFlightHeap.Len(), ShouldEqual, 2)
+		So(len(q.msgMap), ShouldEqual, 5)
+	})
+}
