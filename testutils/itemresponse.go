@@ -56,6 +56,6 @@ func VerifyErrResponse(r IResponse) bool {
 }
 
 func VerifyServiceSize(s ISvc, size int) bool {
-	So(s.Size(), ShouldEqual, size)
-	return s.Size() == size
+	So(s.GetSize(), ShouldEqual, size)
+	return s.GetSize() == size
 }

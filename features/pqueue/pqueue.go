@@ -1,7 +1,6 @@
 package pqueue
 
 import (
-	"firempq/defs"
 	"firempq/features"
 	"firempq/log"
 	"firempq/structs"
@@ -122,9 +121,9 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.GetLastPushTs()
 	res[PQ_STATUS_LAST_POP_TS] = pq.config.GetLastPopTs()
 	res[PQ_STATUS_INACTIVITY_TTL] = pq.config.GetInactivityTtl()
-	res[PQ_STATUS_TOTAL_MSGS] = pq.Size()
+	res[PQ_STATUS_TOTAL_MSGS] = pq.GetSize()
 	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.inFlightHeap.Len()
-	res[PQ_STATUS_AVAILABLE_MSGS] = pq.Size() - pq.inFlightHeap.Len()
+	res[PQ_STATUS_AVAILABLE_MSGS] = pq.GetSize() - pq.inFlightHeap.Len()
 	return res
 }
 
@@ -147,12 +146,8 @@ func (pq *PQueue) GetServiceId() string {
 	return pq.desc.ServiceId
 }
 
-func (pq *PQueue) Size() int {
+func (pq *PQueue) GetSize() int {
 	return len(pq.msgMap)
-}
-
-func (pq *PQueue) GetType() defs.ServiceType {
-	return defs.HT_PRIORITY_QUEUE
 }
 
 func (pq *PQueue) GetTypeName() string {
@@ -293,7 +288,6 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 	if pq.inFlightHeap.ContainsId(msgId) {
 		return ERR_MSG_IS_LOCKED
 	}
-
 	if !pq.deleteMessage(msgId) {
 		return ERR_MSG_NOT_FOUND
 	}

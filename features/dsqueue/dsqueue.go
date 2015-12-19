@@ -3,7 +3,6 @@ package dsqueue
 import (
 	"firempq/common"
 	"firempq/conf"
-	"firempq/defs"
 	"firempq/features"
 	"firempq/log"
 	"firempq/structs"
@@ -123,23 +122,19 @@ func (dsq *DSQueue) GetStatus() map[string]interface{} {
 	res["PopCountLimit"] = dsq.conf.GetPopCountLimit()
 	res["MaxSize"] = dsq.conf.GetMaxSize()
 	res["CreateTs"] = dsq.desc.GetCreateTs()
-	res["TotalMessages"] = dsq.Size()
+	res["TotalMessages"] = dsq.GetSize()
 	res["InFlightSize"] = dsq.inFlightHeap.Len()
 	res["LastPushTs"] = dsq.conf.LastPushTs
 	res["LastPopTs"] = dsq.conf.LastPopTs
 	return res
 }
 
-func (dsq *DSQueue) Size() int {
+func (dsq *DSQueue) GetSize() int {
 	return len(dsq.allMessagesMap)
 }
 
 func (dsq *DSQueue) GetCurrentStatus() IResponse {
 	return common.NewDictResponse(dsq.GetStatus())
-}
-
-func (dsq *DSQueue) GetType() defs.ServiceType {
-	return defs.HT_DOUBLE_SIDED_QUEUE
 }
 
 func (dsq *DSQueue) GetTypeName() string {

@@ -1,9 +1,5 @@
 package api
 
-import (
-	"firempq/defs"
-)
-
 type IItemMetaData interface {
 	GetId() string
 	StringMarshal() string
@@ -23,16 +19,15 @@ type IResponse interface {
 }
 
 type ISvc interface {
-	IsClosed() bool
-	Size() int
-	StartUpdate()
-	GetStatus() map[string]interface{}
-	GetType() defs.ServiceType
-	GetTypeName() string
-	GetServiceId() string
 	NewContext() ServiceContext
+	StartUpdate()
+	GetTypeName() string
+	GetSize() int
+	GetStatus() map[string]interface{}
+	GetServiceId() string
 	Clear()
 	Close()
+	IsClosed() bool
 }
 
 type ServiceContext interface {

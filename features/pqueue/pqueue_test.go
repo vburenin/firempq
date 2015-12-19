@@ -3,7 +3,6 @@ package pqueue
 import (
 	"firempq/common"
 	"firempq/db"
-	"firempq/defs"
 	"firempq/log"
 	"firempq/testutils"
 	"testing"
@@ -255,7 +254,6 @@ func TestStatus(t *testing.T) {
 			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 0)
 
 			So(q.GetServiceId(), ShouldEqual, "1")
-			So(q.GetType(), ShouldEqual, defs.HT_PRIORITY_QUEUE)
 			So(q.GetTypeName(), ShouldEqual, common.STYPE_PRIORITY_QUEUE)
 		})
 		Convey("Status for several messages in flight", func() {
