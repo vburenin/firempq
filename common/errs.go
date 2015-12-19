@@ -5,6 +5,7 @@ var CODE_NOT_FOUND int64 = 404
 var CODE_CONFLICT_REQ int64 = 409
 var CODE_SERVER_ERR int64 = 500
 var CODE_GONE int64 = 410
+var CODE_TEMPORARY_ERROR int64 = 412
 
 func NewError(errorText string, errorCode int64) *ErrorResponse {
 	return &ErrorResponse{errorText, errorCode}
@@ -20,6 +21,10 @@ func NotFoundRequest(errorText string) *ErrorResponse {
 
 func ConflictRequest(errorText string) *ErrorResponse {
 	return &ErrorResponse{errorText, CODE_CONFLICT_REQ}
+}
+
+func TemporaryError(errorText string) *ErrorResponse {
+	return &ErrorResponse{errorText, CODE_TEMPORARY_ERROR}
 }
 
 func ServerError(errorText string) *ErrorResponse {
@@ -40,7 +45,7 @@ var ERR_MSG_POP_ATTEMPTS_EXCEEDED *ErrorResponse = NewError("Message exceded the
 var ERR_QUEUE_INTERNAL_ERROR *ErrorResponse = ServerError("Internal error/data integrity failure")
 var ERR_PRIORITY_OUT_OF_RANGE = InvalidRequest("The priority is out of range")
 
-// Param errors
+// Parameter errors.
 var ERR_MSG_ID_NOT_DEFINED *ErrorResponse = InvalidRequest("Message ID is not defined")
 var ERR_MSG_TIMEOUT_NOT_DEFINED *ErrorResponse = InvalidRequest("Message timeout is not defined")
 var ERR_MSG_BAD_DELIVERY_TIMEOUT *ErrorResponse = InvalidRequest("Bad delivery interval specified")
@@ -49,3 +54,5 @@ var ERR_CMD_WITH_NO_PARAMS *ErrorResponse = InvalidRequest("Command doesn't acce
 var ERR_UNKNOWN_ERROR *ErrorResponse = NewError("Unknown server error", 500)
 
 var ERR_TS_PARAMETER_NEEDED *ErrorResponse = InvalidRequest("TS parameters must be provided")
+
+var ERR_SIZE_EXCEEDED = TemporaryError("Service reached size limit")
