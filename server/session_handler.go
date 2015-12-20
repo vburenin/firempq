@@ -9,41 +9,43 @@ import (
 	"strings"
 
 	. "firempq/api"
+	"strconv"
 )
 
 var EOM = []byte{'\n'}
 
+const (
+	CMD_PING       = "PING"
+	CMD_CREATE_SVC = "CRT"
+	CMD_DROP_SVC   = "DROP"
+	CMD_QUIT       = "QUIT"
+	CMD_UNIX_TS    = "TS"
+	CMD_LIST       = "LIST"
+	CMD_CTX        = "CTX"
+	CMD_LOGLEVEL   = "LOGLEVEL"
+	CMD_PANIC      = "PANIC"
+)
+
 type FuncHandler func([]string) IResponse
 
 type SessionHandler struct {
-	conn         net.Conn
-	tokenizer    *common.Tokenizer
-	mainHandlers map[string]FuncHandler
-	active       bool
-	ctx          ServiceContext
-	svcs         *facade.ServiceFacade
-	quitChan     chan bool
+	conn      net.Conn
+	tokenizer *common.Tokenizer
+	active    bool
+	ctx       ServiceContext
+	svcs      *facade.ServiceFacade
+	quitChan  chan bool
 }
 
 func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
 
-	handlerMap := map[string]FuncHandler{
-		CMD_PING:    pingHandler,
-		CMD_UNIX_TS: tsHandler,
-	}
 	sh := &SessionHandler{
-		conn:         conn,
-		tokenizer:    common.NewTokenizer(),
-		mainHandlers: handlerMap,
-		ctx:          nil,
-		active:       true,
-		svcs:         services,
+		conn:      conn,
+		tokenizer: common.NewTokenizer(),
+		ctx:       nil,
+		active:    true,
+		svcs:      services,
 	}
-	sh.mainHandlers[CMD_QUIT] = sh.quitHandler
-	sh.mainHandlers[CMD_CTX] = sh.setCtxHandler
-	sh.mainHandlers[CMD_CREATE_SVC] = sh.createServiceHandler
-	sh.mainHandlers[CMD_DROP_SVC] = sh.dropServiceHandler
-	sh.mainHandlers[CMD_LIST] = sh.listServicesHandler
 	return sh
 }
 
@@ -94,16 +96,30 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 
 	cmd := cmdTokens[0]
 	tokens := cmdTokens[1:]
-	handler, ok := s.mainHandlers[cmd]
 
-	if !ok {
+	switch cmd {
+	case CMD_QUIT:
+		resp = s.quitHandler(tokens)
+	case CMD_CTX:
+		resp = s.ctxHandler(tokens)
+	case CMD_CREATE_SVC:
+		resp = s.createServiceHandler(tokens)
+	case CMD_DROP_SVC:
+		resp = s.dropServiceHandler(tokens)
+	case CMD_LIST:
+		resp = s.listServicesHandler(tokens)
+	case CMD_LOGLEVEL:
+		resp = logLevelHandler(tokens)
+	case CMD_PING:
+		resp = pingHandler(tokens)
+	case CMD_UNIX_TS:
+		resp = tsHandler(tokens)
+	default:
 		if s.ctx == nil {
 			resp = common.ERR_UNKNOWN_CMD
 		} else {
 			resp = s.ctx.Call(cmd, tokens)
 		}
-	} else {
-		resp = handler(tokens)
 	}
 
 	return s.writeResponse(resp)
@@ -152,7 +168,7 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) IResponse {
 }
 
 // Context changer.
-func (s *SessionHandler) setCtxHandler(tokens []string) IResponse {
+func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
 	if len(tokens) > 1 {
 		return common.InvalidRequest("SETCTX accept service name only")
 	}
@@ -213,4 +229,17 @@ func tsHandler(tokens []string) IResponse {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
 	return common.NewIntResponse(common.Uts())
+}
+
+func logLevelHandler(tokens []string) IResponse {
+	if len(tokens) != 1 {
+		return common.InvalidRequest("Log level accept one integer parameter in range [0-5]")
+	}
+	l, e := strconv.Atoi(tokens[0])
+	if e != nil || l < 0 || l > 5 {
+		return common.InvalidRequest("Log level is an integer in range [0-5]")
+	}
+	log.Warning("Log level changed to: %d", l)
+	log.SetLevel(l)
+	return common.OK_RESPONSE
 }

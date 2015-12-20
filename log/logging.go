@@ -20,8 +20,8 @@ func fixLogger() {
 	Logger.ExtraCalldepth = 1
 }
 
-func SetLevel(l logging.Level) {
-	logging.SetLevel(l, "firempq")
+func SetLevel(l int) {
+	logging.SetLevel(logging.Level(l), "firempq")
 }
 
 var Logger = logging.MustGetLogger("firempq")
