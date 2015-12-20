@@ -40,3 +40,35 @@ func ParseStringParam(params []string, minLen, maxLen int64) ([]string, string, 
 	}
 	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
 }
+
+// ParseUserItemId parses user provided item id that can not start with '_'.
+func ParseUserItemId(params []string, minLen, maxLen int64) ([]string, string, *ErrorResponse) {
+	valName := params[0]
+	if len(params) >= 2 {
+		itemLength := int64(len(params[1]))
+		if itemLength >= minLen && itemLength <= maxLen {
+			if ValidateUserItemId(params[1]) {
+				return params[2:], params[1], nil
+			} else {
+				return nil, "", InvalidRequest("Only ^[a-zA-Z0-9][_a-zA-Z0-9]* symbols are allowed for id")
+			}
+		}
+	}
+	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+}
+
+// ParseItemId parses item id that can use all characters.
+func ParseItemId(params []string, minLen, maxLen int64) ([]string, string, *ErrorResponse) {
+	valName := params[0]
+	if len(params) >= 2 {
+		itemLength := int64(len(params[1]))
+		if itemLength >= minLen && itemLength <= maxLen {
+			if ValidateItemId(params[1]) {
+				return params[2:], params[1], nil
+			} else {
+				return nil, "", InvalidRequest("Only [_a-zA-Z0-9]* symbols are allowed for id")
+			}
+		}
+	}
+	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+}

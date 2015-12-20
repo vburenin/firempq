@@ -14,6 +14,7 @@ type PQContext struct {
 }
 
 const MAX_MESSAGE_ID_LENGTH = 128
+const PAYLOAD_LIMIT = 512 * 1024
 
 const (
 	ACTION_UNLOCK_BY_ID        = "UNLCK"
@@ -88,7 +89,7 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_ID:
-			params, msgId, err = ParseStringParam(params, 1, MAX_MESSAGE_ID_LENGTH)
+			params, msgId, err = ParseItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
 		default:
 			return "", makeUnknownParamResponse(params[0])
 		}
@@ -192,11 +193,11 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_ID:
-			params, msgId, err = ParseStringParam(params, 1, 128)
+			params, msgId, err = ParseUserItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
 		case PRM_PRIORITY:
 			params, priority, err = ParseInt64Param(params, 0, cfg.MaxPriority-1)
 		case PRM_PAYLOAD:
-			params, payload, err = ParseStringParam(params, 1, 512*1024)
+			params, payload, err = ParseStringParam(params, 1, PAYLOAD_LIMIT)
 		case PRM_DELAY:
 			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
 		default:
@@ -220,7 +221,7 @@ func (ctx *PQContext) UpdateLock(params []string) IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_ID:
-			params, msgId, err = ParseStringParam(params, 1, 128)
+			params, msgId, err = ParseItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
 		case PRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		default:
