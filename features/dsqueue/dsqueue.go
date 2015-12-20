@@ -541,11 +541,15 @@ func (dsq *DSQueue) cleanExpiredItems(ts int64) int64 {
 func (dsq *DSQueue) StartUpdate() {
 	go func() {
 		for dsq.closedState.IsFalse() {
-			if dsq.update(common.Uts()) {
-				time.Sleep(time.Millisecond)
-			} else {
-				time.Sleep(conf.CFG.UpdateInterval * 1000)
+			dsq.closedState.Lock()
+			if dsq.closedState.IsFalse() {
+				if dsq.update(common.Uts()) {
+					time.Sleep(time.Millisecond)
+				} else {
+					time.Sleep(conf.CFG.UpdateInterval * 1000)
+				}
 			}
+			dsq.closedState.Unlock()
 		}
 	}()
 }
