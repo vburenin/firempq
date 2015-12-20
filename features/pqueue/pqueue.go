@@ -511,7 +511,7 @@ func (pq *PQueue) StartUpdate() {
 	}()
 }
 
-// How frequently loop should run.
+// Remove expired and return unlocked items. Should be running as a thread.
 func (pq *PQueue) update(ts int64) bool {
 	pq.closedState.Lock()
 	defer pq.closedState.Unlock()

@@ -554,7 +554,7 @@ func (dsq *DSQueue) StartUpdate() {
 	}()
 }
 
-// Remove expired items. Should be running as a thread.
+// Remove expired and return unlocked items. Should be running as a thread.
 func (dsq *DSQueue) update(ts int64) bool {
 	var delivered, unlocked, cleaned int64
 
