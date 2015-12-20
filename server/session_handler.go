@@ -114,6 +114,8 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
 		resp = pingHandler(tokens)
 	case CMD_UNIX_TS:
 		resp = tsHandler(tokens)
+	case CMD_PANIC:
+		resp = panicHandler(tokens)
 	default:
 		if s.ctx == nil {
 			resp = common.ERR_UNKNOWN_CMD
@@ -241,5 +243,15 @@ func logLevelHandler(tokens []string) IResponse {
 	}
 	log.Warning("Log level changed to: %d", l)
 	log.SetLevel(l)
+	return common.OK_RESPONSE
+}
+
+func panicHandler(tokens []string) (resp IResponse) {
+	if len(tokens) > 0 {
+		return common.ERR_CMD_WITH_NO_PARAMS
+	}
+
+	log.Critical("Panic requested!")
+	panic("Panic requested")
 	return common.OK_RESPONSE
 }
