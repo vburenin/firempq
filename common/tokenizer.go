@@ -7,11 +7,8 @@ import (
 )
 
 const (
-	STATE_INIT                 = 0
 	STATE_PARSE_TEXT_TOKEN     = 1
-	STATE_PARSE_BINARY_HEADER  = 3
-	STATE_PARSE_BINARY_PAYLOAD = 4
-	STATE_LOOKING_FOR_LF       = 5
+	STATE_PARSE_BINARY_PAYLOAD = 2
 	SYMBOL_CR                  = 0x0A
 )
 
@@ -19,7 +16,7 @@ const (
 	MAX_TOKENS_PER_MSG    = 32
 	MAX_RECV_BUFFER_SIZE  = 4096
 	MAX_TEXT_TOKEN_LEN    = 256
-	MAX_BINARY_TOKEN_LEN  = 0x80000
+	MAX_BINARY_TOKEN_LEN  = 128 * 1024 * 1024
 	START_ASCII_RANGE     = 0x21
 	END_ASCII_RANGE       = 0x7E
 	INIT_TOKEN_BUFFER_LEN = 48
@@ -45,11 +42,12 @@ func NewTokenizer() *Tokenizer {
 }
 
 func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
-	result := make([]string, 0, MAX_TOKENS_PER_MSG)
 	var err error
 	var token []byte = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
 	var binTokenLen int
 	var state int = STATE_PARSE_TEXT_TOKEN
+
+	result := make([]string, 0, MAX_TOKENS_PER_MSG)
 
 	for {
 		if tok.bufPos >= tok.bufLen {
