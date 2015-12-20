@@ -23,15 +23,5 @@ func GenRandMsgId() string {
 	for i := 1; i < MSG_ID_LENGTH; i++ {
 		randData[i] = MSG_ID_CHARACTERS[rndgen.Int63()%MSG_ID_CHARS_LENGTH]
 	}
-	return string(randData)
-}
-
-func GenRandMsgIdBytes() []byte {
-	rndMutex.Lock()
-	defer rndMutex.Unlock()
-	randData := make([]byte, MSG_ID_LENGTH)
-	for i := 0; i < MSG_ID_LENGTH; i++ {
-		randData[i] = MSG_ID_CHARACTERS[rndgen.Int63()%MSG_ID_CHARS_LENGTH]
-	}
-	return randData
+	return UnsafeBytesToString(randData)
 }
