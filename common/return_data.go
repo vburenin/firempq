@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	. "firempq/api"
+	"io"
 )
 
 type CallFuncType func([]string) IResponse
@@ -26,7 +27,7 @@ func (self *DictResponse) GetDict() map[string]interface{} {
 	return self.dict
 }
 
-func (self *DictResponse) GetResponse() string {
+func (self *DictResponse) getResponseChunks() []string {
 	data := make([]string, 0, 3+9*len(self.dict))
 	data = append(data, "+DATA %")
 	data = append(data, strconv.Itoa(len(self.dict)))
@@ -51,12 +52,25 @@ func (self *DictResponse) GetResponse() string {
 			}
 		}
 	}
-	return strings.Join(data, "")
+	return data
 }
 
-func (self *DictResponse) IsError() bool {
-	return false
+func (self *DictResponse) GetResponse() string {
+	return strings.Join(self.getResponseChunks(), "")
 }
+
+func (self *DictResponse) WriteResponse(buff io.Writer) error {
+	var err error
+	for _, s := range self.getResponseChunks() {
+		_, err = buff.Write(UnsafeStringToBytes(s))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (self *DictResponse) IsError() bool { return false }
 
 func NewItemsResponse(items []IItem) *ItemsResponse {
 	return &ItemsResponse{items}
@@ -66,7 +80,7 @@ func (self *ItemsResponse) GetItems() []IItem {
 	return self.items
 }
 
-func (self *ItemsResponse) GetResponse() string {
+func (self *ItemsResponse) getResponseChunks() []string {
 	data := make([]string, 0, 3+9*len(self.items))
 	data = append(data, "+DATA *")
 	data = append(data, strconv.Itoa(len(self.items)))
@@ -77,14 +91,29 @@ func (self *ItemsResponse) GetResponse() string {
 		data = append(data, " PL ")
 		data = append(data, EncodeRespStringTo(data, item.GetPayload())...)
 	}
-	return strings.Join(data, "")
+	return data
+}
+
+func (self *ItemsResponse) GetResponse() string {
+	return strings.Join(self.getResponseChunks(), "")
+}
+
+func (self *ItemsResponse) WriteResponse(buff io.Writer) error {
+	var err error
+	for _, s := range self.getResponseChunks() {
+		_, err = buff.Write(UnsafeStringToBytes(s))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (self *ItemsResponse) IsError() bool {
 	return false
 }
 
-// Error response.
+// ErrorResponse is an error response.
 type ErrorResponse struct {
 	ErrorText string
 	ErrorCode int64
@@ -100,20 +129,11 @@ func (e *ErrorResponse) GetResponse() string {
 		EncodeRespString(e.ErrorText))
 }
 
+func (e *ErrorResponse) WriteResponse(buff io.Writer) error {
+	_, err := buff.Write(UnsafeStringToBytes(e.GetResponse()))
+	return err
+}
+
 func (e *ErrorResponse) IsError() bool {
 	return true
 }
-
-// Error response.
-type OkResponse struct {
-}
-
-func (e *OkResponse) GetResponse() string {
-	return fmt.Sprintf("+OK")
-}
-
-func (self *OkResponse) IsError() bool {
-	return false
-}
-
-var OK_RESPONSE *OkResponse = &OkResponse{}

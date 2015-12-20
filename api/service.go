@@ -1,5 +1,9 @@
 package api
 
+import (
+	"io"
+)
+
 type IItemMetaData interface {
 	GetId() string
 	StringMarshal() string
@@ -14,6 +18,8 @@ type IItem interface {
 type IResponse interface {
 	// GetResponse returns serialized string of data that can be returned to the client.
 	GetResponse() string
+	// WriteResponse writes the response data directly into writer.
+	WriteResponse(io.Writer) error
 	// IsError tells if this response is actually an error.
 	IsError() bool
 }

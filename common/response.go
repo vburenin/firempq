@@ -6,6 +6,8 @@ import (
 
 	. "firempq/api"
 
+	"io"
+
 	"github.com/op/go-logging"
 )
 
@@ -24,24 +26,29 @@ func TranslateError(err error) IResponse {
 	}
 }
 
-// Simple string response used to return some quick responses for commands like ping, etc.
+// StrResponse is a simple string response used to return some quick responses for commands like ping, etc.
 type StrResponse struct {
 	str string
 }
 
 func NewStrResponse(str string) *StrResponse {
-	return &StrResponse{str: str}
+	return &StrResponse{str: "+" + str}
 }
 
 func (r *StrResponse) GetResponse() string {
-	return "+" + r.str
+	return r.str
+}
+
+func (r *StrResponse) WriteResponse(buff io.Writer) error {
+	_, err := buff.Write(UnsafeStringToBytes(r.GetResponse()))
+	return err
 }
 
 func (r *StrResponse) IsError() bool {
 	return false
 }
 
-// Int simple response.
+// IntResponse is a simple integer response.
 type IntResponse struct {
 	Value int64
 }
@@ -54,11 +61,21 @@ func (r *IntResponse) GetResponse() string {
 	return "+DATA :" + strconv.FormatInt(r.Value, 10)
 }
 
+var intDataPrefix = []byte("+DATA :")
+
+func (r *IntResponse) WriteResponse(buff io.Writer) error {
+	_, err := buff.Write(intDataPrefix)
+	if err == nil {
+		_, err = buff.Write(UnsafeStringToBytes(strconv.FormatInt(r.Value, 10)))
+	}
+	return err
+}
+
 func (r *IntResponse) IsError() bool {
 	return false
 }
 
-// Str Array simple response.
+// StrArrayResponse a response containing array of strings.
 type StrArrayResponse struct {
 	val []string
 }
@@ -71,7 +88,7 @@ func (r *StrArrayResponse) IsError() bool {
 	return false
 }
 
-func (r *StrArrayResponse) GetResponse() string {
+func (r *StrArrayResponse) genResponse() []byte {
 	var buffer bytes.Buffer
 	buffer.WriteString("+DATA *")
 	buffer.WriteString(strconv.Itoa(len(r.val)))
@@ -79,12 +96,20 @@ func (r *StrArrayResponse) GetResponse() string {
 		buffer.WriteString("\n")
 		buffer.WriteString(v)
 	}
-	return buffer.String()
+	return buffer.Bytes()
 }
 
-// Predefined commonly used responses.
-var RESP_PONG IResponse = NewStrResponse("PONG")
+func (r *StrArrayResponse) GetResponse() string {
+	return UnsafeBytesToString(r.genResponse())
+}
 
-// Test interface.
+func (r *StrArrayResponse) WriteResponse(buff io.Writer) error {
+	_, err := buff.Write(r.genResponse())
+	return err
+}
+
+var RESP_PONG IResponse = NewStrResponse("PONG")
+var OK_RESPONSE = NewStrResponse("OK")
+
 var _ IResponse = NewStrResponse("test")
 var _ IResponse = NewIntResponse(10)
