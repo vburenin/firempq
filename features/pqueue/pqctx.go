@@ -33,8 +33,8 @@ const (
 
 const (
 	PRM_ID               = "ID"
-	PRM_POP_WAIT_TIMEOUT = "WAITTIMEOUT"
-	PRM_LOCK_TIMEOUT     = "LOCKTIMEOUT"
+	PRM_POP_WAIT_TIMEOUT = "WAIT"
+	PRM_LOCK_TIMEOUT     = "TIMEOUT"
 	PRM_PRIORITY         = "PRIORITY"
 	PRM_LIMIT            = "LIMIT"
 	PRM_PAYLOAD          = "PL"

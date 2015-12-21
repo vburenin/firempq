@@ -108,6 +108,28 @@ func (r *StrArrayResponse) WriteResponse(buff io.Writer) error {
 	return err
 }
 
+type AsyncResponse struct {
+	asyncHeader string
+	resp IResponse
+}
+
+func NewAsyncResponse(asyncId string, resp IResponse) *AsyncResponse {
+	return &AsyncResponse{"+ASYNC " + asyncId + " ", resp}
+}
+
+func (r *AsyncResponse) GetResponse() string {
+	return r.asyncHeader + r.resp.GetResponse()
+}
+
+func (r *AsyncResponse) WriteResponse(buff io.Writer) error {
+
+	if _, err := buff.Write(UnsafeStringToBytes(r.asyncHeader)); err != nil {
+		return err
+	}
+	return r.resp.WriteResponse(buff)
+}
+
+
 var RESP_PONG IResponse = NewStrResponse("PONG")
 var OK_RESPONSE = NewStrResponse("OK")
 

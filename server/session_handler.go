@@ -10,6 +10,7 @@ import (
 
 	. "firempq/api"
 	"strconv"
+	"sync"
 )
 
 var EOM = []byte{'\n'}
@@ -24,17 +25,20 @@ const (
 	CMD_CTX        = "CTX"
 	CMD_LOGLEVEL   = "LOGLEVEL"
 	CMD_PANIC      = "PANIC"
+	CMD_ASYNC      = "ASYNC"
 )
 
 type FuncHandler func([]string) IResponse
 
 type SessionHandler struct {
+	connLock  sync.Mutex
 	conn      net.Conn
 	tokenizer *common.Tokenizer
 	active    bool
 	ctx       ServiceContext
 	svcs      *facade.ServiceFacade
-	quitChan  chan bool
+	quitChan  chan struct{}
+	asyncChan chan []string
 }
 
 func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
@@ -45,6 +49,7 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 		ctx:       nil,
 		active:    true,
 		svcs:      services,
+		asyncChan: make(chan []string, 1024),
 	}
 	return sh
 }
@@ -60,6 +65,14 @@ func (s *SessionHandler) QuitListener(quitChan chan struct{}) {
 			}
 		}
 	}()
+	go s.asyncDispatcher(quitChan)
+}
+
+func logConnError(err error) {
+	errTxt := err.Error()
+	if err != io.EOF && !(strings.Index(errTxt, "use of closed") > 0) {
+		log.Error(errTxt)
+	}
 }
 
 // DispatchConn dispatcher. Entry point to start connection handling.
@@ -70,13 +83,11 @@ func (s *SessionHandler) DispatchConn() {
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
 		if err == nil {
-			err = s.processCmdTokens(cmdTokens)
+			resp := s.processCmdTokens(cmdTokens)
+			err = s.writeResponse(resp)
 		}
 		if err != nil {
-			errTxt := err.Error()
-			if err != io.EOF && !(strings.Index(errTxt, "use of closed") > 0) {
-				log.Error(errTxt)
-			}
+			logConnError(err)
 			break
 		}
 	}
@@ -84,53 +95,89 @@ func (s *SessionHandler) DispatchConn() {
 	log.Debug("Client disconnected: %s", addr)
 
 }
+func (s *SessionHandler) asyncDispatcher(quitChan chan struct{}) {
+	var err error
+	for s.active {
+		select {
+		case <-quitChan:
+			return
+		case tokens := <-s.asyncChan:
+			asyncId := tokens[0]
+			resp := common.NewAsyncResponse(asyncId, s.processCmdTokens(tokens[1:]))
+			s.connLock.Lock()
+			if resp.WriteResponse(s.conn) == nil {
+				_, err = s.conn.Write(EOM)
+			}
+			s.connLock.Unlock()
+		}
+		if err != nil {
+			logConnError(err)
+			return
+		}
+	}
+}
 
 // Basic token processing that looks for global commands,
 // if there is no token match it will look into current context
 // to see if there is a processor for the rest of the tokens.
-func (s *SessionHandler) processCmdTokens(cmdTokens []string) error {
-	var resp IResponse
+func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 	if len(cmdTokens) == 0 {
-		return s.writeResponse(common.OK_RESPONSE)
+		return common.OK_RESPONSE
 	}
 
 	cmd := cmdTokens[0]
 	tokens := cmdTokens[1:]
 
 	switch cmd {
+	case CMD_ASYNC:
+		return s.asyncHandler(tokens)
 	case CMD_QUIT:
-		resp = s.quitHandler(tokens)
+		return s.quitHandler(tokens)
 	case CMD_CTX:
-		resp = s.ctxHandler(tokens)
+		return s.ctxHandler(tokens)
 	case CMD_CREATE_SVC:
-		resp = s.createServiceHandler(tokens)
+		return s.createServiceHandler(tokens)
 	case CMD_DROP_SVC:
-		resp = s.dropServiceHandler(tokens)
+		return s.dropServiceHandler(tokens)
 	case CMD_LIST:
-		resp = s.listServicesHandler(tokens)
+		return s.listServicesHandler(tokens)
 	case CMD_LOGLEVEL:
-		resp = logLevelHandler(tokens)
+		return logLevelHandler(tokens)
 	case CMD_PING:
-		resp = pingHandler(tokens)
+		return pingHandler(tokens)
 	case CMD_UNIX_TS:
-		resp = tsHandler(tokens)
+		return tsHandler(tokens)
 	case CMD_PANIC:
-		resp = panicHandler(tokens)
+		return panicHandler(tokens)
 	default:
 		if s.ctx == nil {
-			resp = common.ERR_UNKNOWN_CMD
+			return common.ERR_UNKNOWN_CMD
 		} else {
-			resp = s.ctx.Call(cmd, tokens)
+			return s.ctx.Call(cmd, tokens)
 		}
 	}
+}
 
-	return s.writeResponse(resp)
+func (s *SessionHandler) asyncHandler(tokens []string) IResponse {
+	if len(tokens) < 2 {
+		return common.InvalidRequest(
+			"Asynchrounous request must include at least the request identifier and the command")
+	}
+	if !common.ValidateItemId(tokens[0]) {
+		return common.InvalidRequest("Async call id must be [_a-zA-Z0-9]{1,128}")
+	}
+	if tokens[1] == CMD_ASYNC {
+		return common.InvalidRequest("Recursive async calls are not allowed")
+	}
+	s.asyncChan <- tokens
+	return common.NewStrResponse("A " + tokens[0])
 }
 
 // Writes IResponse into connection.
 func (s *SessionHandler) writeResponse(resp IResponse) error {
-	unsafeData := common.UnsafeStringToBytes(resp.GetResponse())
-	if _, err := s.conn.Write(unsafeData); err != nil {
+	s.connLock.Lock()
+	defer s.connLock.Unlock()
+	if err := resp.WriteResponse(s.conn); err != nil {
 		return err
 	}
 	if _, err := s.conn.Write(EOM); err != nil {
