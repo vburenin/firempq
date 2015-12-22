@@ -11,6 +11,7 @@ import (
 
 	. "firempq/api"
 	"firempq/common"
+	"firempq/db"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 
 type QueueOpFunc func(req []string) error
 
-type CommandServer struct {
+type ConnectionServer struct {
 	facade     *facade.ServiceFacade
 	listener   net.Listener
 	signalChan chan os.Signal
@@ -27,27 +28,27 @@ type CommandServer struct {
 }
 
 func NewSimpleServer(listener net.Listener) IServer {
-	return &CommandServer{
+	return &ConnectionServer{
 		facade:     facade.CreateFacade(),
 		listener:   listener,
 		signalChan: make(chan os.Signal, 1),
 	}
 }
 
-func (this *CommandServer) Start() {
-	signal.Notify(this.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go this.waitForSignal()
+func (self *ConnectionServer) Start() {
+	signal.Notify(self.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go self.waitForSignal()
 
-	defer this.listener.Close()
+	defer self.listener.Close()
 	quitChan := common.GetQuitChan()
 	for {
-		conn, err := this.listener.Accept()
+		conn, err := self.listener.Accept()
 		if err == nil {
-			go this.handleConnection(conn)
+			go self.handleConnection(conn)
 		} else {
 			select {
 			case <-quitChan:
-				this.Shutdown()
+				self.Shutdown()
 				return
 			default:
 				log.Error("Could not accept incoming request: %s", err.Error())
@@ -56,36 +57,37 @@ func (this *CommandServer) Start() {
 	}
 }
 
-func (this *CommandServer) Shutdown() {
-	this.waitGroup.Wait()
+func (self *ConnectionServer) Shutdown() {
+	self.waitGroup.Wait()
 	log.Info("Closing queues...")
-	this.facade.Close()
+	self.facade.Close()
+	db.GetDatabase().Close()
 	log.Info("Server stopped.")
 }
 
-func (this *CommandServer) waitForSignal() {
+func (self *ConnectionServer) waitForSignal() {
 	for {
 		select {
-		case <-this.signalChan:
+		case <-self.signalChan:
 			signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-			this.Stop()
+			self.Stop()
 			return
 		}
 	}
 }
 
-func (this *CommandServer) Stop() {
+func (self *ConnectionServer) Stop() {
 	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
-	this.listener.Close()
+	self.listener.Close()
 	common.CloseQuitChan()
 }
 
-func (this *CommandServer) handleConnection(conn net.Conn) {
+func (self *ConnectionServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
-	defer this.waitGroup.Done()
+	defer self.waitGroup.Done()
 
-	this.waitGroup.Add(1)
-	session_handler := NewSessionHandler(conn, this.facade)
+	self.waitGroup.Add(1)
+	session_handler := NewSessionHandler(conn, self.facade)
 	session_handler.DispatchConn()
 }

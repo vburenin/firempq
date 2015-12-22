@@ -13,13 +13,11 @@ import (
 type ServiceFacade struct {
 	allSvcs          map[string]ISvc
 	rwLock           sync.RWMutex
-	database         DataStorage
 	serviceIdCounter uint64
 }
 
-func NewFacade(database DataStorage) *ServiceFacade {
+func NewFacade() *ServiceFacade {
 	f := ServiceFacade{
-		database:         database,
 		allSvcs:          make(map[string]ISvc),
 		serviceIdCounter: 0,
 	}
@@ -135,5 +133,4 @@ func (s *ServiceFacade) Close() {
 		svc.Close()
 	}
 	s.rwLock.Unlock()
-	s.database.Close()
 }

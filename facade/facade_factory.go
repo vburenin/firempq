@@ -2,7 +2,6 @@ package facade
 
 import (
 	"firempq/common"
-	"firempq/db"
 	"firempq/features/dsqueue"
 	"firempq/features/pqueue"
 	"sync"
@@ -42,7 +41,7 @@ func CreateFacade() *ServiceFacade {
 	lock.Lock()
 	defer lock.Unlock()
 	if facade == nil {
-		facade = NewFacade(db.GetDatabase())
+		facade = NewFacade()
 	}
 	return facade
 }
