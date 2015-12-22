@@ -1,9 +1,14 @@
 package log
 
-import "os"
-import "firempq/conf"
-import "github.com/op/go-logging"
-import "log"
+import (
+	"firempq/conf"
+	"io"
+	"log"
+	"os"
+	"strings"
+
+	"github.com/op/go-logging"
+)
 
 func InitLogging() {
 	format := logging.MustStringFormatter(
@@ -33,3 +38,10 @@ var Notice func(string, ...interface{}) = Logger.Notice
 var Info func(string, ...interface{}) = Logger.Info
 var Debug func(string, ...interface{}) = Logger.Debug
 var Fatal func(string, ...interface{}) = log.Fatalf
+
+func LogConnError(err error) {
+	errTxt := err.Error()
+	if err != io.EOF && !(strings.Index(errTxt, "use of closed") > 0) {
+		Error(errTxt)
+	}
+}
