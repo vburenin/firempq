@@ -133,7 +133,7 @@ func (pq *PQueue) SetParams(msgTtl, maxSize, queueTtl, deliveryDelay int64) IRes
 	pq.config.MaxSize = maxSize
 	pq.config.InactivityTtl = queueTtl
 	pq.config.DeliveryDelay = deliveryDelay
-	features.SaveServiceConfig(pq.desc.ServiceId, pq.config)
+	features.SaveServiceConfig(pq.GetServiceId(), pq.config)
 	pq.lock.Unlock()
 	return OK_RESPONSE
 }
