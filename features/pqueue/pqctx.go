@@ -13,7 +13,7 @@ type PQContext struct {
 	pq             *PQueue
 	callsCount     int64
 	responseWriter ResponseWriter
-	asyncChan      chan []string
+	pushChan       chan []string
 	popChan        chan []string
 }
 
@@ -22,7 +22,7 @@ func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
 		pq:             pq,
 		callsCount:     0,
 		responseWriter: r,
-		asyncChan:      make(chan []string, 512),
+		pushChan:       make(chan []string, 512),
 		popChan:        make(chan []string, 512),
 	}
 }
@@ -31,18 +31,18 @@ const MAX_MESSAGE_ID_LENGTH = 128
 const PAYLOAD_LIMIT = 512 * 1024
 
 const (
-	ACTION_UNLOCK_BY_ID        = "UNLCK"
-	ACTION_DELETE_LOCKED_BY_ID = "DELLOCKED"
-	ACTION_DELETE_BY_ID        = "DEL"
-	ACTION_SET_LOCK_TIMEOUT    = "UPDLOCK"
-	ACTION_PUSH                = "PUSH"
-	ACTION_POP                 = "POP"
-	ACTION_POPLOCK             = "POPLCK"
-	ACTION_MSG_INFO            = "MSGINFO"
-	ACTION_STATUS              = "STATUS"
-	ACTION_RELEASE_IN_FLIGHT   = "RELEASE"
-	ACTION_EXPIRE              = "EXPIRE"
-	ACTION_SET_PARAM           = "SET"
+	PQ_CMD_UNLOCK_BY_ID        = "UNLCK"
+	PQ_CMD_DELETE_LOCKED_BY_ID = "DELLOCKED"
+	PQ_CMD_DELETE_BY_ID        = "DEL"
+	PQ_CMD_SET_LOCK_TIMEOUT    = "UPDLOCK"
+	PQ_CMD_PUSH                = "PUSH"
+	PQ_CMD_POP                 = "POP"
+	PQ_CMD_POPLOCK             = "POPLCK"
+	PQ_CMD_MSG_INFO            = "MSGINFO"
+	PQ_CMD_STATUS              = "STATUS"
+	PQ_CMD_RELEASE_IN_FLIGHT   = "RELEASE"
+	PQ_CMD_EXPIRE              = "EXPIRE"
+	PQ_CMD_SET_PARAM           = "SET"
 )
 
 const (
@@ -67,32 +67,32 @@ const (
 func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	ctx.callsCount += 1
 	switch cmd {
-	case ACTION_POPLOCK:
+	case PQ_CMD_POPLOCK:
 		return ctx.PopLock(params)
-	case ACTION_POP:
+	case PQ_CMD_POP:
 		return ctx.Pop(params)
-	case ACTION_MSG_INFO:
+	case PQ_CMD_MSG_INFO:
 		return ctx.GetMessageInfo(params)
-	case ACTION_DELETE_LOCKED_BY_ID:
+	case PQ_CMD_DELETE_LOCKED_BY_ID:
 		return ctx.DeleteLockedById(params)
-	case ACTION_DELETE_BY_ID:
+	case PQ_CMD_DELETE_BY_ID:
 		return ctx.DeleteById(params)
-	case ACTION_PUSH:
+	case PQ_CMD_PUSH:
 		return ctx.Push(params)
-	case ACTION_SET_LOCK_TIMEOUT:
+	case PQ_CMD_SET_LOCK_TIMEOUT:
 		return ctx.UpdateLock(params)
-	case ACTION_UNLOCK_BY_ID:
+	case PQ_CMD_UNLOCK_BY_ID:
 		return ctx.UnlockMessageById(params)
-	case ACTION_STATUS:
+	case PQ_CMD_STATUS:
 		return ctx.GetCurrentStatus(params)
-	case ACTION_SET_PARAM:
+	case PQ_CMD_SET_PARAM:
 		return ctx.SetParamValue(params)
-	case ACTION_RELEASE_IN_FLIGHT:
+	case PQ_CMD_RELEASE_IN_FLIGHT:
 		return ctx.ReleaseInFlight(params)
-	case ACTION_EXPIRE:
+	case PQ_CMD_EXPIRE:
 		return ctx.ExpireItems(params)
 	}
-	return InvalidRequest("Unknown action: " + cmd)
+	return InvalidRequest("Unknown command: " + cmd)
 }
 
 func (ctx *PQContext) asyncDispatcher() {
@@ -103,7 +103,7 @@ func (ctx *PQContext) asyncDispatcher() {
 		case <-quitChan:
 			return
 		case tokens = <-ctx.popChan:
-		case tokens = <-ctx.asyncChan:
+		case tokens = <-ctx.pushChan:
 		}
 		asyncId := tokens[0]
 		resp := NewAsyncResponse(asyncId, ctx.Call(tokens[1], tokens[2:]))
