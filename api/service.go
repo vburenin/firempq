@@ -1,8 +1,6 @@
 package api
 
-import (
-	"io"
-)
+import "io"
 
 type IItemMetaData interface {
 	GetId() string
@@ -24,8 +22,12 @@ type IResponse interface {
 	IsError() bool
 }
 
+type ResponseWriter interface {
+	WriteResponse(IResponse) error
+}
+
 type ISvc interface {
-	NewContext() ServiceContext
+	NewContext(ResponseWriter) ServiceContext
 	StartUpdate()
 	GetTypeName() string
 	GetSize() int

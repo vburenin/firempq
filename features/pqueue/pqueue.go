@@ -89,8 +89,8 @@ func LoadPQueue(desc *ServiceDescription) (ISvc, error) {
 	return pq, nil
 }
 
-func (pq *PQueue) NewContext() ServiceContext {
-	return &PQContext{pq, 0}
+func (pq *PQueue) NewContext(rw ResponseWriter) ServiceContext {
+	return NewPQContext(pq, rw)
 }
 
 const (

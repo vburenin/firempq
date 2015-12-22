@@ -4,13 +4,27 @@ import (
 	. "firempq/api"
 	. "firempq/common"
 	. "firempq/conf"
+	"firempq/log"
 	"fmt"
 	"math"
 )
 
 type PQContext struct {
-	pq         *PQueue
-	callsCount int64
+	pq             *PQueue
+	callsCount     int64
+	responseWriter ResponseWriter
+	asyncChan      chan []string
+	popChan        chan []string
+}
+
+func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
+	return &PQContext{
+		pq:             pq,
+		callsCount:     0,
+		responseWriter: r,
+		asyncChan:      make(chan []string, 512),
+		popChan:        make(chan []string, 512),
+	}
 }
 
 const MAX_MESSAGE_ID_LENGTH = 128
@@ -80,6 +94,43 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	}
 	return InvalidRequest("Unknown action: " + cmd)
 }
+
+func (ctx *PQContext) asyncDispatcher() {
+	var tokens []string
+	quitChan := GetQuitChan()
+	for !ctx.pq.IsClosed() {
+		select {
+		case <-quitChan:
+			return
+		case tokens = <-ctx.popChan:
+		case tokens = <-ctx.asyncChan:
+		}
+		asyncId := tokens[0]
+		resp := NewAsyncResponse(asyncId, ctx.Call(tokens[1], tokens[2:]))
+
+		if err := ctx.responseWriter.WriteResponse(resp); err != nil {
+			log.LogConnError(err)
+			return
+		}
+	}
+}
+
+//func (ctx *PQContext) asyncHandler(tokens []string) IResponse {
+//	if len(tokens) < 2 {
+//		return InvalidRequest(
+//			"Asynchrounous request must include at least the request identifier and the command")
+//	}
+//	if !ValidateItemId(tokens[0]) {
+//		return InvalidRequest("Async call id must be [_a-zA-Z0-9]{1,128}")
+//	}
+//	if tokens[1] == CMD_ASYNC {
+//		return InvalidRequest("Recursive async calls are not allowed")
+//	}
+//	if s.ctx != nil && s.ctx.IsAsyncAction(tokens[1]) {
+//		s.asyncChan <- tokens
+//	}
+//	return common.NewStrResponse("A " + tokens[0])
+//}
 
 // parseMessageIdOnly is looking for message id only.
 func parseMessageIdOnly(params []string) (string, *ErrorResponse) {

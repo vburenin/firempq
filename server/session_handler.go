@@ -4,9 +4,7 @@ import (
 	"firempq/common"
 	"firempq/facade"
 	"firempq/log"
-	"io"
 	"net"
-	"strings"
 
 	. "firempq/api"
 	"strconv"
@@ -25,7 +23,6 @@ const (
 	CMD_CTX        = "CTX"
 	CMD_LOGLEVEL   = "LOGLEVEL"
 	CMD_PANIC      = "PANIC"
-	CMD_ASYNC      = "ASYNC"
 )
 
 type FuncHandler func([]string) IResponse
@@ -37,8 +34,6 @@ type SessionHandler struct {
 	active    bool
 	ctx       ServiceContext
 	svcs      *facade.ServiceFacade
-	quitChan  chan struct{}
-	asyncChan chan []string
 }
 
 func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
@@ -49,12 +44,13 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 		ctx:       nil,
 		active:    true,
 		svcs:      services,
-		asyncChan: make(chan []string, 1024),
 	}
+	sh.QuitListener()
 	return sh
 }
 
-func (s *SessionHandler) QuitListener(quitChan chan struct{}) {
+func (s *SessionHandler) QuitListener() {
+	quitChan := common.GetQuitChan()
 	go func() {
 		for {
 			select {
@@ -65,56 +61,27 @@ func (s *SessionHandler) QuitListener(quitChan chan struct{}) {
 			}
 		}
 	}()
-	go s.asyncDispatcher(quitChan)
-}
-
-func logConnError(err error) {
-	errTxt := err.Error()
-	if err != io.EOF && !(strings.Index(errTxt, "use of closed") > 0) {
-		log.Error(errTxt)
-	}
 }
 
 // DispatchConn dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
 	addr := s.conn.RemoteAddr().String()
 	log.Info("Client connected: %s", addr)
-	s.writeResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
+	s.WriteResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
 		if err == nil {
 			resp := s.processCmdTokens(cmdTokens)
-			err = s.writeResponse(resp)
+			err = s.WriteResponse(resp)
 		}
 		if err != nil {
-			logConnError(err)
+			log.LogConnError(err)
 			break
 		}
 	}
 	s.conn.Close()
 	log.Debug("Client disconnected: %s", addr)
 
-}
-func (s *SessionHandler) asyncDispatcher(quitChan chan struct{}) {
-	var err error
-	for s.active {
-		select {
-		case <-quitChan:
-			return
-		case tokens := <-s.asyncChan:
-			asyncId := tokens[0]
-			resp := common.NewAsyncResponse(asyncId, s.processCmdTokens(tokens[1:]))
-			s.connLock.Lock()
-			if resp.WriteResponse(s.conn) == nil {
-				_, err = s.conn.Write(EOM)
-			}
-			s.connLock.Unlock()
-		}
-		if err != nil {
-			logConnError(err)
-			return
-		}
-	}
 }
 
 // Basic token processing that looks for global commands,
@@ -129,8 +96,6 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 	tokens := cmdTokens[1:]
 
 	switch cmd {
-	case CMD_ASYNC:
-		return s.asyncHandler(tokens)
 	case CMD_QUIT:
 		return s.quitHandler(tokens)
 	case CMD_CTX:
@@ -158,23 +123,8 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 	}
 }
 
-func (s *SessionHandler) asyncHandler(tokens []string) IResponse {
-	if len(tokens) < 2 {
-		return common.InvalidRequest(
-			"Asynchrounous request must include at least the request identifier and the command")
-	}
-	if !common.ValidateItemId(tokens[0]) {
-		return common.InvalidRequest("Async call id must be [_a-zA-Z0-9]{1,128}")
-	}
-	if tokens[1] == CMD_ASYNC {
-		return common.InvalidRequest("Recursive async calls are not allowed")
-	}
-	s.asyncChan <- tokens
-	return common.NewStrResponse("A " + tokens[0])
-}
-
-// Writes IResponse into connection.
-func (s *SessionHandler) writeResponse(resp IResponse) error {
+// WriteResponse writes IResponse into connection.
+func (s *SessionHandler) WriteResponse(resp IResponse) error {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 	if err := resp.WriteResponse(s.conn); err != nil {
@@ -231,7 +181,7 @@ func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
 	if !exists {
 		return common.ERR_NO_SVC
 	}
-	s.ctx = svc.NewContext()
+	s.ctx = svc.NewContext(s)
 	return common.OK_RESPONSE
 }
 

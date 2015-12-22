@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	. "firempq/api"
+	"firempq/common"
 )
 
 const (
@@ -21,7 +22,6 @@ type QueueOpFunc func(req []string) error
 type CommandServer struct {
 	facade     *facade.ServiceFacade
 	listener   net.Listener
-	quitChan   chan struct{}
 	signalChan chan os.Signal
 	waitGroup  sync.WaitGroup
 }
@@ -30,7 +30,6 @@ func NewSimpleServer(listener net.Listener) IServer {
 	return &CommandServer{
 		facade:     facade.CreateFacade(),
 		listener:   listener,
-		quitChan:   make(chan struct{}),
 		signalChan: make(chan os.Signal, 1),
 	}
 }
@@ -40,14 +39,14 @@ func (this *CommandServer) Start() {
 	go this.waitForSignal()
 
 	defer this.listener.Close()
-
+	quitChan := common.GetQuitChan()
 	for {
 		conn, err := this.listener.Accept()
 		if err == nil {
 			go this.handleConnection(conn)
 		} else {
 			select {
-			case <-this.quitChan:
+			case <-quitChan:
 				this.Shutdown()
 				return
 			default:
@@ -79,7 +78,7 @@ func (this *CommandServer) Stop() {
 	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
 	this.listener.Close()
-	close(this.quitChan)
+	common.CloseQuitChan()
 }
 
 func (this *CommandServer) handleConnection(conn net.Conn) {
@@ -88,6 +87,5 @@ func (this *CommandServer) handleConnection(conn net.Conn) {
 
 	this.waitGroup.Add(1)
 	session_handler := NewSessionHandler(conn, this.facade)
-	session_handler.QuitListener(this.quitChan)
 	session_handler.DispatchConn()
 }

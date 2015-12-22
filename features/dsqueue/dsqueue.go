@@ -65,7 +65,7 @@ func CreateDSQueue(desc *common.ServiceDescription, params []string) ISvc {
 	return NewDSQueue(desc, 1000)
 }
 
-func (dsq *DSQueue) NewContext() ServiceContext {
+func (dsq *DSQueue) NewContext(rw ResponseWriter) ServiceContext {
 	return &DSQContext{dsq, 0}
 }
 

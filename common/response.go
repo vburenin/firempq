@@ -110,15 +110,19 @@ func (r *StrArrayResponse) WriteResponse(buff io.Writer) error {
 
 type AsyncResponse struct {
 	asyncHeader string
-	resp IResponse
+	resp        IResponse
 }
 
-func NewAsyncResponse(asyncId string, resp IResponse) *AsyncResponse {
+func NewAsyncResponse(asyncId string, resp IResponse) IResponse {
 	return &AsyncResponse{"+ASYNC " + asyncId + " ", resp}
 }
 
 func (r *AsyncResponse) GetResponse() string {
 	return r.asyncHeader + r.resp.GetResponse()
+}
+
+func (r *AsyncResponse) IsError() bool {
+	return r.resp.IsError()
 }
 
 func (r *AsyncResponse) WriteResponse(buff io.Writer) error {
@@ -128,7 +132,6 @@ func (r *AsyncResponse) WriteResponse(buff io.Writer) error {
 	}
 	return r.resp.WriteResponse(buff)
 }
-
 
 var RESP_PONG IResponse = NewStrResponse("PONG")
 var OK_RESPONSE = NewStrResponse("OK")
