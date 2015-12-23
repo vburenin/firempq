@@ -9,6 +9,7 @@ import (
 	. "firempq/api"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var EOM = []byte{'\n'}
@@ -56,6 +57,11 @@ func (s *SessionHandler) QuitListener() {
 			select {
 			case <-quitChan:
 				s.Stop()
+				if s.ctx != nil {
+					s.ctx.Finish()
+				}
+				s.WriteResponse(common.ERR_CONN_CLOSING)
+				time.Sleep(time.Second)
 				s.conn.Close()
 				return
 			}
