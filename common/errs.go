@@ -49,6 +49,8 @@ var ERR_PRIORITY_OUT_OF_RANGE = InvalidRequest("The priority is out of range")
 var ERR_MSG_ID_NOT_DEFINED *ErrorResponse = InvalidRequest("Message ID is not defined")
 var ERR_MSG_TIMEOUT_NOT_DEFINED *ErrorResponse = InvalidRequest("Message timeout is not defined")
 var ERR_MSG_BAD_DELIVERY_TIMEOUT *ErrorResponse = InvalidRequest("Bad delivery interval specified")
+var ERR_ASYNC_WAIT *ErrorResponse = InvalidRequest("ASYNC param can be used only if WAIT timeout greater than 0")
+var ERR_ASYNC_PUSH *ErrorResponse = InvalidRequest("ASYNC must be used with SYNCWAIT")
 
 var ERR_CMD_WITH_NO_PARAMS *ErrorResponse = InvalidRequest("Command doesn't accept any parameters")
 var ERR_UNKNOWN_ERROR *ErrorResponse = NewError("Unknown server error", 500)

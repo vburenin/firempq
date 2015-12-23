@@ -7,14 +7,16 @@ import (
 	"firempq/log"
 	"fmt"
 	"math"
+	"sync"
 )
 
 type PQContext struct {
 	pq             *PQueue
 	callsCount     int64
 	responseWriter ResponseWriter
-	pushChan       chan []string
-	popChan        chan []string
+	asyncGroup     sync.WaitGroup
+	asyncLock      sync.Mutex
+	asyncCount     int64
 }
 
 func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
@@ -22,12 +24,12 @@ func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
 		pq:             pq,
 		callsCount:     0,
 		responseWriter: r,
-		pushChan:       make(chan []string, 512),
-		popChan:        make(chan []string, 512),
+		asyncCount:     512,
 	}
 }
 
 const MAX_MESSAGE_ID_LENGTH = 128
+const MAX_ASYNC_ID = 8
 const PAYLOAD_LIMIT = 512 * 1024
 
 const (
@@ -54,6 +56,8 @@ const (
 	PRM_PAYLOAD          = "PL"
 	PRM_DELAY            = "DELAY"
 	PRM_TIMESTAMP        = "TS"
+	PRM_ASYNC            = "ASYNC"
+	PRM_SYNC_WAIT        = "SYNCWAIT"
 )
 
 const (
@@ -95,43 +99,6 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 	return InvalidRequest("Unknown command: " + cmd)
 }
 
-func (ctx *PQContext) asyncDispatcher() {
-	var tokens []string
-	quitChan := GetQuitChan()
-	for !ctx.pq.IsClosed() {
-		select {
-		case <-quitChan:
-			return
-		case tokens = <-ctx.popChan:
-		case tokens = <-ctx.pushChan:
-		}
-		asyncId := tokens[0]
-		resp := NewAsyncResponse(asyncId, ctx.Call(tokens[1], tokens[2:]))
-
-		if err := ctx.responseWriter.WriteResponse(resp); err != nil {
-			log.LogConnError(err)
-			return
-		}
-	}
-}
-
-//func (ctx *PQContext) asyncHandler(tokens []string) IResponse {
-//	if len(tokens) < 2 {
-//		return InvalidRequest(
-//			"Asynchrounous request must include at least the request identifier and the command")
-//	}
-//	if !ValidateItemId(tokens[0]) {
-//		return InvalidRequest("Async call id must be [_a-zA-Z0-9]{1,128}")
-//	}
-//	if tokens[1] == CMD_ASYNC {
-//		return InvalidRequest("Recursive async calls are not allowed")
-//	}
-//	if s.ctx != nil && s.ctx.IsAsyncAction(tokens[1]) {
-//		s.asyncChan <- tokens
-//	}
-//	return common.NewStrResponse("A " + tokens[0])
-//}
-
 // parseMessageIdOnly is looking for message id only.
 func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 	var err *ErrorResponse
@@ -165,6 +132,7 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 	var limit int64 = 1
 	var popWaitTimeout int64 = 0
 	var lockTimeout int64 = ctx.pq.config.PopLockTimeout
+	var asyncId string
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -174,6 +142,8 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
 		case PRM_POP_WAIT_TIMEOUT:
 			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
+		case PRM_ASYNC:
+			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -181,7 +151,11 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 			return err
 		}
 	}
-	return ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, true)
+	if len(asyncId) > 0 {
+		return ctx.asyncPop(asyncId, lockTimeout, popWaitTimeout, limit, true)
+	} else {
+		return ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, true)
+	}
 }
 
 // Pop message from queue completely removing it.
@@ -189,6 +163,7 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 	var err *ErrorResponse
 	var limit int64 = 1
 	var popWaitTimeout int64 = 0
+	var asyncId string
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -196,6 +171,8 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
 		case PRM_POP_WAIT_TIMEOUT:
 			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
+		case PRM_ASYNC:
+			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -203,7 +180,27 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 			return err
 		}
 	}
-	return ctx.pq.Pop(0, popWaitTimeout, limit, false)
+	if len(asyncId) > 0 {
+		return ctx.asyncPop(asyncId, 0, popWaitTimeout, limit, false)
+	} else {
+		return ctx.pq.Pop(0, popWaitTimeout, limit, false)
+	}
+}
+
+func (ctx *PQContext) asyncPop(asyncId string, lockTimeout, popWaitTimeout, limit int64, lock bool) IResponse {
+	if len(asyncId) != 0 && popWaitTimeout == 0 {
+		return ERR_ASYNC_WAIT
+	}
+	go func() {
+		ctx.asyncGroup.Add(1)
+		defer ctx.asyncGroup.Done()
+		res := ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, lock)
+		resp := NewAsyncResponse(asyncId, res)
+		if err := ctx.responseWriter.WriteResponse(resp); err != nil {
+			log.LogConnError(err)
+		}
+	}()
+	return NewStrResponse("A " + asyncId)
 }
 
 func (ctx *PQContext) GetMessageInfo(params []string) IResponse {
@@ -240,6 +237,8 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	var priority int64 = cfg.MaxPriority - 1
 	var delay int64 = cfg.DeliveryDelay
 	var payload string = ""
+	var syncWait bool
+	var asyncId string
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -251,6 +250,11 @@ func (ctx *PQContext) Push(params []string) IResponse {
 			params, payload, err = ParseStringParam(params, 1, PAYLOAD_LIMIT)
 		case PRM_DELAY:
 			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
+		case PRM_SYNC_WAIT:
+			params = params[1:]
+			syncWait = true
+		case PRM_ASYNC:
+			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
 		default:
 			return makeUnknownParamResponse(params[0])
 		}
@@ -259,6 +263,29 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		}
 	}
 
+	if syncWait {
+		if len(asyncId) == 0 {
+			res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
+			if !res.IsError() {
+				ctx.pq.WaitFlush()
+			}
+			return res
+		} else {
+			go func() {
+				ctx.asyncGroup.Add(1)
+				res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
+				if !res.IsError() {
+					ctx.pq.WaitFlush()
+				}
+				ctx.responseWriter.WriteResponse(NewAsyncResponse(asyncId, res))
+				ctx.asyncGroup.Done()
+			}()
+			return NewStrResponse("A " + asyncId)
+		}
+	}
+	if len(asyncId) > 0 {
+		return ERR_ASYNC_PUSH
+	}
 	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 }
 
@@ -364,4 +391,6 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 	return ctx.pq.SetParams(msgTtl, maxSize, queueTtl, deliveryDelay)
 }
 
-func (ctx *PQContext) Finish() {}
+func (ctx *PQContext) Finish() {
+	ctx.asyncGroup.Wait()
+}

@@ -218,12 +218,15 @@ func (pq *PQueue) ReleaseInFlight(cutOffTs int64) IResponse {
 func (pq *PQueue) Pop(lockTimeout, popWaitTimeout, limit int64, lock bool) IResponse {
 	// Try to pop items first time and return them if number of popped items is greater than 0.
 	msgItems := pq.popMessages(lockTimeout, limit, lock)
+
 	if len(msgItems) > 0 || popWaitTimeout == 0 {
 		return NewItemsResponse(msgItems)
 	}
 
 	for {
 		select {
+		case <-GetQuitChan():
+			return NewItemsResponse(msgItems)
 		case <-pq.newMsgNotification:
 			msgItems := pq.popMessages(lockTimeout, limit, lock)
 			if len(msgItems) > 0 {
