@@ -17,6 +17,7 @@ type PQContext struct {
 	asyncGroup     sync.WaitGroup
 	asyncLock      sync.Mutex
 	asyncCount     int64
+	finishFlag     bool
 }
 
 func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
@@ -69,6 +70,9 @@ const (
 
 // Call dispatches to the command handler to process necessary parameters.
 func (ctx *PQContext) Call(cmd string, params []string) IResponse {
+	if ctx.finishFlag {
+		return ERR_CONN_CLOSING
+	}
 	ctx.callsCount += 1
 	switch cmd {
 	case PQ_CMD_POPLOCK:
@@ -189,18 +193,18 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 
 func (ctx *PQContext) asyncPop(asyncId string, lockTimeout, popWaitTimeout, limit int64, lock bool) IResponse {
 	if len(asyncId) != 0 && popWaitTimeout == 0 {
-		return ERR_ASYNC_WAIT
+		return NewAsyncResponse(asyncId, ERR_ASYNC_WAIT)
 	}
 	go func() {
 		ctx.asyncGroup.Add(1)
-		defer ctx.asyncGroup.Done()
 		res := ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, lock)
 		resp := NewAsyncResponse(asyncId, res)
 		if err := ctx.responseWriter.WriteResponse(resp); err != nil {
 			log.LogConnError(err)
 		}
+		ctx.asyncGroup.Done()
 	}()
-	return NewStrResponse("A " + asyncId)
+	return NewAsyncAccept(asyncId)
 }
 
 func (ctx *PQContext) GetMessageInfo(params []string) IResponse {
@@ -280,11 +284,11 @@ func (ctx *PQContext) Push(params []string) IResponse {
 				ctx.responseWriter.WriteResponse(NewAsyncResponse(asyncId, res))
 				ctx.asyncGroup.Done()
 			}()
-			return NewStrResponse("A " + asyncId)
+			return NewAsyncAccept(asyncId)
 		}
 	}
 	if len(asyncId) > 0 {
-		return ERR_ASYNC_PUSH
+		return NewAsyncResponse(asyncId, ERR_ASYNC_PUSH)
 	}
 	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 }
@@ -392,5 +396,6 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 }
 
 func (ctx *PQContext) Finish() {
+	ctx.finishFlag = true
 	ctx.asyncGroup.Wait()
 }
