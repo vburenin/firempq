@@ -4,6 +4,7 @@ var CODE_INVALID_REQ int64 = 400
 var CODE_NOT_FOUND int64 = 404
 var CODE_CONFLICT_REQ int64 = 409
 var CODE_SERVER_ERR int64 = 500
+var CODE_SERVER_UNAVAILABLE int64 = 501
 var CODE_GONE int64 = 410
 var CODE_TEMPORARY_ERROR int64 = 412
 
@@ -44,6 +45,8 @@ var ERR_MSG_IS_LOCKED *ErrorResponse = ConflictRequest("Message is locked")
 var ERR_MSG_POP_ATTEMPTS_EXCEEDED *ErrorResponse = NewError("Message exceded the number of pop attempts", CODE_GONE)
 var ERR_QUEUE_INTERNAL_ERROR *ErrorResponse = ServerError("Internal error/data integrity failure")
 var ERR_PRIORITY_OUT_OF_RANGE = InvalidRequest("The priority is out of range")
+
+var ERR_CONN_CLOSING *ErrorResponse = NewError("Connection will be closed soon", CODE_SERVER_UNAVAILABLE)
 
 // Parameter errors.
 var ERR_MSG_ID_NOT_DEFINED *ErrorResponse = InvalidRequest("Message ID is not defined")
