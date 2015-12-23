@@ -55,3 +55,7 @@ func (d *DBService) DeleteFullItemFromDB(itemId string) {
 func (d *DBService) GetItemIterator() ItemIterator {
 	return d.database.IterData(d.itemPrefix)
 }
+
+func (d *DBService) WaitFlush() {
+	d.database.WaitFlush()
+}
