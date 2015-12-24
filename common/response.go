@@ -36,7 +36,7 @@ func NewStrResponse(str string) *StrResponse {
 }
 
 func NewAsyncAccept(str string) *StrResponse {
-	return &StrResponse{str: "A " + str}
+	return &StrResponse{str: "+A " + str}
 }
 
 func (r *StrResponse) GetResponse() string {
