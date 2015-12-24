@@ -1,4 +1,4 @@
-package db
+package ldb
 
 // Level DB cached wrapper to improve write performance using batching.
 
@@ -59,6 +59,15 @@ func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
 	ds.db = db
 	go ds.periodicCacheFlush()
 	return &ds, nil
+}
+
+func (ds *LevelDBStorage) GetStats() map[string]interface{} {
+	return map[string]interface{}{
+		"DBName":       ds.dbName,
+		"CacheSize":    len(ds.itemCache),
+		"TmpCacheSize": len(ds.tmpItemCache),
+		"Close":        ds.closed,
+	}
 }
 
 func (ds *LevelDBStorage) periodicCacheFlush() {

@@ -7,6 +7,7 @@ import (
 	"net"
 
 	. "firempq/api"
+	"firempq/db"
 	"strconv"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ const (
 	CMD_CTX        = "CTX"
 	CMD_LOGLEVEL   = "LOGLEVEL"
 	CMD_PANIC      = "PANIC"
+	CMD_DBSTAT     = "DBSTAT"
 )
 
 type FuncHandler func([]string) IResponse
@@ -118,6 +120,8 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 		return tsHandler(tokens)
 	case CMD_PANIC:
 		return panicHandler(tokens)
+	case CMD_DBSTAT:
+		return dbstatHandler(tokens)
 	default:
 		if s.ctx == nil {
 			return common.ERR_UNKNOWN_CMD
@@ -251,7 +255,7 @@ func logLevelHandler(tokens []string) IResponse {
 	return common.OK_RESPONSE
 }
 
-func panicHandler(tokens []string) (resp IResponse) {
+func panicHandler(tokens []string) IResponse {
 	if len(tokens) > 0 {
 		return common.ERR_CMD_WITH_NO_PARAMS
 	}
@@ -259,4 +263,12 @@ func panicHandler(tokens []string) (resp IResponse) {
 	log.Critical("Panic requested!")
 	panic("Panic requested")
 	return common.OK_RESPONSE
+}
+
+func dbstatHandler(tokens []string) IResponse {
+	if len(tokens) > 0 {
+		return common.ERR_CMD_WITH_NO_PARAMS
+	}
+	db := db.GetDatabase()
+	return common.NewDictResponse(db.GetStats())
 }

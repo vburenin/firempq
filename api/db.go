@@ -18,6 +18,7 @@ type DataStorage interface {
 	CachedDeleteData(id ...string)
 	IterData(prefix string) ItemIterator
 	GetData(id string) string
+	GetStats() map[string]interface{}
 	Close()
 	IsClosed() bool
 }
