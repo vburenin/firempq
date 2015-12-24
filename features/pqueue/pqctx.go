@@ -37,7 +37,7 @@ const (
 	PQ_CMD_UNLOCK_BY_ID        = "UNLCK"
 	PQ_CMD_DELETE_LOCKED_BY_ID = "DELLOCKED"
 	PQ_CMD_DELETE_BY_ID        = "DEL"
-	PQ_CMD_SET_LOCK_TIMEOUT    = "UPDLOCK"
+	PQ_CMD_UPD_LOCK            = "UPDLOCK"
 	PQ_CMD_PUSH                = "PUSH"
 	PQ_CMD_POP                 = "POP"
 	PQ_CMD_POPLOCK             = "POPLCK"
@@ -49,16 +49,16 @@ const (
 )
 
 const (
-	PRM_ID               = "ID"
-	PRM_POP_WAIT_TIMEOUT = "WAIT"
-	PRM_LOCK_TIMEOUT     = "TIMEOUT"
-	PRM_PRIORITY         = "PRIORITY"
-	PRM_LIMIT            = "LIMIT"
-	PRM_PAYLOAD          = "PL"
-	PRM_DELAY            = "DELAY"
-	PRM_TIMESTAMP        = "TS"
-	PRM_ASYNC            = "ASYNC"
-	PRM_SYNC_WAIT        = "SYNCWAIT"
+	PRM_ID           = "ID"
+	PRM_POP_WAIT     = "WAIT"
+	PRM_LOCK_TIMEOUT = "TIMEOUT"
+	PRM_PRIORITY     = "PRIORITY"
+	PRM_LIMIT        = "LIMIT"
+	PRM_PAYLOAD      = "PL"
+	PRM_DELAY        = "DELAY"
+	PRM_TIMESTAMP    = "TS"
+	PRM_ASYNC        = "ASYNC"
+	PRM_SYNC_WAIT    = "SYNCWAIT"
 )
 
 const (
@@ -87,7 +87,7 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.DeleteById(params)
 	case PQ_CMD_PUSH:
 		return ctx.Push(params)
-	case PQ_CMD_SET_LOCK_TIMEOUT:
+	case PQ_CMD_UPD_LOCK:
 		return ctx.UpdateLock(params)
 	case PQ_CMD_UNLOCK_BY_ID:
 		return ctx.UnlockMessageById(params)
@@ -144,7 +144,7 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		case PRM_LIMIT:
 			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
-		case PRM_POP_WAIT_TIMEOUT:
+		case PRM_POP_WAIT:
 			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
 		case PRM_ASYNC:
 			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
@@ -173,7 +173,7 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 		switch params[0] {
 		case PRM_LIMIT:
 			params, limit, err = ParseInt64Param(params, 1, CFG_PQ.MaxPopBatchSize)
-		case PRM_POP_WAIT_TIMEOUT:
+		case PRM_POP_WAIT:
 			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
 		case PRM_ASYNC:
 			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
@@ -375,12 +375,16 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 	queueTtl := cfg.InactivityTtl
 	deliveryDelay := cfg.DeliveryDelay
 
+	if len(params) == 0 {
+		return ERR_CMD_PARAM_NOT_PROVIDED
+	}
+
 	for len(params) > 0 {
 		switch params[0] {
 		case CPRM_MSG_TTL:
 			params, msgTtl, err = ParseInt64Param(params, 1, CFG_PQ.MaxMessageTtl)
 		case CPRM_MAX_SIZE:
-			params, maxSize, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
+			params, maxSize, err = ParseInt64Param(params, 0, math.MaxInt64)
 		case CPRM_DELIVERY_DELAY:
 			params, deliveryDelay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
 		case CPRM_QUEUE_INACTIVITY_TTL:
