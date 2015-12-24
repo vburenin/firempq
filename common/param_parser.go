@@ -50,7 +50,7 @@ func ParseUserItemId(params []string, minLen, maxLen int64) ([]string, string, *
 			if ValidateUserItemId(params[1]) {
 				return params[2:], params[1], nil
 			} else {
-				return nil, "", InvalidRequest("Only ^[a-zA-Z0-9][_a-zA-Z0-9]* symbols are allowed for id")
+				return nil, "", ERR_MSG_USER_ID_IS_WRONG
 			}
 		}
 	}
@@ -66,7 +66,7 @@ func ParseItemId(params []string, minLen, maxLen int64) ([]string, string, *Erro
 			if ValidateItemId(params[1]) {
 				return params[2:], params[1], nil
 			} else {
-				return nil, "", InvalidRequest("Only [_a-zA-Z0-9]* symbols are allowed for id")
+				return nil, "", ERR_MSG_ID_IS_WRONG
 			}
 		}
 	}
