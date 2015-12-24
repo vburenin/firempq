@@ -276,30 +276,30 @@ func TestCtxUpdateLock(t *testing.T) {
 	Convey("Update lock should work fine", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("Should fail with unknown param", func() {
-			resp := q.Call(PQ_CMD_SET_LOCK_TIMEOUT, []string{PRM_ID, "ab", "TEST_PARAM"})
+			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "ab", "TEST_PARAM"})
 			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 		Convey("Failure with incorrect message id", func() {
-			resp := q.Call(PQ_CMD_SET_LOCK_TIMEOUT, []string{PRM_ID, "$ab", PRM_LOCK_TIMEOUT, "10000"})
+			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "$ab", PRM_LOCK_TIMEOUT, "10000"})
 			So(resp, ShouldEqual, ERR_MSG_ID_IS_WRONG)
 		})
 
 		Convey("Failure with empty message id", func() {
-			resp := q.Call(PQ_CMD_SET_LOCK_TIMEOUT, []string{PRM_LOCK_TIMEOUT, "1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_LOCK_TIMEOUT, "1"})
 			So(resp, ShouldEqual, ERR_MSG_ID_NOT_DEFINED)
 		})
 		Convey("Failure with no timeout defined", func() {
-			resp := q.Call(PQ_CMD_SET_LOCK_TIMEOUT, []string{PRM_ID, "1234"})
+			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "1234"})
 			So(resp, ShouldEqual, ERR_MSG_TIMEOUT_NOT_DEFINED)
 		})
 
 		Convey("Failure with no message", func() {
-			resp := q.Call(PQ_CMD_SET_LOCK_TIMEOUT, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "100"})
+			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "100"})
 			So(resp, ShouldEqual, ERR_MSG_NOT_FOUND)
 		})
 
 		Convey("Failure with to wrong timeout", func() {
-			resp := q.Call(PQ_CMD_SET_LOCK_TIMEOUT, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxLockTimeout))
 		})
 	})
