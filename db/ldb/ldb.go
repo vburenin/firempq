@@ -131,10 +131,12 @@ func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 		} else {
 			limitCounter = 0
 			ds.db.Write(defaultWriteOptions, wb)
+			wb.Close()
 			wb = levigo.NewWriteBatch()
 		}
 		iter.Next()
 	}
+	wb.Close()
 
 	ds.db.Write(defaultWriteOptions, wb)
 	return total
@@ -157,6 +159,7 @@ func (ds *LevelDBStorage) flushCache() {
 		}
 	}
 	ds.db.Write(defaultWriteOptions, wb)
+	wb.Close()
 }
 
 // IterData returns an iterator over all data with prefix.
@@ -171,6 +174,7 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 		panic("Number of arguments must be even!")
 	}
 	wb := levigo.NewWriteBatch()
+	defer wb.Close()
 	for i := 0; i < len(data); i += 2 {
 		wb.Put(common.UnsafeStringToBytes(data[i]),
 			common.UnsafeStringToBytes(data[i+1]))
@@ -180,6 +184,7 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 
 func (ds *LevelDBStorage) DeleteData(id ...string) {
 	wb := levigo.NewWriteBatch()
+	defer wb.Close()
 	for _, i := range id {
 		wb.Delete(common.UnsafeStringToBytes(i))
 	}
