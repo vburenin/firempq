@@ -35,6 +35,7 @@ type SessionHandler struct {
 	active    bool
 	ctx       ServiceContext
 	svcs      *facade.ServiceFacade
+	stopChan  chan struct{}
 }
 
 func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
@@ -45,6 +46,7 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 		ctx:       nil,
 		active:    true,
 		svcs:      services,
+		stopChan:  make(chan struct{}, 1),
 	}
 	sh.QuitListener()
 	return sh
@@ -53,18 +55,14 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 func (s *SessionHandler) QuitListener() {
 	quitChan := common.GetQuitChan()
 	go func() {
-		for {
-			select {
-			case <-quitChan:
-				s.Stop()
-				if s.ctx != nil {
-					s.ctx.Finish()
-				}
-				s.WriteResponse(common.ERR_CONN_CLOSING)
-				time.Sleep(time.Second)
-				s.conn.Close()
-				return
-			}
+		select {
+		case <-quitChan:
+			s.Stop()
+			s.WriteResponse(common.ERR_CONN_CLOSING)
+			time.Sleep(time.Second)
+			s.conn.Close()
+			return
+		case <-s.stopChan:
 		}
 	}()
 }
@@ -85,9 +83,9 @@ func (s *SessionHandler) DispatchConn() {
 			break
 		}
 	}
+	s.Stop()
 	s.conn.Close()
 	log.Debug("Client disconnected: %s", addr)
-
 }
 
 // Basic token processing that looks for global commands,
@@ -194,6 +192,10 @@ func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
 // Stop the processing loop.
 func (s *SessionHandler) Stop() {
 	s.active = false
+	if s.ctx != nil {
+		s.ctx.Finish()
+	}
+	s.stopChan <- struct{}{}
 }
 
 // Stops the main loop on QUIT.
