@@ -35,6 +35,13 @@ func (d *InMemDBService) CachedStore(data ...string) {
 	d.mutex.Unlock()
 }
 
+func (d *InMemDBService) GetStats() map[string]interface{} {
+	return map[string]interface{}{
+		"Size":   len(d.mapData),
+		"Closed": d.closed,
+	}
+}
+
 func (d *InMemDBService) DeleteDataWithPrefix(prefix string) int {
 	d.mutex.Lock()
 	keys := make([]string, 10)
