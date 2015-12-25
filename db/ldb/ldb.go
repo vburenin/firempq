@@ -11,20 +11,18 @@ import (
 
 	. "firempq/api"
 
-	"github.com/jmhodges/levigo"
+	//"github.com/jmhodges/levigo"
+
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
-
-// Default LevelDB read options.
-var defaultReadOptions = levigo.NewReadOptions()
-
-// Default LevelDB write options.
-var defaultWriteOptions = levigo.NewWriteOptions()
 
 // LevelDBStorage A high level cached structure on top of LevelDB.
 // It caches item storing them into database
 // as multiple large batches later.
 type LevelDBStorage struct {
-	db             *levigo.DB        // Pointer the the instance of level db.
+	db             *leveldb.DB       // Pointer the the instance of level db.
 	dbName         string            // LevelDB database name.
 	itemCache      map[string]string // Active cache for item metadata.
 	tmpItemCache   map[string]string // Active cache during flush operation.
@@ -47,12 +45,13 @@ func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
 	}
 
 	// LevelDB write options.
-	opts := levigo.NewOptions()
-	opts.SetCreateIfMissing(true)
-	opts.SetWriteBufferSize(10 * 1024 * 1024)
-	opts.SetCompression(levigo.SnappyCompression)
+	opts := new(opt.Options)
+	opts.Compression = opt.SnappyCompression
+	opts.BlockCacheCapacity = 32 * 1024 * 1024
+	opts.CompactionTableSize = 8 * 1024 * 1024
+	opts.WriteBuffer = 32 * 1024 * 1024
 
-	db, err := levigo.Open(dbName, opts)
+	db, err := leveldb.OpenFile(dbName, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +120,7 @@ func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 	limitCounter := 0
 	total := 0
 	iter := ds.IterData(prefix)
-	wb := levigo.NewWriteBatch()
+	wb := new(leveldb.Batch)
 
 	for iter.Valid() {
 		total++
@@ -130,15 +129,13 @@ func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 			limitCounter++
 		} else {
 			limitCounter = 0
-			ds.db.Write(defaultWriteOptions, wb)
-			wb.Close()
-			wb = levigo.NewWriteBatch()
+			ds.db.Write(wb, nil)
+			wb.Reset()
 		}
 		iter.Next()
 	}
-	wb.Close()
 
-	ds.db.Write(defaultWriteOptions, wb)
+	ds.db.Write(wb, nil)
 	return total
 }
 
@@ -149,7 +146,7 @@ func (ds *LevelDBStorage) flushCache() {
 	ds.itemCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
-	wb := levigo.NewWriteBatch()
+	wb := new(leveldb.Batch)
 	for k, v := range ds.tmpItemCache {
 		key := common.UnsafeStringToBytes(k)
 		if v == "" {
@@ -158,13 +155,12 @@ func (ds *LevelDBStorage) flushCache() {
 			wb.Put(key, common.UnsafeStringToBytes(v))
 		}
 	}
-	ds.db.Write(defaultWriteOptions, wb)
-	wb.Close()
+	ds.db.Write(wb, nil)
 }
 
 // IterData returns an iterator over all data with prefix.
 func (ds *LevelDBStorage) IterData(prefix string) ItemIterator {
-	iter := ds.db.NewIterator(defaultReadOptions)
+	iter := ds.db.NewIterator(new(util.Range), nil)
 	return makeItemIterator(iter, common.UnsafeStringToBytes(prefix))
 }
 
@@ -173,22 +169,20 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 	if len(data)%2 != 0 {
 		panic("Number of arguments must be even!")
 	}
-	wb := levigo.NewWriteBatch()
-	defer wb.Close()
+	wb := new(leveldb.Batch)
 	for i := 0; i < len(data); i += 2 {
 		wb.Put(common.UnsafeStringToBytes(data[i]),
 			common.UnsafeStringToBytes(data[i+1]))
 	}
-	return ds.db.Write(defaultWriteOptions, wb)
+	return ds.db.Write(wb, nil)
 }
 
 func (ds *LevelDBStorage) DeleteData(id ...string) {
-	wb := levigo.NewWriteBatch()
-	defer wb.Close()
+	wb := new(leveldb.Batch)
 	for _, i := range id {
 		wb.Delete(common.UnsafeStringToBytes(i))
 	}
-	ds.db.Write(defaultWriteOptions, wb)
+	ds.db.Write(wb, nil)
 }
 
 // GetData looks data looks for and item going through each layer of cache finally looking into database.
@@ -205,7 +199,7 @@ func (ds *LevelDBStorage) GetData(id string) string {
 		return data
 	}
 	ds.cacheLock.Unlock()
-	value, _ := ds.db.Get(defaultReadOptions, common.UnsafeStringToBytes(id))
+	value, _ := ds.db.Get(common.UnsafeStringToBytes(id), nil)
 	return common.UnsafeBytesToString(value)
 }
 

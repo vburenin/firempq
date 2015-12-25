@@ -3,13 +3,13 @@ package ldb
 import (
 	"bytes"
 
-	"github.com/jmhodges/levigo"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
 // ItemIterator built on top of LevelDB.
 // It takes into account service name to limit the amount of selected data.
 type LevelDbItemIterator struct {
-	iter    *levigo.Iterator
+	iter    iterator.Iterator
 	prefix  []byte // Prefix for look ups.
 	Key     []byte // Currently selected key. Valid only if the iterator is valid.
 	Value   []byte // Currently selected value. Valid only if the iterator is valid.
@@ -17,7 +17,7 @@ type LevelDbItemIterator struct {
 }
 
 //
-func makeItemIterator(iter *levigo.Iterator, prefix []byte) *LevelDbItemIterator {
+func makeItemIterator(iter iterator.Iterator, prefix []byte) *LevelDbItemIterator {
 	iter.Seek(prefix)
 	return &LevelDbItemIterator{iter, prefix, nil, nil, nil}
 }
@@ -53,7 +53,7 @@ func (mi *LevelDbItemIterator) Valid() bool {
 
 // Close closes iterator. Iterator must be closed!
 func (mi *LevelDbItemIterator) Close() {
-	mi.iter.Close()
+	mi.iter.Release()
 }
 
 func (mi *LevelDbItemIterator) GetKey() []byte {
