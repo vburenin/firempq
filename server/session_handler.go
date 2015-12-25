@@ -10,7 +10,6 @@ import (
 	"firempq/db"
 	"strconv"
 	"sync"
-	"time"
 )
 
 var EOM = []byte{'\n'}
@@ -41,14 +40,13 @@ type SessionHandler struct {
 }
 
 func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
-
 	sh := &SessionHandler{
 		conn:      conn,
 		tokenizer: common.NewTokenizer(),
 		ctx:       nil,
 		active:    true,
 		svcs:      services,
-		stopChan:  make(chan struct{}, 1),
+		stopChan:  make(chan struct{}),
 	}
 	sh.QuitListener()
 	return sh
@@ -61,7 +59,9 @@ func (s *SessionHandler) QuitListener() {
 		case <-quitChan:
 			s.Stop()
 			s.WriteResponse(common.ERR_CONN_CLOSING)
-			time.Sleep(time.Second)
+			if s.ctx != nil {
+				s.ctx.Finish()
+			}
 			s.conn.Close()
 			return
 		case <-s.stopChan:
@@ -72,7 +72,7 @@ func (s *SessionHandler) QuitListener() {
 // DispatchConn dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
 	addr := s.conn.RemoteAddr().String()
-	log.Info("Client connected: %s", addr)
+	log.Debug("Client connected: %s", addr)
 	s.WriteResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
@@ -85,7 +85,10 @@ func (s *SessionHandler) DispatchConn() {
 			break
 		}
 	}
-	s.Stop()
+	close(s.stopChan)
+	if s.ctx != nil {
+		s.ctx.Finish()
+	}
 	s.conn.Close()
 	log.Debug("Client disconnected: %s", addr)
 }
@@ -196,10 +199,6 @@ func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
 // Stop the processing loop.
 func (s *SessionHandler) Stop() {
 	s.active = false
-	if s.ctx != nil {
-		s.ctx.Finish()
-	}
-	s.stopChan <- struct{}{}
 }
 
 // Stops the main loop on QUIT.

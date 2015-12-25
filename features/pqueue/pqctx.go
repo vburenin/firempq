@@ -400,6 +400,8 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 }
 
 func (ctx *PQContext) Finish() {
-	ctx.finishFlag = true
-	ctx.asyncGroup.Wait()
+	if !ctx.finishFlag {
+		ctx.finishFlag = true
+		ctx.asyncGroup.Wait()
+	}
 }
