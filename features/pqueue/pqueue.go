@@ -323,7 +323,8 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	}
 
 	pq.msgSerialNumber++
-	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl, pq.msgSerialNumber)
+	// Message should start expiring since the moment it was added into general pool of available messages.
+	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl+delay, pq.msgSerialNumber)
 
 	pq.msgMap[msg.Id] = msg
 	if delay == 0 {
