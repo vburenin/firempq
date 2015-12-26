@@ -1,39 +1,32 @@
-package db
+package cldb
 
 import (
-	"firempq/db/cldb"
-	"firempq/log"
 	"os"
 	"sync"
 
-	. "firempq/api"
+	"firempq/log"
 )
 
-var database DataStorage = nil
+var database *CLevelDBStorage
 var lock sync.Mutex
 
 // GetDatabase returns DataStorage singleton.
-func GetDatabase() DataStorage {
+func GetDatabase() *CLevelDBStorage {
 	lock.Lock()
 	defer lock.Unlock()
 	return getDatabase()
 }
 
-func SetDatabase(ds DataStorage) {
-	database = ds
-}
-
-func getDatabase() DataStorage {
+func getDatabase() *CLevelDBStorage {
+	var err error
 	if database == nil {
-		var err error
-		database, err = cldb.NewLevelDBStorage("databasedir")
+		database, err = NewLevelDBStorage("databasedir")
 		if err != nil {
 			log.Error("Cannot initialize FireMPQ database: %s", err)
 			os.Exit(255)
 		}
 	}
-
-	if database.IsClosed() {
+	if database.closed {
 		database = nil
 		return getDatabase()
 	}
