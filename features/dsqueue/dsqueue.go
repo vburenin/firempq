@@ -236,7 +236,7 @@ func (dsq *DSQueue) SetLockTimeout(msgId string, lockTimeout int64) IResponse {
 	msg.UnlockTs = common.Uts() + int64(lockTimeout)
 
 	dsq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	dsq.StoreItemBodyInDB(msg)
+	dsq.StoreItemBodyInDB(msgId, msg.StringMarshal())
 
 	return common.OK_RESPONSE
 }
@@ -305,7 +305,7 @@ func (dsq *DSQueue) storeMessage(msg *DSQMetaMessage, payload string) IResponse 
 	} else {
 		dsq.addMessageToQueue(msg)
 	}
-	dsq.StoreFullItemInDB(msg, payload)
+	dsq.StoreFullItemInDB(msg.GetId(), msg.StringMarshal(), payload)
 	common.NewMessageNotify(dsq.newMsgNotification)
 	return common.OK_RESPONSE
 }
@@ -366,7 +366,7 @@ func (dsq *DSQueue) popMetaMessage(popFrom int32, permanentPop bool) *DSQMetaMes
 	} else {
 		msg.PushAt = QUEUE_DIRECTION_NONE
 	}
-	dsq.StoreItemBodyInDB(msg)
+	dsq.StoreItemBodyInDB(msgId, msg.StringMarshal())
 
 	return msg
 }
@@ -477,7 +477,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResp
 	msg.UnlockTs = 0
 	dsq.addMessageToQueue(msg)
 	dsq.trackExpiration(msg)
-	dsq.StoreItemBodyInDB(msg)
+	dsq.StoreItemBodyInDB(msg.Id, msg.StringMarshal())
 	common.NewMessageNotify(dsq.newMsgNotification)
 	return nil
 }
@@ -485,7 +485,7 @@ func (dsq *DSQueue) returnTo(msg *DSQMetaMessage, place int32) *common.ErrorResp
 // Finish message delivery to the queue.
 func (dsq *DSQueue) completeDelivery(msg *DSQMetaMessage) {
 	dsq.addMessageToQueue(msg)
-	dsq.StoreItemBodyInDB(msg)
+	dsq.StoreItemBodyInDB(msg.Id, msg.StringMarshal())
 	common.NewMessageNotify(dsq.newMsgNotification)
 }
 

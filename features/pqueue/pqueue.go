@@ -308,12 +308,9 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 		return ERR_PRIORITY_OUT_OF_RANGE
 	}
 
-	if len(msgId) == 0 {
-		msgId = GenRandMsgId()
-	}
-
 	nowTs := Uts()
 	pq.config.LastPushTs = nowTs
+	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl+delay, 0)
 
 	pq.lock.Lock()
 
@@ -323,8 +320,8 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	}
 
 	pq.msgSerialNumber++
+	msg.SerialNumber = pq.msgSerialNumber
 	// Message should start expiring since the moment it was added into general pool of available messages.
-	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl+delay, pq.msgSerialNumber)
 
 	pq.msgMap[msg.Id] = msg
 	if delay == 0 {
@@ -336,7 +333,7 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	}
 	// Payload is a race conditional case, since it is not always flushed on disk and may or may not exist in memory.
 	pq.payloadLock.Lock()
-	pq.StoreFullItemInDB(msg, payload)
+	pq.StoreFullItemInDB(msg.Id, msg.StringMarshal(), payload)
 	pq.payloadLock.Unlock()
 
 	pq.lock.Unlock()
@@ -367,7 +364,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []IItem
 
 		if lock {
 			pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-			pq.StoreItemBodyInDB(msg)
+			pq.StoreItemBodyInDB(msgId, msg.StringMarshal())
 		} else {
 			delete(pq.msgMap, msgId)
 		}
@@ -414,7 +411,7 @@ func (pq *PQueue) UpdateLock(msgId string, lockTimeout int64) IResponse {
 	msg.UnlockTs = Uts() + lockTimeout
 
 	pq.inFlightHeap.PushItem(msgId, msg.UnlockTs)
-	pq.StoreItemBodyInDB(msg)
+	pq.StoreItemBodyInDB(msgId, msg.StringMarshal())
 	return OK_RESPONSE
 }
 
@@ -461,7 +458,7 @@ func (pq *PQueue) returnToFront(msg *PQMsgMetaData) *ErrorResponse {
 	msg.UnlockTs = 0
 	pq.availMsgs.PushFront(msg.Id)
 	pq.expireHeap.PushItem(msg.Id, msg.ExpireTs)
-	pq.StoreItemBodyInDB(msg)
+	pq.StoreItemBodyInDB(msg.Id, msg.StringMarshal())
 	return nil
 }
 

@@ -29,8 +29,8 @@ func MakePayloadPrefix(serviceId string) string {
 }
 
 // StoreItemBodyInDB stores only message metadata in the database.
-func (d *DBService) StoreItemBodyInDB(item IItemMetaData) {
-	d.database.CachedStore(d.itemPrefix+item.GetId(), item.StringMarshal())
+func (d *DBService) StoreItemBodyInDB(itemId, itemData string) {
+	d.database.CachedStore(d.itemPrefix+itemId, itemData)
 }
 
 // GetPayloadFromDB returns message payload.
@@ -39,11 +39,10 @@ func (d *DBService) GetPayloadFromDB(itemId string) string {
 }
 
 // StoreFullItemInDB stores messages data and payload data into database.
-func (d *DBService) StoreFullItemInDB(item IItemMetaData, payload string) {
-	id := item.GetId()
-	itemKey := d.itemPrefix + id
-	payloadKey := d.payloadPrefix + id
-	d.database.StoreData(itemKey, item.StringMarshal(), payloadKey, payload)
+func (d *DBService) StoreFullItemInDB(itemId, itemData string, payload string) {
+	itemKey := d.itemPrefix + itemId
+	payloadKey := d.payloadPrefix + itemId
+	d.database.CachedStore(itemKey, itemData, payloadKey, payload)
 }
 
 // DeleteFullItemFromDB removes item from database including its payload.
