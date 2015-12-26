@@ -17,6 +17,10 @@ func (rw *TestResponseWriter) WriteResponse(resp IResponse) error {
 	return nil
 }
 
+func (rw *TestResponseWriter) GetResponses() []IResponse {
+	return rw.responses
+}
+
 func NewTestResponseWriter() *TestResponseWriter {
 	return &TestResponseWriter{
 		responses: make([]IResponse, 0, 1000),

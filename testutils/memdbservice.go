@@ -84,6 +84,8 @@ func (d *InMemDBService) GetData(id string) string {
 	return d.mapData[id]
 }
 
+func (d *InMemDBService) FlushCache() {}
+
 type InMemIterator struct {
 	keyList []string
 	curPos  int

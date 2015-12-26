@@ -6,7 +6,6 @@ import (
 	"firempq/testutils"
 	"testing"
 
-	. "firempq/api"
 	. "firempq/common"
 	. "firempq/conf"
 	. "firempq/testutils"
@@ -46,19 +45,10 @@ func getCtxDesc() *ServiceDescription {
 	}
 }
 
-type TestResponseWriter struct {
-	responses []IResponse
-}
-
-func (rw *TestResponseWriter) WriteResponse(resp IResponse) error {
-	rw.responses = append(rw.responses, resp)
-	return nil
-}
-
 func i2a(v int64) string { return strconv.FormatInt(v, 10) }
 
 func CreateQueueTestContext() (*PQContext, *TestResponseWriter) {
-	rw := &TestResponseWriter{make([]IResponse, 0, 2)}
+	rw := NewTestResponseWriter()
 	return initPQueue(getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
 }
 
@@ -101,8 +91,8 @@ func TestCtxPopLock(t *testing.T) {
 			resp := q.Call(PQ_CMD_POPLOCK, []string{PRM_ASYNC, "a1", PRM_POP_WAIT, "1"})
 			So(resp.GetResponse(), ShouldEqual, "+A a1")
 			time.Sleep(time.Millisecond * 10)
-			So(len(rw.responses), ShouldEqual, 1)
-			So(rw.responses[0].GetResponse(), ShouldEqual, "+ASYNC a1 +DATA *0")
+			So(len(rw.GetResponses()), ShouldEqual, 1)
+			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC a1 +DATA *0")
 		})
 
 		Convey("Pop should return empty list", func() {
@@ -142,8 +132,8 @@ func TestCtxPop(t *testing.T) {
 			resp := q.Call(PQ_CMD_POP, []string{PRM_ASYNC, "a1", PRM_POP_WAIT, "1"})
 			So(resp.GetResponse(), ShouldEqual, "+A a1")
 			time.Sleep(time.Millisecond * 10)
-			So(len(rw.responses), ShouldEqual, 1)
-			So(rw.responses[0].GetResponse(), ShouldEqual, "+ASYNC a1 +DATA *0")
+			So(len(rw.GetResponses()), ShouldEqual, 1)
+			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC a1 +DATA *0")
 		})
 
 		Convey("Pop async run error because POP WAIT is 0", func() {
@@ -262,7 +252,7 @@ func TestCtxPush(t *testing.T) {
 			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_ASYNC, "asid", PRM_SYNC_WAIT})
 			So(resp.GetResponse(), ShouldContainSubstring, "+A asid")
 			time.Sleep(time.Millisecond * 10)
-			So(rw.responses[0].GetResponse(), ShouldEqual, "+ASYNC asid +OK")
+			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC asid +OK")
 			VerifyServiceSize(q.pq, 1)
 		})
 		Convey("Push with unknown param.", func() {
