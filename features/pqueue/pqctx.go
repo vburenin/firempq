@@ -12,6 +12,7 @@ import (
 
 type PQContext struct {
 	pq             *PQueue
+	idgen          *IdGen
 	callsCount     int64
 	responseWriter ResponseWriter
 	asyncGroup     sync.WaitGroup
@@ -26,6 +27,7 @@ func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
 		callsCount:     0,
 		responseWriter: r,
 		asyncCount:     512,
+		idgen:          NewIdGen(),
 	}
 }
 
@@ -59,6 +61,7 @@ const (
 	PRM_TIMESTAMP    = "TS"
 	PRM_ASYNC        = "ASYNC"
 	PRM_SYNC_WAIT    = "SYNCWAIT"
+	PRM_MSG_TTL      = "TTL"
 )
 
 const (
@@ -254,6 +257,8 @@ func (ctx *PQContext) Push(params []string) IResponse {
 			params, payload, err = ParseStringParam(params, 1, PAYLOAD_LIMIT)
 		case PRM_DELAY:
 			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
+		case PRM_MSG_TTL:
+			params, msgTtl, err = ParseInt64Param(params, 0, CFG_PQ.MaxMessageTtl)
 		case PRM_SYNC_WAIT:
 			params = params[1:]
 			syncWait = true
@@ -265,6 +270,9 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		if err != nil {
 			return err
 		}
+	}
+	if len(msgId) == 0 {
+		msgId = ctx.idgen.GenRandId()
 	}
 
 	if syncWait {
