@@ -116,7 +116,6 @@ func (ds *CLevelDBStorage) CachedStore(data ...string) {
 // DeleteDataWithPrefix deletes all service data such as service metadata, items and payloads.
 func (ds *CLevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 	ds.flushLock.Lock()
-	defer ds.flushLock.Unlock()
 	ds.FlushCache()
 
 	limitCounter := 0
@@ -125,21 +124,25 @@ func (ds *CLevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 	wb := levigo.NewWriteBatch()
 
 	for iter.Valid() {
-		total++
 		if limitCounter < 1000 {
-			wb.Delete(iter.GetKey())
+			key := iter.GetKey()
+			iter.Next()
+			wb.Delete(key)
 			limitCounter++
+			total++
 		} else {
 			limitCounter = 0
 			ds.db.Write(defaultWriteOptions, wb)
-			wb.Close()
+			wb.Clear()
 			wb = levigo.NewWriteBatch()
 		}
-		iter.Next()
+
+	}
+	if limitCounter > 0 {
+		ds.db.Write(defaultWriteOptions, wb)
 	}
 	wb.Close()
-
-	ds.db.Write(defaultWriteOptions, wb)
+	ds.flushLock.Unlock()
 	return total
 }
 
@@ -174,7 +177,7 @@ func (ds *CLevelDBStorage) FlushCache() {
 // IterData returns an iterator over all data with prefix.
 func (ds *CLevelDBStorage) IterData(prefix string) ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
-	return makeItemIterator(iter, common.UnsafeStringToBytes(prefix))
+	return makeItemIterator(iter, []byte(prefix))
 }
 
 // StoreData data directly into the database stores service metadata into database.
@@ -183,21 +186,22 @@ func (ds *CLevelDBStorage) StoreData(data ...string) error {
 		panic("Number of arguments must be even!")
 	}
 	wb := levigo.NewWriteBatch()
-	defer wb.Close()
 	for i := 0; i < len(data); i += 2 {
 		wb.Put(common.UnsafeStringToBytes(data[i]),
 			common.UnsafeStringToBytes(data[i+1]))
 	}
-	return ds.db.Write(defaultWriteOptions, wb)
+	res := ds.db.Write(defaultWriteOptions, wb)
+	wb.Close()
+	return res
 }
 
 func (ds *CLevelDBStorage) DeleteData(id ...string) {
 	wb := levigo.NewWriteBatch()
-	defer wb.Close()
 	for _, i := range id {
 		wb.Delete(common.UnsafeStringToBytes(i))
 	}
 	ds.db.Write(defaultWriteOptions, wb)
+	wb.Close()
 }
 
 // GetData looks data looks for and item going through each layer of cache finally looking into database.
@@ -229,14 +233,14 @@ func (ds *CLevelDBStorage) CachedDeleteData(id ...string) {
 
 func (ds *CLevelDBStorage) IsClosed() bool {
 	ds.flushLock.Lock()
-	defer ds.flushLock.Unlock()
-	return ds.closed
+	cl := ds.closed
+	ds.flushLock.Unlock()
+	return cl
 }
 
 // Close flushes data on disk and closes database.
 func (ds *CLevelDBStorage) Close() {
 	ds.flushLock.Lock()
-	defer ds.flushLock.Unlock()
 	if !ds.closed {
 		log.Info("Flushing database cache")
 		ds.FlushCache()
@@ -247,4 +251,5 @@ func (ds *CLevelDBStorage) Close() {
 	} else {
 		log.Error("Attempt to close database more than once!")
 	}
+	ds.flushLock.Unlock()
 }
