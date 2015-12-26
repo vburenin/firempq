@@ -82,6 +82,7 @@ func DeleteServiceData(serviceId string) {
 	desc := GetServiceDescription(serviceId)
 	if desc == nil {
 		log.Error("Attempt to delete unknown service id: %s", serviceId)
+		return
 	}
 	desc.ToDelete = true
 	SaveServiceDescription(desc)
