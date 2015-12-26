@@ -28,6 +28,7 @@ type LevelDBStorage struct {
 	tmpItemCache   map[string]string // Active cache during flush operation.
 	cacheLock      sync.Mutex        // Used for caches access.
 	flushLock      sync.Mutex        // Used to prevent double flush.
+	saveLock       sync.Mutex
 	closed         bool
 	flushSync      *sync.WaitGroup // Use to wait until flush happens.
 	forceFlushChan chan bool
@@ -46,10 +47,9 @@ func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
 
 	// LevelDB write options.
 	opts := new(opt.Options)
-	opts.Compression = opt.SnappyCompression
-	opts.BlockCacheCapacity = 32 * 1024 * 1024
-	opts.CompactionTableSize = 8 * 1024 * 1024
-	opts.WriteBuffer = 32 * 1024 * 1024
+	opts.Compression = opt.NoCompression
+	opts.BlockCacheCapacity = 8 * 1024 * 1024
+	opts.WriteBuffer = 8 * 1024 * 1024
 
 	db, err := leveldb.OpenFile(dbName, opts)
 	if err != nil {
@@ -83,7 +83,7 @@ func (ds *LevelDBStorage) periodicCacheFlush() {
 		ds.flushSync = &sync.WaitGroup{}
 		ds.flushSync.Add(1)
 		if !ds.closed {
-			ds.flushCache()
+			ds.FlushCache()
 		}
 		oldFlushSync.Done()
 		ds.flushLock.Unlock()
@@ -113,9 +113,9 @@ func (ds *LevelDBStorage) CachedStore(data ...string) {
 
 // DeleteDataWithPrefix deletes all service data such as service metadata, items and payloads.
 func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
-	ds.flushLock.Lock()
-	defer ds.flushLock.Unlock()
-	ds.flushCache()
+	ds.FlushCache()
+	ds.saveLock.Lock()
+	defer ds.saveLock.Unlock()
 
 	limitCounter := 0
 	total := 0
@@ -140,22 +140,31 @@ func (ds *LevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 }
 
 // FlushCache flushes all cache into database.
-func (ds *LevelDBStorage) flushCache() {
+func (ds *LevelDBStorage) FlushCache() {
+	ds.saveLock.Lock()
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = ds.itemCache
 	ds.itemCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
 	wb := new(leveldb.Batch)
+	count := 0
 	for k, v := range ds.tmpItemCache {
+		if count >= 25000 {
+			ds.db.Write(wb, nil)
+			wb.Reset()
+		}
 		key := common.UnsafeStringToBytes(k)
 		if v == "" {
 			wb.Delete(key)
 		} else {
 			wb.Put(key, common.UnsafeStringToBytes(v))
 		}
+		count++
+
 	}
 	ds.db.Write(wb, nil)
+	ds.saveLock.Unlock()
 }
 
 // IterData returns an iterator over all data with prefix.
@@ -224,7 +233,7 @@ func (ds *LevelDBStorage) Close() {
 	defer ds.flushLock.Unlock()
 	if !ds.closed {
 		log.Info("Flushing database cache")
-		ds.flushCache()
+		ds.FlushCache()
 		ds.closed = true
 		log.Info("Closing the database")
 		ds.db.Close()

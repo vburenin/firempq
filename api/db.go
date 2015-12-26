@@ -14,6 +14,7 @@ type DataStorage interface {
 	CachedStore(data ...string)
 	DeleteDataWithPrefix(prefix string) int
 	StoreData(data ...string) error
+	FlushCache()
 	DeleteData(id ...string)
 	CachedDeleteData(id ...string)
 	IterData(prefix string) ItemIterator
