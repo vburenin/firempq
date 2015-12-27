@@ -2,12 +2,8 @@ package api
 
 import "io"
 
-type IItemMetaData interface {
-	GetId() string
-	StringMarshal() string
-}
-
-type IItem interface {
+type IResponseItem interface {
+	Encode() string
 	GetId() string
 	GetPayload() string
 }
