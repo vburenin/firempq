@@ -2,25 +2,24 @@ package common
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	. "firempq/api"
-	"io"
+	. "firempq/common/response_encoder"
 )
 
 type CallFuncType func([]string) IResponse
-
-type ItemsResponse struct {
-	items []IItem
-}
 
 type DictResponse struct {
 	dict map[string]interface{}
 }
 
 func NewDictResponse(dict map[string]interface{}) *DictResponse {
-	return &DictResponse{dict}
+	return &DictResponse{
+		dict: dict,
+	}
 }
 
 func (self *DictResponse) GetDict() map[string]interface{} {
@@ -72,24 +71,26 @@ func (self *DictResponse) WriteResponse(buff io.Writer) error {
 
 func (self *DictResponse) IsError() bool { return false }
 
-func NewItemsResponse(items []IItem) *ItemsResponse {
-	return &ItemsResponse{items}
+type ItemsResponse struct {
+	items []IResponseItem
 }
 
-func (self *ItemsResponse) GetItems() []IItem {
+func NewItemsResponse(items []IResponseItem) *ItemsResponse {
+	return &ItemsResponse{
+		items: items,
+	}
+}
+
+func (self *ItemsResponse) GetItems() []IResponseItem {
 	return self.items
 }
 
 func (self *ItemsResponse) getResponseChunks() []string {
 	data := make([]string, 0, 3+9*len(self.items))
-	data = append(data, "+DATA *")
-	data = append(data, strconv.Itoa(len(self.items)))
+	data = append(data, "+DATA")
+	data = append(data, EncodeArraySize(len(self.items)))
 	for _, item := range self.items {
-		data = append(data, " ")
-		data = append(data, "%2 ID ")
-		data = append(data, EncodeRespStringTo(data, item.GetId())...)
-		data = append(data, " PL ")
-		data = append(data, EncodeRespStringTo(data, item.GetPayload())...)
+		data = append(data, item.Encode())
 	}
 	return data
 }
