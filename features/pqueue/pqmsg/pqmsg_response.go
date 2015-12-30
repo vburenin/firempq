@@ -46,9 +46,9 @@ func (p *MsgResponseItem) Encode() string {
 	buf.WriteString(EncodeInt64(p.expireTs))
 
 	buf.WriteString(" POPCNT")
-	buf.WriteString(EncodeInt64(p.expireTs))
+	buf.WriteString(EncodeInt64(p.popCount))
 
 	buf.WriteString(" UTS")
-	buf.WriteString(EncodeInt64(p.expireTs))
+	buf.WriteString(EncodeInt64(p.unlockTs))
 	return UnsafeBytesToString(buf.Bytes())
 }
