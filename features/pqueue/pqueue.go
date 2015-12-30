@@ -535,7 +535,7 @@ func (pq *PQueue) update(ts int64) bool {
 		r1 := pq.releaseInFlight(ts)
 		r2 := pq.cleanExpiredItems(ts)
 		pq.lock.Unlock()
-		return r1 >= CFG_PQ.UnlockBatchSize || r2 > CFG_PQ.ExpirationBatchSize
+		return r1 >= CFG_PQ.UnlockBatchSize || r2 >= CFG_PQ.ExpirationBatchSize
 	}
 	return false
 }
