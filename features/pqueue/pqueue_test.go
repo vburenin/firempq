@@ -1,13 +1,16 @@
 package pqueue
 
 import (
+	"strconv"
+	"testing"
+	"time"
+
 	"firempq/common"
 	"firempq/db"
 	"firempq/log"
 	"firempq/testutils"
-	"testing"
-	"time"
 
+	. "firempq/features/pqueue/pqmsg"
 	. "firempq/testutils"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -168,11 +171,16 @@ func TestPushLotsOfMessages(t *testing.T) {
 	totalMsg := 10000
 	Convey("10k messages should be pushed and received being removed", t, func() {
 		for i := 0; i < totalMsg; i++ {
-			q.Push("", " ", 100000, 0, 10)
+			q.Push("id"+strconv.Itoa(i), " ", 100000, 0, 10)
 		}
+		work := true
+		go func() {
+			time.Sleep(time.Second * 5)
+			work = false
+		}()
 		counter := 0
 		loops := 0
-		for counter < totalMsg && loops < totalMsg {
+		for counter < totalMsg && loops < totalMsg && work {
 			resp, ok := q.Pop(0, 10, 10, false).(*common.ItemsResponse)
 			if !ok {
 				break
@@ -199,6 +207,8 @@ func TestMessageLoad(t *testing.T) {
 
 		// This messages should be removed as expired during reload.
 		VerifyOkResponse(q.Push("dd", "dd", 0, 0, 20))
+		VerifyServiceSize(q, 8)
+		// Queue size should be the same since message is just locked.
 		VerifySingleItem(q.Pop(1000, 0, 1, true), "d0", "p")
 		VerifyServiceSize(q, 8)
 
@@ -207,6 +217,7 @@ func TestMessageLoad(t *testing.T) {
 		So(q.IsClosed(), ShouldBeTrue)
 
 		q := CreateTestQueue()
+		// 7 messages because one of them has expired during reload.
 		VerifyServiceSize(q, 7)
 		VerifySingleItem(q.Pop(0, 0, 1, false), "d3", "p")
 		VerifySingleItem(q.Pop(0, 0, 1, false), "d4", "p")
@@ -400,7 +411,7 @@ func TestSize(t *testing.T) {
 		VerifyServiceSize(q, 5)
 		So(q.availMsgs.Len(), ShouldEqual, 3)
 		So(q.inFlightHeap.Len(), ShouldEqual, 2)
-		So(len(q.msgMap), ShouldEqual, 5)
+		So(len(q.id2sn), ShouldEqual, 5)
 	})
 }
 
@@ -408,10 +419,10 @@ func TestSizeLimit(t *testing.T) {
 	Convey("Fourth element should fail with size limit error", t, func() {
 		q := CreateNewTestQueue()
 		q.SetParams(10000, 3, 10000, 0)
-		VerifyOkResponse(q.Push("", "p", 10000, 0, 11))
-		VerifyOkResponse(q.Push("", "p", 10000, 0, 11))
-		VerifyOkResponse(q.Push("", "p", 10000, 0, 11))
-		So(q.Push("", "p", 10000, 0, 11), ShouldResemble, common.ERR_SIZE_EXCEEDED)
+		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11))
+		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11))
+		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11))
+		So(q.Push("4", "p", 10000, 0, 11), ShouldResemble, common.ERR_SIZE_EXCEEDED)
 		VerifyServiceSize(q, 3)
 	})
 }

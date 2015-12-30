@@ -8,7 +8,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func VerifyItemsResponse(r IResponse, size int) ([]IItem, bool) {
+func VerifyItemsResponse(r IResponse, size int) ([]IResponseItem, bool) {
 	ir, ok := r.(*common.ItemsResponse)
 	So(ok, ShouldBeTrue)
 	if ok {

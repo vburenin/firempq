@@ -1,12 +1,12 @@
 syntax = "proto2";
-package pqueue;
+package pqmsg;
 
 message PQueueMsgData {
 	required int64 priority = 1;
 	required int64 expire_ts = 2;
 	required int64 pop_count = 3;
 	required int64 unlock_ts = 4;
-	required uint64 serial_number = 5;
+	required string str_id = 5;
 }
 
 

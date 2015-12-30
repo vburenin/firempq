@@ -1,20 +1,19 @@
 package pqueue
 
 import (
+	"math"
+	"strconv"
+	"testing"
+	"time"
+
 	"firempq/db"
 	"firempq/log"
 	"firempq/testutils"
-	"testing"
 
 	. "firempq/common"
 	. "firempq/conf"
+	. "firempq/features/pqueue/pqmsg"
 	. "firempq/testutils"
-
-	"strconv"
-
-	"time"
-
-	"math"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
