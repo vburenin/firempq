@@ -88,3 +88,12 @@ func TestTooMuchData(t *testing.T) {
 		})
 	})
 }
+
+func TestSingleChar(t *testing.T) {
+	Convey("Too much data is not ok", t, func() {
+		d := "CTX $1 c\n"
+		tok := NewTokenizer()
+		v, _ := tok.ReadTokens(NewTestDataReader(d))
+		So(v, ShouldResemble, []string{"CTX", "c"})
+	})
+}
