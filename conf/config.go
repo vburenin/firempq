@@ -27,21 +27,6 @@ type PQueueConfigData struct {
 	MaxMessageTtl     int64
 }
 
-// DSQueueConfigData a config specific to a DSQueue
-type DSQueueConfigData struct {
-	DefaultMessageTtl    int64
-	DefaultDeliveryDelay int64
-	DefaultLockTimeout   int64
-	DefaultPopCountLimit int64
-	ExpirationBatchSize  int64
-	UnlockBatchSize      int64
-	MaxPopWaitTimeout    int64
-	MaxPopBatchSize      int64
-	MaxLockTimeout       int64
-	MaxDeliveryDelay     int64
-	MaxMessageTtl        int64
-}
-
 // Config is a generic service config type.
 type Config struct {
 	LogLevel            logging.Level
@@ -51,7 +36,6 @@ type Config struct {
 	DbBufferSize        int64
 	DatabasePath        string
 	PQueueConfig        PQueueConfigData
-	DSQueueConfig       DSQueueConfigData
 	UpdateInterval      time.Duration
 	BinaryLogPath       string
 	BinaryLogBufferSize int
@@ -61,7 +45,6 @@ type Config struct {
 
 var CFG *Config
 var CFG_PQ *PQueueConfigData
-var CFG_DSQ *DSQueueConfigData
 
 func init() {
 	NewDefaultConfig()
@@ -100,32 +83,9 @@ func NewDefaultConfig() *Config {
 			// Max Message TTL is 14 days.
 			MaxMessageTtl: 3600000 * 24 * 14,
 		},
-		DSQueueConfig: DSQueueConfigData{
-			// 10 minutes
-			DefaultMessageTtl: 10 * 60 * 1000,
-			// No delay
-			DefaultDeliveryDelay: 0,
-			// Locked by default 60 seconds.
-			DefaultLockTimeout: 60 * 1000,
-			// Do not expire more than 1000 messages at once.
-			ExpirationBatchSize: 1000,
-			// Do not unlock more than 1000 messages at once.
-			UnlockBatchSize: 1000,
-			// Pop wait can not be set larger than 30 seconds.
-			MaxPopWaitTimeout: 30000,
-			// Max Pop Batch size limit is 10
-			MaxPopBatchSize: 10,
-			// Max Lock timeout is two hours.
-			MaxLockTimeout: 3600000 * 2,
-			// Max delivery message delay is 12 hours.
-			MaxDeliveryDelay: 3600000 * 12,
-			// Max Message TTL is 14 days.
-			MaxMessageTtl: 3600000 * 24 * 14,
-		},
 	}
 	CFG = &cfg
 	CFG_PQ = &(cfg.PQueueConfig)
-	CFG_DSQ = &(cfg.DSQueueConfig)
 	return &cfg
 }
 
@@ -179,6 +139,5 @@ func ReadConfig() error {
 	}
 	CFG = cfg
 	CFG_PQ = &(cfg.PQueueConfig)
-	CFG_DSQ = &(cfg.DSQueueConfig)
 	return nil
 }

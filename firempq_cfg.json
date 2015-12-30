@@ -14,16 +14,6 @@
     "ExpirationBatchSize": 1000,
     "UnlockBatchSize": 1000,
     "MaxPopWaitTimeout": 30000,
-    "MaxPopBatchSize": 10
-  },
-  "DSQueueConfig": {
-    "DefaultMessageTtl": 3600000,
-    "DefaultDeliveryDelay": 0,
-    "DefaultLockTimeout": 1200000,
-    "DefaultPopCountLimit": 0,
-    "ExpirationBatchSize": 1000,
-    "UnlockBatchSize": 1000,
-    "MaxPopWaitTimeout": 30000,
-    "MaxPopBatchSize": 10
+    "MaxPopBatchSize": 100
   }
 }
