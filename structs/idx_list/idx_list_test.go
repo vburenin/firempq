@@ -7,7 +7,7 @@ import (
 
 func TestListQueue1(t *testing.T) {
 
-	lq := NewListQueue()
+	lq := NewStrIndexList()
 
 	for i := 0; i < 1000; i++ {
 		lq.PushBack(strconv.Itoa(i))
@@ -22,7 +22,7 @@ func TestListQueue1(t *testing.T) {
 
 func TestListQueue2(t *testing.T) {
 
-	lq := NewListQueue()
+	lq := NewStrIndexList()
 
 	for i := 0; i < 1000; i++ {
 		lq.PushBack(strconv.Itoa(i))
@@ -45,7 +45,7 @@ func TestListQueue2(t *testing.T) {
 
 func TestListQueue3(t *testing.T) {
 
-	lq := NewListQueue()
+	lq := NewStrIndexList()
 
 	for i := 0; i < 1000; i++ {
 		lq.PushFront(strconv.Itoa(i))

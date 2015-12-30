@@ -2,19 +2,19 @@ package structs
 
 import "container/list"
 
-type IndexList struct {
+type StrIndexList struct {
 	itemList *list.List
 	idxMap   map[string]*list.Element
 }
 
-func NewListQueue() *IndexList {
-	return &IndexList{
+func NewStrIndexList() *StrIndexList {
+	return &StrIndexList{
 		itemList: list.New(),
 		idxMap:   make(map[string]*list.Element),
 	}
 }
 
-func (lq *IndexList) PushBack(id string) bool {
+func (lq *StrIndexList) PushBack(id string) bool {
 	_, ok := lq.idxMap[id]
 	if !ok {
 		el := lq.itemList.PushBack(id)
@@ -25,7 +25,7 @@ func (lq *IndexList) PushBack(id string) bool {
 	}
 }
 
-func (lq *IndexList) PushFront(id string) bool {
+func (lq *StrIndexList) PushFront(id string) bool {
 	_, ok := lq.idxMap[id]
 	if !ok {
 		el := lq.itemList.PushFront(id)
@@ -36,23 +36,23 @@ func (lq *IndexList) PushFront(id string) bool {
 	}
 }
 
-func (lq *IndexList) unlink(el *list.Element) string {
+func (lq *StrIndexList) unlink(el *list.Element) string {
 	retVal := lq.itemList.Remove(el).(string)
 	delete(lq.idxMap, retVal)
 	return retVal
 }
 
-func (lq *IndexList) PopFront() string {
+func (lq *StrIndexList) PopFront() string {
 	el := lq.itemList.Front()
 	return lq.unlink(el)
 }
 
-func (lq *IndexList) PopBack() string {
+func (lq *StrIndexList) PopBack() string {
 	el := lq.itemList.Back()
 	return lq.unlink(el)
 }
 
-func (lq *IndexList) RemoveById(id string) bool {
+func (lq *StrIndexList) RemoveById(id string) bool {
 	idx, ok := lq.idxMap[id]
 	if !ok {
 		return false
@@ -61,10 +61,10 @@ func (lq *IndexList) RemoveById(id string) bool {
 	return true
 }
 
-func (lq *IndexList) Len() int {
+func (lq *StrIndexList) Len() int {
 	return len(lq.idxMap)
 }
 
-func (lq *IndexList) Empty() bool {
+func (lq *StrIndexList) Empty() bool {
 	return len(lq.idxMap) == 0
 }
