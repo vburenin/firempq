@@ -127,7 +127,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 		return dbstatHandler(tokens)
 	default:
 		if s.ctx == nil {
-			return common.ERR_UNKNOWN_CMD
+			return common.InvalidRequest("Unknown command: " + cmd)
 		} else {
 			return s.ctx.Call(cmd, tokens)
 		}
@@ -180,7 +180,7 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) IResponse {
 // Context changer.
 func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
 	if len(tokens) > 1 {
-		return common.InvalidRequest("SETCTX accept service name only")
+		return common.InvalidRequest("CTX accept service name only")
 	}
 
 	if len(tokens) == 0 {
