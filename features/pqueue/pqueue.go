@@ -582,7 +582,7 @@ func (pq *PQueue) loadAllMessages() {
 	}
 	log.Debug("Total messages: %d", len(pq.id2sn))
 	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
-	log.Debug("Available messages: %d", len(pq.id2sn)-pq.lockedMsgCnt)
+	log.Debug("Available messages: %d", pq.availMsgs.Len())
 }
 
 var _ ISvc = &PQueue{}
