@@ -326,8 +326,6 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	pq.msgSerialNumber++
 	sn := pq.msgSerialNumber
 	msg.SerialNumber = sn
-	// Message should start expiring since the moment it was added into general pool of available messages.
-
 	pq.id2sn[msgId] = sn
 
 	if delay == 0 {
@@ -380,7 +378,8 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []IResp
 		pq.payloadLock.Lock()
 		pq.lock.Unlock()
 		payload := pq.GetPayloadFromDB(snDb)
-		msgs = append(msgs, NewMsgResponseItem(msg.StrId, payload, msg.ExpireTs, msg.PopCount, msg.UnlockTs))
+		msgs = append(msgs,
+			NewMsgResponseItem(msg.StrId, payload, msg.ExpireTs, msg.PopCount, msg.UnlockTs))
 
 		if !lock {
 			pq.DeleteFullItemFromDB(snDb)
@@ -471,7 +470,7 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	h := pq.trackHeap
 	var cntDel int64 = 0
 	var cntRet int64 = 0
-	for h.NotEmpty() && cntDel+cntRet < CFG_PQ.UnlockBatchSize {
+	for h.NotEmpty() && cntDel+cntRet < CFG_PQ.TimeoutCheckBatchSize {
 		msg := h.MinMsg()
 		if msg.UnlockTs > 0 && msg.UnlockTs < ts {
 			cntRet++
@@ -515,7 +514,7 @@ func (pq *PQueue) StartUpdate() {
 				break
 			}
 			pq.closedState.Unlock()
-			if cnt >= CFG_PQ.ExpirationBatchSize {
+			if cnt >= CFG_PQ.TimeoutCheckBatchSize {
 				time.Sleep(time.Millisecond)
 			} else {
 				time.Sleep(CFG.UpdateInterval * time.Millisecond)

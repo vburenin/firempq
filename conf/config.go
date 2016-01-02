@@ -13,13 +13,12 @@ import (
 )
 
 type PQueueConfigData struct {
-	DefaultMessageTtl    int64
-	DefaultDeliveryDelay int64
-	DefaultLockTimeout   int64
-	DefaultPopCountLimit int64
-	DefaultMaxSize       int64
-	ExpirationBatchSize  int64
-	UnlockBatchSize      int64
+	DefaultMessageTtl     int64
+	DefaultDeliveryDelay  int64
+	DefaultLockTimeout    int64
+	DefaultPopCountLimit  int64
+	DefaultMaxSize        int64
+	TimeoutCheckBatchSize int64
 
 	MaxPopWaitTimeout int64
 	MaxPopBatchSize   int64
@@ -71,10 +70,8 @@ func NewDefaultConfig() *Config {
 			DefaultDeliveryDelay: 0,
 			// Locked by default 60 seconds.
 			DefaultLockTimeout: 60 * 1000,
-			// Do not expire more than 1000 messages at once.
-			ExpirationBatchSize: 1000,
-			// Do not unlock more than 1000 messages at once.
-			UnlockBatchSize: 1000,
+			// Do not time out too many messages at once, it may significantly increase latency.
+			TimeoutCheckBatchSize: 1000,
 			// Pop wait can not be set larger than 30 seconds.
 			MaxPopWaitTimeout: 30000,
 			// Max Pop Batch size limit is 10
