@@ -124,7 +124,7 @@ func (ds *CLevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 	wb := levigo.NewWriteBatch()
 
 	for iter.Valid() {
-		if limitCounter < 1000 {
+		if limitCounter < 10000 {
 			key := iter.GetKey()
 			iter.Next()
 			wb.Delete(key)
@@ -149,17 +149,22 @@ func (ds *CLevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 // FlushCache flushes all cache into database.
 func (ds *CLevelDBStorage) FlushCache() {
 	ds.saveLock.Lock()
+	defer ds.saveLock.Unlock()
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = ds.itemCache
 	ds.itemCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
+	if len(ds.tmpItemCache) == 0 {
+		return
+	}
 	wb := levigo.NewWriteBatch()
 	counter := 0
 	for k, v := range ds.tmpItemCache {
 		if counter >= 10000 {
 			ds.db.Write(defaultWriteOptions, wb)
 			wb.Clear()
+			counter = 0
 		}
 		key := common.UnsafeStringToBytes(k)
 		if v == "" {
@@ -169,9 +174,10 @@ func (ds *CLevelDBStorage) FlushCache() {
 		}
 		counter++
 	}
-	ds.db.Write(defaultWriteOptions, wb)
+	if counter > 0 {
+		ds.db.Write(defaultWriteOptions, wb)
+	}
 	wb.Close()
-	ds.saveLock.Unlock()
 }
 
 // IterData returns an iterator over all data with prefix.

@@ -150,9 +150,10 @@ func (ds *LevelDBStorage) FlushCache() {
 	wb := new(leveldb.Batch)
 	count := 0
 	for k, v := range ds.tmpItemCache {
-		if count >= 25000 {
+		if count >= 10000 {
 			ds.db.Write(wb, nil)
 			wb.Reset()
+			count = 0
 		}
 		key := common.UnsafeStringToBytes(k)
 		if v == "" {
