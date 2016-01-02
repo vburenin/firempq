@@ -45,8 +45,7 @@ const (
 	PQ_CMD_POPLOCK             = "POPLCK"
 	PQ_CMD_MSG_INFO            = "MSGINFO"
 	PQ_CMD_STATUS              = "STATUS"
-	PQ_CMD_RELEASE_IN_FLIGHT   = "RELEASE"
-	PQ_CMD_EXPIRE              = "EXPIRE"
+	PQ_CMD_CHECK_TIMEOUTS      = "CHKTS"
 	PQ_CMD_SET_PARAM           = "SET"
 )
 
@@ -98,10 +97,8 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.GetCurrentStatus(params)
 	case PQ_CMD_SET_PARAM:
 		return ctx.SetParamValue(params)
-	case PQ_CMD_RELEASE_IN_FLIGHT:
-		return ctx.ReleaseInFlight(params)
-	case PQ_CMD_EXPIRE:
-		return ctx.ExpireItems(params)
+	case PQ_CMD_CHECK_TIMEOUTS:
+		return ctx.CheckTimeouts(params)
 	}
 	return InvalidRequest("Unknown command: " + cmd)
 }
@@ -347,7 +344,7 @@ func (ctx *PQContext) GetCurrentStatus(params []string) IResponse {
 	return ctx.pq.GetCurrentStatus()
 }
 
-func (ctx *PQContext) funcItems(params []string, f func(int64) IResponse) IResponse {
+func (ctx *PQContext) CheckTimeouts(params []string) IResponse {
 	var err *ErrorResponse
 	var ts int64 = -1
 	for len(params) > 0 {
@@ -364,15 +361,7 @@ func (ctx *PQContext) funcItems(params []string, f func(int64) IResponse) IRespo
 	if ts < 0 {
 		return ERR_TS_PARAMETER_NEEDED
 	}
-	return f(ts)
-}
-
-func (ctx *PQContext) ReleaseInFlight(params []string) IResponse {
-	return ctx.funcItems(params, ctx.pq.ReleaseInFlight)
-}
-
-func (ctx *PQContext) ExpireItems(params []string) IResponse {
-	return ctx.funcItems(params, ctx.pq.ExpireItems)
+	return ctx.pq.CheckTimeouts(ts)
 }
 
 func (ctx *PQContext) SetParamValue(params []string) IResponse {

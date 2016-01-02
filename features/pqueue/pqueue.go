@@ -11,7 +11,6 @@ import (
 	. "firempq/common"
 	. "firempq/conf"
 	. "firempq/features/pqueue/pqmsg"
-	. "firempq/structs/pheap"
 )
 
 type PQueue struct {
@@ -21,19 +20,13 @@ type PQueue struct {
 	// For messages jumping around all their jumps should be protected.
 	lock sync.Mutex
 	// Currently available messages to be popped.
-	availMsgs *PHeap
+	availMsgs *MsgHeap
 	// All messages with the ticking counters except those which are inFlight.
-	expireHeap *PHeap
+	trackHeap *MsgHeap
 	// All locked messages
-	inFlightHeap *PHeap
-	// Just a user defined id set.
 	id2sn map[string]uint64
-	// SerialNumber to message data.
-	sn2msg map[uint64]*PQMsgMetaData
-
 	// Set as True if the service is closed.
 	closedState BoolFlag
-
 	// Instance of the database.
 	config *PQConfig
 
@@ -42,7 +35,11 @@ type PQueue struct {
 	// Shorter version of service name to identify this service.
 	newMsgNotification chan struct{}
 
+	// Serial number assigned to new messages.
 	msgSerialNumber uint64
+
+	// Number of message which are locked
+	lockedMsgCnt int
 }
 
 func CreatePQueue(desc *ServiceDescription, params []string) ISvc {
@@ -54,12 +51,11 @@ func initPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
 		desc:               desc,
 		config:             config,
 		id2sn:              make(map[string]uint64),
-		sn2msg:             make(map[uint64]*PQMsgMetaData),
-		availMsgs:          NewPHeap(),
-		expireHeap:         NewPHeap(),
-		inFlightHeap:       NewPHeap(),
+		availMsgs:          NewSnHeap(),
+		trackHeap:          NewTsHeap(),
 		newMsgNotification: make(chan struct{}),
 		msgSerialNumber:    0,
+		lockedMsgCnt:       0,
 	}
 	// Init inherited service db.
 	pq.InitServiceDB(desc.ServiceId)
@@ -70,7 +66,7 @@ func initPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
 func NewPQueue(desc *ServiceDescription, priorities int64, size int64) *PQueue {
 	config := &PQConfig{
 		MaxPriority:    priorities,
-		MaxSize:        size,
+		MaxSize:        CFG_PQ.DefaultMaxSize,
 		MsgTtl:         CFG_PQ.DefaultMessageTtl,
 		DeliveryDelay:  CFG_PQ.DefaultDeliveryDelay,
 		PopLockTimeout: CFG_PQ.DefaultLockTimeout,
@@ -128,8 +124,8 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res[PQ_STATUS_LAST_POP_TS] = pq.config.GetLastPopTs()
 	res[PQ_STATUS_INACTIVITY_TTL] = pq.config.GetInactivityTtl()
 	res[PQ_STATUS_TOTAL_MSGS] = pq.GetSize()
-	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.inFlightHeap.Len()
-	res[PQ_STATUS_AVAILABLE_MSGS] = pq.GetSize() - pq.inFlightHeap.Len()
+	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.lockedMsgCnt
+	res[PQ_STATUS_AVAILABLE_MSGS] = pq.GetSize() - pq.lockedMsgCnt
 	return res
 }
 
@@ -170,8 +166,8 @@ func (pq *PQueue) Clear() {
 			pq.lock.Unlock()
 			break
 		}
-		for k, _ := range pq.sn2msg {
-			snList = append(snList, k)
+		for _, v := range pq.id2sn {
+			snList = append(snList, v)
 			if len(snList) > 100 {
 				break
 			}
@@ -194,11 +190,11 @@ func (pq *PQueue) IsClosed() bool {
 	return pq.closedState.IsTrue()
 }
 
-func (pq *PQueue) ExpireItems(cutOffTs int64) IResponse {
+func (pq *PQueue) TimeoutItems(cutOffTs int64) IResponse {
 	var total int64
 	pq.lock.Lock()
 
-	for value := pq.cleanExpiredItems(cutOffTs); value > 0; value = pq.cleanExpiredItems(cutOffTs) {
+	for value := pq.checkTimeouts(cutOffTs); value > 0; value = pq.checkTimeouts(cutOffTs) {
 		total += value
 	}
 
@@ -211,7 +207,7 @@ func (pq *PQueue) ReleaseInFlight(cutOffTs int64) IResponse {
 	var total int64
 	pq.lock.Lock()
 
-	for value := pq.releaseInFlight(cutOffTs); value > 0; value = pq.releaseInFlight(cutOffTs) {
+	for value := pq.checkTimeouts(cutOffTs); value > 0; value = pq.checkTimeouts(cutOffTs) {
 		total += value
 	}
 
@@ -254,22 +250,17 @@ const (
 )
 
 func (pq *PQueue) GetMessageInfo(msgId string) IResponse {
-	var unlockTs int64
 	pq.lock.Lock()
 	sn, ok := pq.id2sn[msgId]
 	if !ok {
 		pq.lock.Unlock()
 		return ERR_MSG_NOT_FOUND
 	}
-	locked := pq.inFlightHeap.ContainsIntId(sn)
-	msg := pq.sn2msg[sn]
-	if locked {
-		unlockTs = msg.UnlockTs
-	}
+	msg := pq.trackHeap.GetMsg(sn)
 	data := map[string]interface{}{
 		MSG_INFO_ID:        msgId,
-		MSG_INFO_LOCKED:    locked,
-		MSG_INFO_UNLOCK_TS: unlockTs,
+		MSG_INFO_LOCKED:    msg.UnlockTs > 0,
+		MSG_INFO_UNLOCK_TS: msg.UnlockTs,
 		MSG_INFO_POP_COUNT: msg.PopCount,
 		MSG_INFO_PRIORITY:  msg.Priority,
 		MSG_INFO_EXPIRE_TS: msg.ExpireTs,
@@ -287,11 +278,12 @@ func (pq *PQueue) DeleteLockedById(msgId string) IResponse {
 		return ERR_MSG_NOT_FOUND
 	}
 
-	if !pq.inFlightHeap.Remove(sn) {
+	if pq.trackHeap.GetMsg(sn).UnlockTs == 0 {
 		return ERR_MSG_NOT_LOCKED
 	}
 
 	pq.deleteMessage(sn)
+	pq.lockedMsgCnt--
 
 	return OK_RESPONSE
 }
@@ -303,7 +295,7 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 	if sn == 0 {
 		return ERR_MSG_NOT_FOUND
 	}
-	if pq.inFlightHeap.ContainsIntId(sn) {
+	if pq.trackHeap.GetMsg(sn).UnlockTs > 0 {
 		return ERR_MSG_IS_LOCKED
 	}
 	pq.deleteMessage(sn)
@@ -312,7 +304,7 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 
 func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
 
-	if int64(len(pq.id2sn)) >= pq.config.MaxSize {
+	if pq.config.MaxSize > 0 && int64(len(pq.id2sn)) >= pq.config.MaxSize {
 		return ERR_SIZE_EXCEEDED
 	}
 
@@ -337,15 +329,14 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	// Message should start expiring since the moment it was added into general pool of available messages.
 
 	pq.id2sn[msgId] = sn
-	pq.sn2msg[sn] = msg
 
 	if delay == 0 {
-		pq.expireHeap.Push(msg.ExpireTs, sn)
-		pq.availMsgs.Push(msg.Priority, sn)
+		pq.availMsgs.Push(msg)
 	} else {
 		msg.UnlockTs = nowTs + delay
-		pq.inFlightHeap.Push(msg.UnlockTs, sn)
+		pq.lockedMsgCnt++
 	}
+	pq.trackHeap.Push(msg)
 	// Payload is a race conditional case, since it is not always flushed on disk and may or may not exist in memory.
 	pq.payloadLock.Lock()
 	pq.StoreFullItemInDB(EncodeUint64ToString(sn), msg.StringMarshal(), payload)
@@ -370,22 +361,20 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []IResp
 			return msgs
 		}
 
-		sn := pq.availMsgs.Pop().IntId
-		msg, _ := pq.sn2msg[sn]
-
-		msg.UnlockTs = nowTs + lockTimeout
-		msg.PopCount += 1
-
-		pq.expireHeap.Remove(sn)
-
+		msg := pq.availMsgs.Pop()
+		sn := msg.SerialNumber
 		snDb := EncodeUint64ToString(sn)
+
 		if lock {
+			pq.lockedMsgCnt++
+			msg.UnlockTs = nowTs + lockTimeout
+			msg.PopCount += 1
+			// Changing priority to -1 guarantees that message will stay at the top of the queue.
 			msg.Priority = -1
-			pq.inFlightHeap.Push(msg.UnlockTs, sn)
+			pq.trackHeap.Push(msg)
 			pq.StoreItemBodyInDB(snDb, msg.StringMarshal())
 		} else {
 			delete(pq.id2sn, msg.StrId)
-			delete(pq.sn2msg, sn)
 		}
 
 		pq.payloadLock.Lock()
@@ -410,11 +399,11 @@ func (pq *PQueue) UpdateLock(msgId string, lockTimeout int64) IResponse {
 
 	sn := pq.id2sn[msgId]
 	if sn > 0 {
-		if pq.inFlightHeap.Remove(sn) {
-			msg := pq.sn2msg[sn]
+		msg := pq.trackHeap.GetMsg(sn)
+		if msg.UnlockTs > 0 {
 			msg.UnlockTs = Uts() + lockTimeout
-			pq.inFlightHeap.Push(msg.UnlockTs, sn)
-			pq.StoreItemBodyInDB(msgId, msg.StringMarshal())
+			pq.trackHeap.Push(msg)
+			pq.StoreItemBodyInDB(EncodeUint64ToString(sn), msg.StringMarshal())
 			return OK_RESPONSE
 		} else {
 			return ERR_MSG_NOT_LOCKED
@@ -433,26 +422,24 @@ func (pq *PQueue) UnlockMessageById(msgId string) IResponse {
 	if sn == 0 {
 		return ERR_MSG_NOT_FOUND
 	}
-	if !pq.inFlightHeap.Remove(sn) {
+	msg := pq.trackHeap.GetMsg(sn)
+	if msg.UnlockTs == 0 {
 		return ERR_MSG_NOT_LOCKED
 	}
 	// Message exists, push it into the front of the queue.
-	pq.returnToFront(pq.sn2msg[sn])
+	pq.returnToFront(msg)
 	return OK_RESPONSE
 }
 
 func (pq *PQueue) deleteMessage(sn uint64) bool {
-	if msg, ok := pq.sn2msg[sn]; ok {
+	if msg := pq.trackHeap.Remove(sn); msg != nil {
 		delete(pq.id2sn, msg.StrId)
-		delete(pq.sn2msg, sn)
-		if pq.availMsgs.Remove(sn) {
-			pq.expireHeap.Remove(sn)
-		} else {
-			pq.inFlightHeap.Remove(sn)
+		if msg.UnlockTs == 0 {
+			pq.availMsgs.Remove(sn)
+			pq.payloadLock.Lock()
+			pq.DeleteFullItemFromDB(EncodeUint64ToString(sn))
+			pq.payloadLock.Unlock()
 		}
-		pq.payloadLock.Lock()
-		pq.DeleteFullItemFromDB(EncodeUint64ToString(sn))
-		pq.payloadLock.Unlock()
 		return true
 	}
 	return false
@@ -460,84 +447,81 @@ func (pq *PQueue) deleteMessage(sn uint64) bool {
 
 // Attempts to return a message into the front of the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
-func (pq *PQueue) returnToFront(msg *PQMsgMetaData) *ErrorResponse {
+func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
+	pq.lockedMsgCnt--
 	lim := pq.config.PopCountLimit
 	if lim > 0 {
 		if lim <= msg.PopCount {
 			pq.deleteMessage(msg.SerialNumber)
-			return nil
+			return
 		}
 	}
 	msg.UnlockTs = 0
-	sn := msg.SerialNumber
-	pq.availMsgs.Push(msg.Priority, sn)
-	pq.expireHeap.Push(msg.ExpireTs, sn)
-	pq.StoreItemBodyInDB(EncodeUint64ToString(sn), msg.StringMarshal())
-	return nil
+	pq.availMsgs.Push(msg)
+	pq.trackHeap.Push(msg)
+	pq.StoreItemBodyInDB(EncodeUint64ToString(msg.SerialNumber), msg.StringMarshal())
+}
+
+func (pq *PQueue) CheckTimeouts(ts int64) IResponse {
+	return NewIntResponse(pq.checkTimeouts(ts))
 }
 
 // Unlocks all items which exceeded their lock time.
-func (pq *PQueue) releaseInFlight(ts int64) int64 {
-	ifHeap := pq.inFlightHeap
-	var counter int64 = 0
-	for ifHeap.NotEmpty() && ifHeap.MinItem() < ts && counter < CFG_PQ.UnlockBatchSize {
-		counter++
-		sn := ifHeap.Pop().IntId
-		msg := pq.sn2msg[sn]
-		// Messages where popcount == 0 are messages with the delivery delay.
-		if msg.PopCount == 0 {
-			pq.expireHeap.Push(msg.ExpireTs, sn)
-			pq.availMsgs.Push(msg.Priority, sn)
-		} else {
+func (pq *PQueue) checkTimeouts(ts int64) int64 {
+	h := pq.trackHeap
+	var cntDel int64 = 0
+	var cntRet int64 = 0
+	for h.NotEmpty() && cntDel+cntRet < CFG_PQ.UnlockBatchSize {
+		msg := h.MinMsg()
+		if msg.UnlockTs > 0 && msg.UnlockTs < ts {
+			cntRet++
+			h.Pop()
+			msg.UnlockTs = 0
 			pq.returnToFront(msg)
+		} else if msg.ExpireTs < ts {
+			cntDel++
+			h.Pop()
+			delete(pq.id2sn, msg.StrId)
+			pq.availMsgs.Remove(msg.SerialNumber)
+			pq.payloadLock.Lock()
+			pq.DeleteFullItemFromDB(EncodeUint64ToString(msg.SerialNumber))
+			pq.payloadLock.Unlock()
+		} else {
+			break
 		}
+	}
+	if cntRet > 0 {
 		NewMessageNotify(pq.newMsgNotification)
+		log.Debug("%d item(s) moved to the queue.", cntRet)
 	}
-	if counter > 0 {
-		log.Debug("%d item(s) moved to the queue.", counter)
+	if cntDel > 0 {
+		log.Debug("%d item(s) removed from the queue.", cntDel)
 	}
-	return counter
-}
-
-// Remove all items which are completely expired.
-func (pq *PQueue) cleanExpiredItems(ts int64) int64 {
-	var counter int64 = 0
-	eh := pq.expireHeap
-	for eh.NotEmpty() && eh.MinItem() < ts && counter < CFG_PQ.ExpirationBatchSize {
-		counter++
-		pq.deleteMessage(eh.Pop().IntId)
-	}
-	if counter > 0 {
-		log.Debug("%d item(s) expired.", counter)
-	}
-	return counter
+	return cntDel + cntRet
 }
 
 // StartUpdate runs a loop of periodic data updates.
 func (pq *PQueue) StartUpdate() {
 	go func() {
-		for pq.closedState.IsFalse() {
-			if pq.update(Uts()) {
+		var cnt int64
+		for {
+			pq.closedState.Lock()
+			if pq.closedState.IsFalse() {
+				pq.lock.Lock()
+				cnt = pq.checkTimeouts(Uts())
+				pq.lock.Unlock()
+			} else {
+				pq.closedState.Unlock()
+				break
+			}
+			pq.closedState.Unlock()
+			if cnt >= CFG_PQ.ExpirationBatchSize {
 				time.Sleep(time.Millisecond)
 			} else {
 				time.Sleep(CFG.UpdateInterval * time.Millisecond)
 			}
 		}
 	}()
-}
-
-// Remove expired and return unlocked items. Should be running as a thread.
-func (pq *PQueue) update(ts int64) bool {
-	pq.closedState.Lock()
-	defer pq.closedState.Unlock()
-	if pq.closedState.IsFalse() {
-		pq.lock.Lock()
-		r1 := pq.releaseInFlight(ts)
-		r2 := pq.cleanExpiredItems(ts)
-		pq.lock.Unlock()
-		return r1 >= CFG_PQ.UnlockBatchSize || r2 >= CFG_PQ.ExpirationBatchSize
-	}
-	return false
 }
 
 // MessageSlice data type to sort messages.
@@ -588,20 +572,17 @@ func (pq *PQueue) loadAllMessages() {
 	}
 
 	for _, msg := range msgs {
-		sn := msg.SerialNumber
-		pq.id2sn[msg.StrId] = sn
-		pq.sn2msg[sn] = msg
-		if msg.UnlockTs > nowTs {
-			pq.inFlightHeap.Push(msg.UnlockTs, sn)
+		pq.id2sn[msg.StrId] = msg.SerialNumber
+		pq.trackHeap.Push(msg)
+		if msg.UnlockTs == 0 {
+			pq.availMsgs.Push(msg)
 		} else {
-			pq.expireHeap.Push(msg.ExpireTs, sn)
-			pq.availMsgs.Push(msg.Priority, sn)
+			pq.lockedMsgCnt++
 		}
 	}
-
-	log.Debug("Messages available: %d", pq.expireHeap.Len())
-	log.Debug("Messages are in flight: %d", pq.inFlightHeap.Len())
-
+	log.Debug("Total messages: %d", len(pq.id2sn))
+	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
+	log.Debug("Available messages: %d", len(pq.id2sn)-pq.lockedMsgCnt)
 }
 
 var _ ISvc = &PQueue{}

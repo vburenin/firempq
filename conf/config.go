@@ -17,6 +17,7 @@ type PQueueConfigData struct {
 	DefaultDeliveryDelay int64
 	DefaultLockTimeout   int64
 	DefaultPopCountLimit int64
+	DefaultMaxSize       int64
 	ExpirationBatchSize  int64
 	UnlockBatchSize      int64
 
@@ -62,6 +63,8 @@ func NewDefaultConfig() *Config {
 		BinaryLogBufferSize: 128,
 		BinaryLogPageSize:   2 * 1024 * 1024 * 1025, // 2Gb
 		PQueueConfig: PQueueConfigData{
+			// Max number of messages which can be pushed into the queue. 0 - no limit.
+			DefaultMaxSize: 0,
 			// 10 minutes
 			DefaultMessageTtl: 10 * 60 * 1000,
 			// No delay

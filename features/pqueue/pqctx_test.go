@@ -91,7 +91,7 @@ func TestCtxPopLock(t *testing.T) {
 			So(resp.GetResponse(), ShouldEqual, "+A a1")
 			time.Sleep(time.Millisecond * 10)
 			So(len(rw.GetResponses()), ShouldEqual, 1)
-			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC a1 +DATA *0")
+			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC a1 +MSGS *0")
 		})
 
 		Convey("Pop should return empty list", func() {
@@ -132,7 +132,7 @@ func TestCtxPop(t *testing.T) {
 			So(resp.GetResponse(), ShouldEqual, "+A a1")
 			time.Sleep(time.Millisecond * 10)
 			So(len(rw.GetResponses()), ShouldEqual, 1)
-			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC a1 +DATA *0")
+			So(rw.GetResponses()[0].GetResponse(), ShouldEqual, "+ASYNC a1 +MSGS *0")
 		})
 
 		Convey("Pop async run error because POP WAIT is 0", func() {
@@ -333,45 +333,23 @@ func TestCtxGetCurrentStatus(t *testing.T) {
 	})
 }
 
-func TestCtxReleaseInFlight(t *testing.T) {
+func TestCtxCheckTimeouts(t *testing.T) {
 	Convey("Unlocking message should work as expected", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("TS param needed error should be returned", func() {
-			resp := q.Call(PQ_CMD_RELEASE_IN_FLIGHT, []string{})
+			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{})
 			So(resp, ShouldEqual, ERR_TS_PARAMETER_NEEDED)
 		})
 		Convey("Should return unknown param error", func() {
-			resp := q.Call(PQ_CMD_RELEASE_IN_FLIGHT, []string{"TEST_PARAM"})
+			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{"TEST_PARAM"})
 			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 		Convey("Should return wrong TS error", func() {
-			resp := q.Call(PQ_CMD_RELEASE_IN_FLIGHT, []string{PRM_TIMESTAMP, "-1"})
+			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{PRM_TIMESTAMP, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 		Convey("Should work", func() {
-			resp := q.Call(PQ_CMD_RELEASE_IN_FLIGHT, []string{PRM_TIMESTAMP, "1000"})
-			So(resp.GetResponse(), ShouldEqual, "+DATA :0")
-		})
-	})
-}
-
-func TestCtxExpireItems(t *testing.T) {
-	Convey("Unlocking message should work as expected", t, func() {
-		q, _ := CreateNewQueueTestContext()
-		Convey("TS param needed error should be returned", func() {
-			resp := q.Call(PQ_CMD_EXPIRE, []string{})
-			So(resp, ShouldEqual, ERR_TS_PARAMETER_NEEDED)
-		})
-		Convey("Should return unknown param error", func() {
-			resp := q.Call(PQ_CMD_EXPIRE, []string{"TEST_PARAM"})
-			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
-		})
-		Convey("Should return wrong TS error", func() {
-			resp := q.Call(PQ_CMD_EXPIRE, []string{PRM_TIMESTAMP, "-1"})
-			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
-		})
-		Convey("Should work", func() {
-			resp := q.Call(PQ_CMD_EXPIRE, []string{PRM_TIMESTAMP, "1000"})
+			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{PRM_TIMESTAMP, "1000"})
 			So(resp.GetResponse(), ShouldEqual, "+DATA :0")
 		})
 	})

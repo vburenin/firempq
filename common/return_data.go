@@ -87,7 +87,7 @@ func (self *ItemsResponse) GetItems() []IResponseItem {
 
 func (self *ItemsResponse) getResponseChunks() []string {
 	data := make([]string, 0, 3+9*len(self.items))
-	data = append(data, "+DATA")
+	data = append(data, "+MSGS")
 	data = append(data, EncodeArraySize(len(self.items)))
 	for _, item := range self.items {
 		data = append(data, item.Encode())

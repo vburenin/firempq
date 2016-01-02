@@ -70,11 +70,12 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 
 		// Unlock item data1 it should become available again.
 		q.UpdateLock("data1", 0)
-		q.update(common.Uts() + 110)
+		q.checkTimeouts(common.Uts() + 110)
 		VerifySingleItem(q.Pop(10000, 0, 1, true), "data1", "p1")
 		VerifyServiceSize(q, 2)
 
-		q.DeleteLockedById("data1")
+		VerifyOkResponse(q.DeleteLockedById("data1"))
+
 		VerifyServiceSize(q, 1)
 		q.DeleteLockedById("data2")
 		VerifyServiceSize(q, 0)
@@ -88,7 +89,7 @@ func TestAutoExpiration(t *testing.T) {
 		q.Push("data2", "p2", 1000, 0, 12)
 		q.Push("data3", "p3", 10000, 0, 12)
 		VerifyServiceSize(q, 3)
-		q.update(common.Uts() + 1300)
+		q.checkTimeouts(common.Uts() + 1300)
 		VerifyServiceSize(q, 1)
 	})
 }
@@ -359,7 +360,7 @@ func TestExpiration(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
 		q.Push("d1", "p", 10000, 0, 11)
-		r, _ := q.ExpireItems(common.Uts() + 100000).(*common.IntResponse)
+		r, _ := q.TimeoutItems(common.Uts() + 100000).(*common.IntResponse)
 		So(r.Value, ShouldEqual, 1)
 		VerifyServiceSize(q, 0)
 	})
@@ -410,7 +411,7 @@ func TestSize(t *testing.T) {
 
 		VerifyServiceSize(q, 5)
 		So(q.availMsgs.Len(), ShouldEqual, 3)
-		So(q.inFlightHeap.Len(), ShouldEqual, 2)
+		So(q.lockedMsgCnt, ShouldEqual, 2)
 		So(len(q.id2sn), ShouldEqual, 5)
 	})
 }
