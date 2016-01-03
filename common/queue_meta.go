@@ -3,11 +3,10 @@ package common
 import "strconv"
 
 const (
-	STYPE_PRIORITY_QUEUE     = "pqueue"  // High priority goes first.
-	STYPE_DOUBLE_SIDED_QUEUE = "dsqueue" // Double sided queue
+	STYPE_PRIORITY_QUEUE = "pqueue" // High priority goes first.
 )
 
-func NewServiceDescription(sType string, exportId uint64, name string) *ServiceDescription {
+func NewServiceDescription(name, sType string, exportId uint64) *ServiceDescription {
 	return &ServiceDescription{
 		ExportId:  exportId,
 		SType:     sType,

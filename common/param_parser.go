@@ -50,7 +50,7 @@ func ParseUserItemId(params []string, minLen, maxLen int64) ([]string, string, *
 			if ValidateUserItemId(params[1]) {
 				return params[2:], params[1], nil
 			} else {
-				return nil, "", ERR_MSG_USER_ID_IS_WRONG
+				return nil, "", ERR_USER_ID_IS_WRONG
 			}
 		}
 	}
@@ -66,9 +66,21 @@ func ParseItemId(params []string, minLen, maxLen int64) ([]string, string, *Erro
 			if ValidateItemId(params[1]) {
 				return params[2:], params[1], nil
 			} else {
-				return nil, "", ERR_MSG_ID_IS_WRONG
+				return nil, "", ERR_ID_IS_WRONG
 			}
 		}
 	}
 	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+}
+
+func ParseServiceType(params []string) ([]string, string, *ErrorResponse) {
+	valName := params[0]
+	if len(params) >= 2 {
+		svcType := params[1]
+		if svcType != "pqueue" && svcType != "pq" {
+			return nil, "", InvalidRequest("Unknown service type: " + svcType)
+		}
+		return params[2:], svcType, nil
+	}
+	return nil, "", InvalidRequest(valName + " must be followed by service type")
 }

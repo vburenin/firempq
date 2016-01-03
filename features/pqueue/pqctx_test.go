@@ -20,7 +20,6 @@ import (
 
 func getCtxConfig() *PQConfig {
 	return &PQConfig{
-		MaxPriority:    25,
 		MaxSize:        100001,
 		MsgTtl:         100000,
 		DeliveryDelay:  1,
@@ -28,7 +27,6 @@ func getCtxConfig() *PQConfig {
 		PopCountLimit:  4,
 		LastPushTs:     12,
 		LastPopTs:      13,
-		InactivityTtl:  1234567890,
 	}
 }
 
@@ -48,7 +46,7 @@ func i2a(v int64) string { return strconv.FormatInt(v, 10) }
 
 func CreateQueueTestContext() (*PQContext, *TestResponseWriter) {
 	rw := NewTestResponseWriter()
-	return initPQueue(getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
+	return InitPQueue(getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
 }
 
 func CreateNewQueueTestContext() (*PQContext, *TestResponseWriter) {
@@ -56,6 +54,47 @@ func CreateNewQueueTestContext() (*PQContext, *TestResponseWriter) {
 	log.SetLevel(1)
 	db.SetDatabase(testutils.NewInMemDBService())
 	return CreateQueueTestContext()
+}
+
+func TestParsePQConfig(t *testing.T) {
+	Convey("All config parameters should be parsed correctly", t, func() {
+		Convey("Check all parameters are correct", func() {
+			params := []string{
+				CPRM_MSG_TTL, "100",
+				CPRM_MAX_SIZE, "200",
+				CPRM_DELIVERY_DELAY, "300",
+				CPRM_POP_LIMIT, "400",
+				CPRM_LOCK_TIMEOUT, "500",
+			}
+			cfg, resp := ParsePQConfig(params)
+			VerifyOkResponse(resp)
+			So(cfg.MsgTtl, ShouldEqual, 100)
+			So(cfg.MaxSize, ShouldEqual, 200)
+			So(cfg.DeliveryDelay, ShouldEqual, 300)
+			So(cfg.PopCountLimit, ShouldEqual, 400)
+			So(cfg.PopLockTimeout, ShouldEqual, 500)
+		})
+		Convey("Message ttl parse error", func() {
+			_, err := ParsePQConfig([]string{CPRM_MSG_TTL, "-1"})
+			So(err.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxMessageTtl))
+		})
+		Convey("Max size parse error", func() {
+			_, err := ParsePQConfig([]string{CPRM_MAX_SIZE, "-1"})
+			So(err.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
+		})
+		Convey("Delivery delay parse error", func() {
+			_, err := ParsePQConfig([]string{CPRM_DELIVERY_DELAY, "-1"})
+			So(err.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxDeliveryDelay))
+		})
+		Convey("Pop limit parse error", func() {
+			_, err := ParsePQConfig([]string{CPRM_POP_LIMIT, "-1"})
+			So(err.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
+		})
+		Convey("Lock timeout parse error", func() {
+			_, err := ParsePQConfig([]string{CPRM_LOCK_TIMEOUT, "-1"})
+			So(err.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxLockTimeout))
+		})
+	})
 }
 
 func TestCtxPopLock(t *testing.T) {
@@ -159,7 +198,7 @@ func TestCtxGetMessageInfo(t *testing.T) {
 
 		Convey("Wrong message ID format should be detected", func() {
 			resp := q.Call(PQ_CMD_MSG_INFO, []string{PRM_ID, "$"})
-			So(resp, ShouldEqual, ERR_MSG_ID_IS_WRONG)
+			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Wrong message ID not found", func() {
@@ -179,7 +218,7 @@ func TestCtxDeleteLockedByID(t *testing.T) {
 
 		Convey("Wrong message ID format should be detected", func() {
 			resp := q.Call(PQ_CMD_DELETE_LOCKED_BY_ID, []string{PRM_ID, "$"})
-			So(resp, ShouldEqual, ERR_MSG_ID_IS_WRONG)
+			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Message is not locked error should be returned", func() {
@@ -205,7 +244,7 @@ func TestCtxDeleteByID(t *testing.T) {
 
 		Convey("Wrong message ID format should be detected", func() {
 			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{PRM_ID, "$"})
-			So(resp, ShouldEqual, ERR_MSG_ID_IS_WRONG)
+			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Message should be deleted", func() {
@@ -226,12 +265,17 @@ func TestCtxPush(t *testing.T) {
 
 		Convey("Should not accept messages with underscore prefix", func() {
 			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "_ab", PRM_PAYLOAD, "p"})
-			So(resp, ShouldEqual, ERR_MSG_USER_ID_IS_WRONG)
+			So(resp, ShouldEqual, ERR_USER_ID_IS_WRONG)
 		})
 
 		Convey("Priority should be out of range", func() {
 			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_PRIORITY, "-1"})
-			So(resp.GetResponse(), ShouldContainSubstring, i2a(q.pq.config.MaxPriority-1))
+			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
+		})
+
+		Convey("Message ttl should error", func() {
+			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_MSG_TTL, "-1"})
+			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxMessageTtl))
 		})
 
 		Convey("Delivery delay must be out of range", func() {
@@ -270,7 +314,7 @@ func TestCtxUpdateLock(t *testing.T) {
 		})
 		Convey("Failure with incorrect message id", func() {
 			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "$ab", PRM_LOCK_TIMEOUT, "10000"})
-			So(resp, ShouldEqual, ERR_MSG_ID_IS_WRONG)
+			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Failure with empty message id", func() {
@@ -304,7 +348,7 @@ func TestCtxUnlockMessageByID(t *testing.T) {
 
 		Convey("Wrong message ID format should be detected", func() {
 			resp := q.Call(PQ_CMD_UNLOCK_BY_ID, []string{PRM_ID, "$"})
-			So(resp, ShouldEqual, ERR_MSG_ID_IS_WRONG)
+			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Unknown param failure", func() {
@@ -374,10 +418,16 @@ func TestCtxSetParamValue(t *testing.T) {
 			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_DELIVERY_DELAY, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxDeliveryDelay))
 		})
-		Convey("Queue inactivity TTL error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_QUEUE_INACTIVITY_TTL, "-1"})
+		Convey("Pop limit out of range error", func() {
+			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_POP_LIMIT, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
+
+		Convey("Lock timeout error", func() {
+			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_LOCK_TIMEOUT, "-1"})
+			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxLockTimeout))
+		})
+
 		Convey("Should return unknown param error", func() {
 			resp := q.Call(PQ_CMD_SET_PARAM, []string{"TEST_PARAM"})
 			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
@@ -387,7 +437,6 @@ func TestCtxSetParamValue(t *testing.T) {
 				CPRM_DELIVERY_DELAY, "100",
 				CPRM_MSG_TTL, "10000",
 				CPRM_MAX_SIZE, "100000",
-				CPRM_QUEUE_INACTIVITY_TTL, "10000000",
 			}
 			VerifyOkResponse(q.Call(PQ_CMD_SET_PARAM, params))
 		})

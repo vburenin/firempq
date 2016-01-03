@@ -42,11 +42,7 @@ type PQueue struct {
 	lockedMsgCnt int
 }
 
-func CreatePQueue(desc *ServiceDescription, params []string) ISvc {
-	return NewPQueue(desc, 100, 1000)
-}
-
-func initPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
+func InitPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
 	pq := PQueue{
 		desc:               desc,
 		config:             config,
@@ -57,28 +53,11 @@ func initPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
 		msgSerialNumber:    0,
 		lockedMsgCnt:       0,
 	}
+	features.SaveServiceConfig(desc.ServiceId, config)
 	// Init inherited service db.
 	pq.InitServiceDB(desc.ServiceId)
 	pq.loadAllMessages()
 	return &pq
-}
-
-func NewPQueue(desc *ServiceDescription, priorities int64, size int64) *PQueue {
-	config := &PQConfig{
-		MaxPriority:    priorities,
-		MaxSize:        CFG_PQ.DefaultMaxSize,
-		MsgTtl:         CFG_PQ.DefaultMessageTtl,
-		DeliveryDelay:  CFG_PQ.DefaultDeliveryDelay,
-		PopLockTimeout: CFG_PQ.DefaultLockTimeout,
-		PopCountLimit:  CFG_PQ.DefaultPopCountLimit,
-		LastPushTs:     Uts(),
-		LastPopTs:      Uts(),
-		InactivityTtl:  0,
-	}
-
-	queue := initPQueue(desc, config)
-	features.SaveServiceConfig(desc.ServiceId, config)
-	return queue
 }
 
 func LoadPQueue(desc *ServiceDescription) (ISvc, error) {
@@ -87,7 +66,7 @@ func LoadPQueue(desc *ServiceDescription) (ISvc, error) {
 	if err != nil {
 		return nil, err
 	}
-	pq := initPQueue(desc, config)
+	pq := InitPQueue(desc, config)
 	return pq, nil
 }
 
@@ -113,7 +92,6 @@ const (
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
-	res[PQ_STATUS_MAX_PRIORITY] = pq.config.GetMaxPriority()
 	res[PQ_STATUS_MAX_SIZE] = pq.config.GetMaxSize()
 	res[PQ_STATUS_MSG_TTL] = pq.config.GetMsgTtl()
 	res[PQ_STATUS_DELIVERY_DELAY] = pq.config.GetDeliveryDelay()
@@ -122,21 +100,21 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res[PQ_STATUS_CREATE_TS] = pq.desc.GetCreateTs()
 	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.GetLastPushTs()
 	res[PQ_STATUS_LAST_POP_TS] = pq.config.GetLastPopTs()
-	res[PQ_STATUS_INACTIVITY_TTL] = pq.config.GetInactivityTtl()
 	res[PQ_STATUS_TOTAL_MSGS] = pq.GetSize()
 	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.lockedMsgCnt
 	res[PQ_STATUS_AVAILABLE_MSGS] = pq.GetSize() - pq.lockedMsgCnt
 	return res
 }
 
-func (pq *PQueue) SetParams(msgTtl, maxSize, queueTtl, deliveryDelay int64) IResponse {
+func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout int64) IResponse {
 	pq.lock.Lock()
 	pq.config.MsgTtl = msgTtl
 	pq.config.MaxSize = maxSize
-	pq.config.InactivityTtl = queueTtl
 	pq.config.DeliveryDelay = deliveryDelay
-	features.SaveServiceConfig(pq.GetServiceId(), pq.config)
+	pq.config.PopCountLimit = popLimit
+	pq.config.PopLockTimeout = lockTimeout
 	pq.lock.Unlock()
+	features.SaveServiceConfig(pq.GetServiceId(), pq.config)
 	return OK_RESPONSE
 }
 
@@ -308,10 +286,6 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 		return ERR_SIZE_EXCEEDED
 	}
 
-	if priority >= pq.config.MaxPriority {
-		return ERR_PRIORITY_OUT_OF_RANGE
-	}
-
 	nowTs := Uts()
 	pq.config.LastPushTs = nowTs
 	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl+delay, 0)
@@ -448,12 +422,10 @@ func (pq *PQueue) deleteMessage(sn uint64) bool {
 // If a number of POP attempts has exceeded, message will be deleted.
 func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
 	pq.lockedMsgCnt--
-	lim := pq.config.PopCountLimit
-	if lim > 0 {
-		if lim <= msg.PopCount {
-			pq.deleteMessage(msg.SerialNumber)
-			return
-		}
+	popLimit := pq.config.PopCountLimit
+	if popLimit > 0 && msg.PopCount >= popLimit {
+		pq.deleteMessage(msg.SerialNumber)
+		return
 	}
 	msg.UnlockTs = 0
 	pq.availMsgs.Push(msg)

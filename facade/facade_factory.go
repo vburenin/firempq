@@ -8,11 +8,11 @@ import (
 	. "firempq/api"
 )
 
-type ServiceConstructor func(*common.ServiceDescription, []string) ISvc
+type ServiceConstructor func(*common.ServiceDescription, []string) (ISvc, IResponse)
 type ServiceLoader func(*common.ServiceDescription) (ISvc, error)
 
-func GetServiceConstructor(serviceName string) (ServiceConstructor, bool) {
-	switch serviceName {
+func GetServiceConstructor(serviceType string) (ServiceConstructor, bool) {
+	switch serviceType {
 	case common.STYPE_PRIORITY_QUEUE:
 		return pqueue.CreatePQueue, true
 	default:

@@ -18,7 +18,6 @@ import (
 
 func getConfig() *PQConfig {
 	return &PQConfig{
-		MaxPriority:    25,
 		MaxSize:        100001,
 		MsgTtl:         100000,
 		DeliveryDelay:  1,
@@ -26,7 +25,6 @@ func getConfig() *PQConfig {
 		PopCountLimit:  4,
 		LastPushTs:     12,
 		LastPopTs:      13,
-		InactivityTtl:  1234567890,
 	}
 }
 
@@ -43,7 +41,7 @@ func getDesc() *common.ServiceDescription {
 }
 
 func CreateTestQueue() *PQueue {
-	return initPQueue(getDesc(), getConfig())
+	return InitPQueue(getDesc(), getConfig())
 }
 
 func CreateNewTestQueue() *PQueue {
@@ -239,7 +237,6 @@ func TestStatus(t *testing.T) {
 		Convey("Empty status should be default", func() {
 			s, _ := q.GetCurrentStatus().(*common.DictResponse)
 			status := s.GetDict()
-			So(status[PQ_STATUS_MAX_PRIORITY], ShouldEqual, 25)
 			So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 100001)
 			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
 			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
@@ -248,7 +245,6 @@ func TestStatus(t *testing.T) {
 			So(status[PQ_STATUS_CREATE_TS], ShouldEqual, 123)
 			So(status[PQ_STATUS_LAST_PUSH_TS], ShouldEqual, 12)
 			So(status[PQ_STATUS_LAST_POP_TS], ShouldEqual, 13)
-			So(status[PQ_STATUS_INACTIVITY_TTL], ShouldEqual, 1234567890)
 			So(status[PQ_STATUS_TOTAL_MSGS], ShouldEqual, 0)
 			So(status[PQ_STATUS_IN_FLIGHT_MSG], ShouldEqual, 0)
 			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 0)
@@ -266,7 +262,6 @@ func TestStatus(t *testing.T) {
 
 			s, _ := q.GetCurrentStatus().(*common.DictResponse)
 			status := s.GetDict()
-			So(status[PQ_STATUS_MAX_PRIORITY], ShouldEqual, 25)
 			So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 100001)
 			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
 			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
@@ -275,7 +270,6 @@ func TestStatus(t *testing.T) {
 			So(status[PQ_STATUS_CREATE_TS], ShouldBeLessThanOrEqualTo, common.Uts())
 			So(status[PQ_STATUS_LAST_PUSH_TS], ShouldBeLessThanOrEqualTo, common.Uts())
 			So(status[PQ_STATUS_LAST_POP_TS], ShouldBeLessThanOrEqualTo, common.Uts())
-			So(status[PQ_STATUS_INACTIVITY_TTL], ShouldEqual, 1234567890)
 			So(status[PQ_STATUS_TOTAL_MSGS], ShouldEqual, 3)
 			So(status[PQ_STATUS_IN_FLIGHT_MSG], ShouldEqual, 1)
 			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 2)
@@ -287,14 +281,15 @@ func TestStatus(t *testing.T) {
 func TestSetParams(t *testing.T) {
 	Convey("Parameters should be set", t, func() {
 		q := CreateNewTestQueue()
-		VerifyOkResponse(q.SetParams(10000, 20000, 30000, 40000))
+		VerifyOkResponse(q.SetParams(10000, 20000, 30000, 40000, 50000))
 
 		s, _ := q.GetCurrentStatus().(*common.DictResponse)
 		status := s.GetDict()
 		So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 10000)
 		So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 20000)
-		So(status[PQ_STATUS_INACTIVITY_TTL], ShouldEqual, 30000)
-		So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 40000)
+		So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 30000)
+		So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 40000)
+		So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 50000)
 	})
 }
 
@@ -351,7 +346,6 @@ func TestPushError(t *testing.T) {
 	q := CreateNewTestQueue()
 	q.Push("d1", "p", 10000, 100, 11)
 	Convey("Push should result in errors", t, func() {
-		So(q.Push("d2", "p", 10000, 100, 110), ShouldResemble, common.ERR_PRIORITY_OUT_OF_RANGE)
 		So(q.Push("d1", "p", 10000, 100, 1), ShouldResemble, common.ERR_ITEM_ALREADY_EXISTS)
 	})
 }
@@ -419,7 +413,7 @@ func TestSize(t *testing.T) {
 func TestSizeLimit(t *testing.T) {
 	Convey("Fourth element should fail with size limit error", t, func() {
 		q := CreateNewTestQueue()
-		q.SetParams(10000, 3, 10000, 0)
+		q.SetParams(10000, 3, 10000, 0, 50000)
 		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11))

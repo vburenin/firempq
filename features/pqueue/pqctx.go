@@ -1,13 +1,14 @@
 package pqueue
 
 import (
+	"math"
+	"sync"
+
 	. "firempq/api"
 	. "firempq/common"
 	. "firempq/conf"
+	. "firempq/features/pqueue/pqmsg"
 	"firempq/log"
-	"fmt"
-	"math"
-	"sync"
 )
 
 type PQContext struct {
@@ -64,11 +65,62 @@ const (
 )
 
 const (
-	CPRM_MSG_TTL              = "MSGTTL"
-	CPRM_MAX_SIZE             = "MAXSIZE"
-	CPRM_QUEUE_INACTIVITY_TTL = "QTTL"
-	CPRM_DELIVERY_DELAY       = "DELAY"
+	CPRM_MSG_TTL        = "MSGTTL"
+	CPRM_MAX_SIZE       = "MAXSIZE"
+	CPRM_DELIVERY_DELAY = "DELAY"
+	CPRM_POP_LIMIT      = "POPLIMIT"
+	CPRM_LOCK_TIMEOUT   = "TIMEOUT"
 )
+
+func CreatePQueue(desc *ServiceDescription, params []string) (ISvc, IResponse) {
+	config, resp := ParsePQConfig(params)
+	if resp.IsError() {
+		return nil, resp
+	}
+	return InitPQueue(desc, config), OK_RESPONSE
+}
+
+func ParsePQConfig(params []string) (*PQConfig, IResponse) {
+	var err *ErrorResponse
+
+	msgTtl := CFG_PQ.DefaultMessageTtl
+	maxSize := CFG_PQ.DefaultMaxSize
+	delay := CFG_PQ.DefaultDeliveryDelay
+	lockTimeout := CFG_PQ.DefaultLockTimeout
+	popLimit := CFG_PQ.DefaultPopCountLimit
+
+	for len(params) > 0 {
+		switch params[0] {
+		case CPRM_MSG_TTL:
+			params, msgTtl, err = ParseInt64Param(params, 0, CFG_PQ.MaxMessageTtl)
+		case CPRM_MAX_SIZE:
+			params, maxSize, err = ParseInt64Param(params, 0, math.MaxInt64)
+		case CPRM_DELIVERY_DELAY:
+			params, delay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
+		case CPRM_POP_LIMIT:
+			params, popLimit, err = ParseInt64Param(params, 0, math.MaxInt64)
+		case CPRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
+		default:
+			return nil, UnknownParam(params[0])
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cfg := &PQConfig{
+		MaxSize:        maxSize,
+		MsgTtl:         msgTtl,
+		DeliveryDelay:  delay,
+		PopLockTimeout: lockTimeout,
+		PopCountLimit:  popLimit,
+		LastPushTs:     Uts(),
+		LastPopTs:      Uts(),
+	}
+
+	return cfg, OK_RESPONSE
+}
 
 // Call dispatches to the command handler to process necessary parameters.
 func (ctx *PQContext) Call(cmd string, params []string) IResponse {
@@ -113,7 +165,7 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 		case PRM_ID:
 			params, msgId, err = ParseItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
 		default:
-			return "", makeUnknownParamResponse(params[0])
+			return "", UnknownParam(params[0])
 		}
 		if err != nil {
 			return "", err
@@ -124,10 +176,6 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 		return "", ERR_MSG_ID_NOT_DEFINED
 	}
 	return msgId, nil
-}
-
-func makeUnknownParamResponse(paramName string) *ErrorResponse {
-	return InvalidRequest(fmt.Sprintf("Unknown parameter: %s", paramName))
 }
 
 // PopLock gets message from the queue setting lock timeout.
@@ -149,7 +197,7 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 		case PRM_ASYNC:
 			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
 		default:
-			return makeUnknownParamResponse(params[0])
+			return UnknownParam(params[0])
 		}
 		if err != nil {
 			return err
@@ -178,7 +226,7 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 		case PRM_ASYNC:
 			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
 		default:
-			return makeUnknownParamResponse(params[0])
+			return UnknownParam(params[0])
 		}
 		if err != nil {
 			return err
@@ -238,7 +286,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	var err *ErrorResponse
 	var msgId string
 	var msgTtl int64 = cfg.MsgTtl
-	var priority int64 = cfg.MaxPriority - 1
+	var priority int64 = 0
 	var delay int64 = cfg.DeliveryDelay
 	var payload string = ""
 	var syncWait bool
@@ -249,7 +297,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		case PRM_ID:
 			params, msgId, err = ParseUserItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
 		case PRM_PRIORITY:
-			params, priority, err = ParseInt64Param(params, 0, cfg.MaxPriority-1)
+			params, priority, err = ParseInt64Param(params, 0, math.MaxInt64)
 		case PRM_PAYLOAD:
 			params, payload, err = ParseStringParam(params, 1, PAYLOAD_LIMIT)
 		case PRM_DELAY:
@@ -262,7 +310,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		case PRM_ASYNC:
 			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
 		default:
-			return makeUnknownParamResponse(params[0])
+			return UnknownParam(params[0])
 		}
 		if err != nil {
 			return err
@@ -312,7 +360,7 @@ func (ctx *PQContext) UpdateLock(params []string) IResponse {
 		case PRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		default:
-			return makeUnknownParamResponse(params[0])
+			return UnknownParam(params[0])
 		}
 		if err != nil {
 			return err
@@ -352,7 +400,7 @@ func (ctx *PQContext) CheckTimeouts(params []string) IResponse {
 		case PRM_TIMESTAMP:
 			params, ts, err = ParseInt64Param(params, 0, math.MaxInt64)
 		default:
-			return makeUnknownParamResponse(params[0])
+			return UnknownParam(params[0])
 		}
 		if err != nil {
 			return err
@@ -369,8 +417,9 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 	cfg := ctx.pq.config
 	msgTtl := cfg.MsgTtl
 	maxSize := cfg.MaxSize
-	queueTtl := cfg.InactivityTtl
+	popLimit := cfg.PopCountLimit
 	deliveryDelay := cfg.DeliveryDelay
+	lockTimeout := cfg.PopLockTimeout
 
 	if len(params) == 0 {
 		return ERR_CMD_PARAM_NOT_PROVIDED
@@ -384,16 +433,18 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 			params, maxSize, err = ParseInt64Param(params, 0, math.MaxInt64)
 		case CPRM_DELIVERY_DELAY:
 			params, deliveryDelay, err = ParseInt64Param(params, 0, CFG_PQ.MaxDeliveryDelay)
-		case CPRM_QUEUE_INACTIVITY_TTL:
-			params, deliveryDelay, err = ParseInt64Param(params, 0, math.MaxInt64)
+		case CPRM_POP_LIMIT:
+			params, popLimit, err = ParseInt64Param(params, 0, math.MaxInt64)
+		case CPRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		default:
-			return makeUnknownParamResponse(params[0])
+			return UnknownParam(params[0])
 		}
 		if err != nil {
 			return err
 		}
 	}
-	return ctx.pq.SetParams(msgTtl, maxSize, queueTtl, deliveryDelay)
+	return ctx.pq.SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout)
 }
 
 func (ctx *PQContext) Finish() {

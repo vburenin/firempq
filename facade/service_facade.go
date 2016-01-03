@@ -66,15 +66,21 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 		return common.ERR_SVC_ALREADY_EXISTS
 	}
 	serviceConstructor, ok := GetServiceConstructor(svcType)
+
 	if !ok {
 		return common.ERR_SVC_UNKNOWN_TYPE
 	}
 
-	s.serviceIdCounter += 1
+	desc := common.NewServiceDescription(svcName, svcType, s.serviceIdCounter+1)
 
-	desc := common.NewServiceDescription(svcType, s.serviceIdCounter, svcName)
+	svc, resp := serviceConstructor(desc, params)
+	if resp.IsError() {
+		return resp
+	}
+
+	s.serviceIdCounter++
 	features.SaveServiceDescription(desc)
-	svc := serviceConstructor(desc, params)
+
 	svc.StartUpdate()
 	s.allSvcs[svcName] = svc
 

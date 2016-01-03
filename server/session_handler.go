@@ -1,12 +1,12 @@
 package server
 
 import (
-	"firempq/common"
 	"firempq/facade"
 	"firempq/log"
 	"net"
 
 	. "firempq/api"
+	. "firempq/common"
 	"firempq/db"
 	"strconv"
 	"sync"
@@ -32,7 +32,7 @@ type FuncHandler func([]string) IResponse
 type SessionHandler struct {
 	connLock  sync.Mutex
 	conn      net.Conn
-	tokenizer *common.Tokenizer
+	tokenizer *Tokenizer
 	active    bool
 	ctx       ServiceContext
 	svcs      *facade.ServiceFacade
@@ -42,7 +42,7 @@ type SessionHandler struct {
 func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
 	sh := &SessionHandler{
 		conn:      conn,
-		tokenizer: common.NewTokenizer(),
+		tokenizer: NewTokenizer(),
 		ctx:       nil,
 		active:    true,
 		svcs:      services,
@@ -53,12 +53,12 @@ func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHa
 }
 
 func (s *SessionHandler) QuitListener() {
-	quitChan := common.GetQuitChan()
+	quitChan := GetQuitChan()
 	go func() {
 		select {
 		case <-quitChan:
 			s.Stop()
-			s.WriteResponse(common.ERR_CONN_CLOSING)
+			s.WriteResponse(ERR_CONN_CLOSING)
 			if s.ctx != nil {
 				s.ctx.Finish()
 			}
@@ -73,7 +73,7 @@ func (s *SessionHandler) QuitListener() {
 func (s *SessionHandler) DispatchConn() {
 	addr := s.conn.RemoteAddr().String()
 	log.Debug("Client connected: %s", addr)
-	s.WriteResponse(common.NewStrResponse("HELLO FIREMPQ-0.1"))
+	s.WriteResponse(NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
 		if err == nil {
@@ -98,7 +98,7 @@ func (s *SessionHandler) DispatchConn() {
 // to see if there is a processor for the rest of the tokens.
 func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 	if len(cmdTokens) == 0 {
-		return common.OK_RESPONSE
+		return OK_RESPONSE
 	}
 
 	cmd := cmdTokens[0]
@@ -127,7 +127,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 		return dbstatHandler(tokens)
 	default:
 		if s.ctx == nil {
-			return common.InvalidRequest("Unknown command: " + cmd)
+			return InvalidRequest("Unknown command: " + cmd)
 		} else {
 			return s.ctx.Call(cmd, tokens)
 		}
@@ -150,27 +150,37 @@ func (s *SessionHandler) WriteResponse(resp IResponse) error {
 // Handler that creates a service.
 func (s *SessionHandler) createServiceHandler(tokens []string) IResponse {
 	if len(tokens) < 2 {
-		return common.InvalidRequest("At least service type and name should be provided")
+		return InvalidRequest("At least service type and name should be provided")
 	}
 	svcName := tokens[0]
 	svcType := tokens[1]
 
-	_, exists := s.svcs.GetService(svcName)
-	if exists {
-		return common.ConflictRequest("Service exists already")
+	if len(svcName) > 256 {
+		return InvalidRequest("Service name can not be longer than 256 characters")
 	}
 
-	resp := s.svcs.CreateService(svcType, svcName, make([]string, 0))
-	return resp
+	if !ValidateItemId(svcName) {
+		return ERR_ID_IS_WRONG
+	}
+	if svcType != STYPE_PRIORITY_QUEUE {
+		return InvalidRequest("Unknown service type")
+	}
+
+	_, exists := s.svcs.GetService(svcName)
+	if exists {
+		return ConflictRequest("Service exists already")
+	}
+
+	return s.svcs.CreateService(svcType, svcName, tokens[2:])
 }
 
 // Drop service.
 func (s *SessionHandler) dropServiceHandler(tokens []string) IResponse {
 	if len(tokens) == 0 {
-		return common.InvalidRequest("Service name must be provided")
+		return InvalidRequest("Service name must be provided")
 	}
 	if len(tokens) > 1 {
-		return common.InvalidRequest("DROP accept service name only")
+		return InvalidRequest("DROP accept service name only")
 	}
 	svcName := tokens[0]
 	res := s.svcs.DropService(svcName)
@@ -180,20 +190,20 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) IResponse {
 // Context changer.
 func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
 	if len(tokens) > 1 {
-		return common.InvalidRequest("CTX accept service name only")
+		return InvalidRequest("CTX accept service name only")
 	}
 
 	if len(tokens) == 0 {
-		return common.InvalidRequest("Service name must be provided")
+		return InvalidRequest("Service name must be provided")
 	}
 
 	svcName := tokens[0]
 	svc, exists := s.svcs.GetService(svcName)
 	if !exists {
-		return common.ERR_NO_SVC
+		return ERR_NO_SVC
 	}
 	s.ctx = svc.NewContext(s)
-	return common.OK_RESPONSE
+	return OK_RESPONSE
 }
 
 // Stop the processing loop.
@@ -204,10 +214,10 @@ func (s *SessionHandler) Stop() {
 // Stops the main loop on QUIT.
 func (s *SessionHandler) quitHandler(tokens []string) IResponse {
 	if len(tokens) > 0 {
-		return common.ERR_CMD_WITH_NO_PARAMS
+		return ERR_CMD_WITH_NO_PARAMS
 	}
 	s.Stop()
-	return common.OK_RESPONSE
+	return OK_RESPONSE
 }
 
 // List all active services.
@@ -219,7 +229,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) IResponse {
 	} else if len(tokens) == 2 {
 		svcType = tokens[1]
 	} else if len(tokens) > 2 {
-		return common.InvalidRequest("LIST accept service name prefix and service type only")
+		return InvalidRequest("LIST accept service name prefix and service type only")
 	}
 
 	return s.svcs.ListServices(svcPrefix, svcType)
@@ -228,46 +238,46 @@ func (s *SessionHandler) listServicesHandler(tokens []string) IResponse {
 // Ping responder.
 func pingHandler(tokens []string) IResponse {
 	if len(tokens) > 0 {
-		return common.ERR_CMD_WITH_NO_PARAMS
+		return ERR_CMD_WITH_NO_PARAMS
 	}
-	return common.RESP_PONG
+	return RESP_PONG
 }
 
 // Returns current server unix time stamp in milliseconds.
 func tsHandler(tokens []string) IResponse {
 	if len(tokens) > 0 {
-		return common.ERR_CMD_WITH_NO_PARAMS
+		return ERR_CMD_WITH_NO_PARAMS
 	}
-	return common.NewIntResponse(common.Uts())
+	return NewIntResponse(Uts())
 }
 
 func logLevelHandler(tokens []string) IResponse {
 	if len(tokens) != 1 {
-		return common.InvalidRequest("Log level accept one integer parameter in range [0-5]")
+		return InvalidRequest("Log level accept one integer parameter in range [0-5]")
 	}
 	l, e := strconv.Atoi(tokens[0])
 	if e != nil || l < 0 || l > 5 {
-		return common.InvalidRequest("Log level is an integer in range [0-5]")
+		return InvalidRequest("Log level is an integer in range [0-5]")
 	}
 	log.Warning("Log level changed to: %d", l)
 	log.SetLevel(l)
-	return common.OK_RESPONSE
+	return OK_RESPONSE
 }
 
 func panicHandler(tokens []string) IResponse {
 	if len(tokens) > 0 {
-		return common.ERR_CMD_WITH_NO_PARAMS
+		return ERR_CMD_WITH_NO_PARAMS
 	}
 
 	log.Critical("Panic requested!")
 	panic("Panic requested")
-	return common.OK_RESPONSE
+	return OK_RESPONSE
 }
 
 func dbstatHandler(tokens []string) IResponse {
 	if len(tokens) > 0 {
-		return common.ERR_CMD_WITH_NO_PARAMS
+		return ERR_CMD_WITH_NO_PARAMS
 	}
 	db := db.GetDatabase()
-	return common.NewDictResponse(db.GetStats())
+	return NewDictResponse(db.GetStats())
 }
