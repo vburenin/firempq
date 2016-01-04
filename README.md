@@ -16,6 +16,7 @@ This is a list of my typical use cases:
 10. High performance. We all want to have a high performance service, so FireMPQ goal is to provide a service that can handle hundreds of thousands operations per second.
 
 Other use cases:
+
 1. AWS SQS protocol support. Development on AWS may be costly if it involves generation of hundreds of millions of SQS messages, being able to use FireMPQ instead can reduce a cost.
 2. Message content visibility. For debugging/informational purposes it may be interesting to see message content that is pending in the queue.
 3. Queue content clean up. Especially in development/test environment, it is useful to clean up queue content.
@@ -23,7 +24,9 @@ Other use cases:
 5. AMPQ support - very long term plan if there is nothing to do. Volunteers are very welcome. May help during transition from services like RabbitMQ to FireMPQ.
 
 
-Here is a list of features I am looking forward to implement the first release.
+# First release features
+
+Here is a list of features I am looking forward to implement the first release:
 
 0. Simple text protocol.
 1. Priorities for messages (per message).
@@ -33,7 +36,7 @@ Here is a list of features I am looking forward to implement the first release.
 5. Asynchronous requests.
 6. Confirmation that message is stored on disk.
 
-Further plans
+# Further plans
 0. Performance optimizations if possible.
 1. Management Web-UI. A rich Web-UI that will help administrators manage existing queues, etc.
 2. Support of AWS SQS protocol.
@@ -44,4 +47,5 @@ Further plans
 It is actually already working. Extensive testing is in process.
 
 # Web Site
+
 I have registered a domain name http://firempq.com. This will be a project home page. It is under construction at the moment.
