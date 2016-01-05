@@ -403,33 +403,33 @@ func TestCtxSetParamValue(t *testing.T) {
 	Convey("Set param should work well", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("At least one parameter should be provided error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{})
 			So(resp, ShouldEqual, ERR_CMD_PARAM_NOT_PROVIDED)
 		})
 		Convey("Message TTL error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_MSG_TTL, "0"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_MSG_TTL, "0"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxMessageTtl))
 		})
 		Convey("Queue Max Size", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "-1"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 		Convey("Message delivery delay error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_DELIVERY_DELAY, "-1"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_DELIVERY_DELAY, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxDeliveryDelay))
 		})
 		Convey("Pop limit out of range error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_POP_LIMIT, "-1"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_POP_LIMIT, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 
 		Convey("Lock timeout error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{CPRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_LOCK_TIMEOUT, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxLockTimeout))
 		})
 
 		Convey("Should return unknown param error", func() {
-			resp := q.Call(PQ_CMD_SET_PARAM, []string{"TEST_PARAM"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{"TEST_PARAM"})
 			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 		Convey("All parameters should be set", func() {
@@ -438,7 +438,7 @@ func TestCtxSetParamValue(t *testing.T) {
 				CPRM_MSG_TTL, "10000",
 				CPRM_MAX_SIZE, "100000",
 			}
-			VerifyOkResponse(q.Call(PQ_CMD_SET_PARAM, params))
+			VerifyOkResponse(q.Call(PQ_CMD_SET_CFG, params))
 		})
 	})
 }
