@@ -505,12 +505,18 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	var cntRet int64 = 0
 	for h.NotEmpty() && cntDel+cntRet < CFG_PQ.TimeoutCheckBatchSize {
 		msg := h.MinMsg()
-		if msg.UnlockTs > 0 && msg.UnlockTs < ts {
-			cntRet++
-			h.Pop()
-			msg.UnlockTs = 0
-			pq.returnToFront(msg)
-		} else if msg.ExpireTs < ts {
+		if msg.UnlockTs > 0 {
+			if msg.UnlockTs < ts {
+				cntRet++
+				h.Pop()
+				msg.UnlockTs = 0
+				pq.returnToFront(msg)
+			} else {
+				break
+			}
+		}
+		if msg.ExpireTs < ts {
+			println(msg.ExpireTs, msg.UnlockTs, msg.PopCount, msg.SerialNumber, ts)
 			cntDel++
 			h.Pop()
 			delete(pq.id2sn, msg.StrId)
