@@ -118,7 +118,7 @@ func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeou
 }
 
 func (pq *PQueue) GetCurrentStatus() IResponse {
-	return NewDictResponse(pq.GetStatus())
+	return NewDictResponse("+STATUS", pq.GetStatus())
 }
 
 func (pq *PQueue) GetServiceId() string {
@@ -243,7 +243,7 @@ func (pq *PQueue) GetMessageInfo(msgId string) IResponse {
 		MSG_INFO_EXPIRE_TS: msg.ExpireTs,
 	}
 	pq.lock.Unlock()
-	return NewDictResponse(data)
+	return NewDictResponse("+MSGINFO", data)
 }
 
 func (pq *PQueue) DeleteLockedById(msgId string) IResponse {

@@ -24,7 +24,7 @@ const (
 	CMD_CTX        = "CTX"
 	CMD_LOGLEVEL   = "LOGLEVEL"
 	CMD_PANIC      = "PANIC"
-	CMD_DBSTAT     = "DBSTAT"
+	CMD_DBSTATS    = "DBSTATS"
 )
 
 type FuncHandler func([]string) IResponse
@@ -123,7 +123,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 		return tsHandler(tokens)
 	case CMD_PANIC:
 		return panicHandler(tokens)
-	case CMD_DBSTAT:
+	case CMD_DBSTATS:
 		return dbstatHandler(tokens)
 	default:
 		if s.ctx == nil {
@@ -134,7 +134,7 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 	}
 }
 
-// WriteResponse writes IResponse into connection.
+// WriteResponse writes IResponse into connection writer.
 func (s *SessionHandler) WriteResponse(resp IResponse) error {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
@@ -279,5 +279,5 @@ func dbstatHandler(tokens []string) IResponse {
 		return ERR_CMD_WITH_NO_PARAMS
 	}
 	db := db.GetDatabase()
-	return NewDictResponse(db.GetStats())
+	return NewDictResponse("+DBSTATS", db.GetStats())
 }

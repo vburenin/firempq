@@ -13,12 +13,14 @@ import (
 type CallFuncType func([]string) IResponse
 
 type DictResponse struct {
-	dict map[string]interface{}
+	dict   map[string]interface{}
+	header string
 }
 
-func NewDictResponse(dict map[string]interface{}) *DictResponse {
+func NewDictResponse(header string, dict map[string]interface{}) *DictResponse {
 	return &DictResponse{
-		dict: dict,
+		dict:   dict,
+		header: header,
 	}
 }
 
@@ -28,7 +30,8 @@ func (self *DictResponse) GetDict() map[string]interface{} {
 
 func (self *DictResponse) getResponseChunks() []string {
 	data := make([]string, 0, 3+9*len(self.dict))
-	data = append(data, "+DATA %")
+	data = append(data, self.header)
+	data = append(data, " %")
 	data = append(data, strconv.Itoa(len(self.dict)))
 	for k, v := range self.dict {
 		data = append(data, " ")
