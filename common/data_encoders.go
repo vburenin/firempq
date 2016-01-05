@@ -5,20 +5,13 @@ import (
 	"strings"
 )
 
-func EncodeRespStringTo(data []string, str string) []string {
-	return []string{"$", strconv.Itoa(len(str)), " ", str}
-}
-
-func EncodeRespInt64To(data []string, val int64) []string {
-	return []string{":", strconv.FormatInt(val, 10)}
-}
-
+// EncodeRespString encode string into protocol text format.
 func EncodeRespString(data string) string {
 	output := []string{"$", strconv.Itoa(len(data)), " ", data}
 	return strings.Join(output, "")
 }
 
-// Encode int64 into net format.
+// EncodeRespInt64 encode int64 into the protocol text format.
 func EncodeRespInt64(val int64) string {
 	return ":" + strconv.FormatInt(val, 10)
 }
@@ -28,6 +21,7 @@ func EncodeTo36Base(exportId uint64) string {
 	return strconv.FormatUint(exportId, 36)
 }
 
+// EncodeUint64ToString encodes uint64 to the sequence of bytes.
 func EncodeUint64ToString(v uint64) string {
 	b := make([]byte, 8)
 	b[0] = byte(v >> 56)
@@ -41,6 +35,7 @@ func EncodeUint64ToString(v uint64) string {
 	return UnsafeBytesToString(b)
 }
 
+// DecodeBytesToUnit64 decodes sequence of bytes to  uint64.
 func DecodeBytesToUnit64(b []byte) uint64 {
 	return (uint64(b[7]) |
 		uint64(b[6])<<8 |
