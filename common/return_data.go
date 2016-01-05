@@ -31,7 +31,7 @@ func (self *DictResponse) getResponseChunks() []string {
 	data = append(data, "+DATA %")
 	data = append(data, strconv.Itoa(len(self.dict)))
 	for k, v := range self.dict {
-		data = append(data, "\n")
+		data = append(data, " ")
 		data = append(data, k)
 		data = append(data, " ")
 		switch t := v.(type) {
