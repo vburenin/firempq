@@ -6,43 +6,32 @@ import (
 	"time"
 )
 
-var rndgen = rand.NewSource(time.Now().UnixNano())
-var rndMutex = sync.Mutex{}
-
 const (
-	MSG_ID_CHARACTERS   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	MSG_ID_LENGTH       = 24
-	MSG_ID_CHARS_LENGTH = 62
+	msgIdCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	msgIdLength     = 24
 )
 
-func GenRandMsgId() string {
-	randData := make([]byte, MSG_ID_LENGTH)
-	rndMutex.Lock()
-	defer rndMutex.Unlock()
-	randData[0] = '_'
-	for i := 1; i < MSG_ID_LENGTH; i++ {
-		randData[i] = MSG_ID_CHARACTERS[rndgen.Int63()%MSG_ID_CHARS_LENGTH]
-	}
-	return UnsafeBytesToString(randData)
-}
+var msgIdCharsTotal = int64(len(msgIdCharacters))
 
 type IdGen struct {
 	mutex  sync.Mutex
 	rndgen rand.Source
 }
 
+// NewIdGen return new Message ID generator object to be used within the scope of one queue.
 func NewIdGen() *IdGen {
 	return &IdGen{
 		rndgen: rand.NewSource(time.Now().UnixNano()),
 	}
 }
 
+// GenRandId generates random message id from the set of allowed characters.
 func (g *IdGen) GenRandId() string {
-	randData := make([]byte, MSG_ID_LENGTH)
+	randData := make([]byte, msgIdLength)
 	g.mutex.Lock()
 	randData[0] = '_'
-	for i := 1; i < MSG_ID_LENGTH; i++ {
-		randData[i] = MSG_ID_CHARACTERS[g.rndgen.Int63()%MSG_ID_CHARS_LENGTH]
+	for i := 1; i < msgIdLength; i++ {
+		randData[i] = msgIdCharacters[g.rndgen.Int63()%msgIdCharsTotal]
 	}
 	g.mutex.Unlock()
 	return UnsafeBytesToString(randData)

@@ -2,17 +2,12 @@ package common
 
 import (
 	"bytes"
+	"io"
 	"strconv"
 
 	. "firempq/api"
-
-	"io"
-
-	"github.com/op/go-logging"
+	"firempq/log"
 )
-
-// Error translator
-var log = logging.MustGetLogger("firempq")
 
 func TranslateError(err error) IResponse {
 	if err == nil {
@@ -139,6 +134,3 @@ func (r *AsyncResponse) WriteResponse(buff io.Writer) error {
 
 var RESP_PONG IResponse = NewStrResponse("PONG")
 var OK_RESPONSE = NewStrResponse("OK")
-
-var _ IResponse = NewStrResponse("test")
-var _ IResponse = NewIntResponse(10)

@@ -1,19 +1,18 @@
 package main
 
 import (
+	"fmt"
+	"sync"
+	"time"
+
 	"firempq/common"
+	"firempq/db"
 	"firempq/facade"
 	"firempq/log"
 
 	. "firempq/api"
-	"firempq/db"
 	. "firempq/features/pqueue"
-	"firempq/structs/pheap"
 	. "firempq/testutils"
-	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
 func BenchMassPush() {
@@ -35,13 +34,13 @@ func BenchMassPush() {
 	respWriter := NewTestResponseWriter()
 	ctx := svc.NewContext(respWriter)
 
-	ctx.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100"})
+	ctx.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
 	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
 
 	testFunc := func() {
-		for i := 0; i < 100000; i++ {
+		for i := 0; i < 1000000; i++ {
 			ctx.Call(PQ_CMD_PUSH, data)
 		}
 		grp.Done()
@@ -60,10 +59,12 @@ func BenchMassPush() {
 	ctx.Finish()
 
 	log.Info("Test finished in: %d - %d", (finishTs - startTs), (finishTs-startTs)/1000000)
-	//db.GetDatabase().FlushCache()
-	//f.DropService("BenchTest")
-	//f.Close()
-	//db.GetDatabase().Close()
+	db.GetDatabase().FlushCache()
+	//println("waiting...")
+	//time.Sleep(time.Second * 1200)
+	f.DropService("BenchTest")
+	f.Close()
+	db.GetDatabase().Close()
 }
 
 func BenchMassPushMultiQueue() {
@@ -176,34 +177,6 @@ func BenchMassPushMultiQueue() {
 	log.Info("Waiting flush...")
 	log.Info("Closing DB")
 	db.GetDatabase().Close()
-}
-
-func BenchHeap() {
-	println("Starting...")
-	st := time.Now().UnixNano()
-	s := 10000000
-	set := make(map[uint64]struct{})
-	dt := make([]uint64, 0, s)
-	rand.Seed(0)
-	for i := 0; i < s; i++ {
-		dt = append(dt, uint64(rand.Int63()))
-	}
-	for _, v := range dt {
-		set[v] = struct{}{}
-	}
-	if len(set) < s {
-		panic("Not enough data")
-	}
-	ft := time.Now().UnixNano() - st
-	fmt.Println("Data prepared in", float64(ft)/1000000, "ms")
-	println("Pushing into heap")
-	st = time.Now().UnixNano()
-	c := pheap.NewPHeap()
-	for idx, v := range dt {
-		c.Push(int64(idx%20), v)
-	}
-	ft = time.Now().UnixNano() - st
-	fmt.Println("Data prepared in", float64(ft)/1000000, "ms")
 }
 
 func sn2db(v uint64) string {

@@ -35,7 +35,7 @@ func EncodeUint64ToString(v uint64) string {
 	return UnsafeBytesToString(b)
 }
 
-// DecodeBytesToUnit64 decodes sequence of bytes to  uint64.
+// DecodeBytesToUnit64 decodes sequence of bytes to uint64.
 func DecodeBytesToUnit64(b []byte) uint64 {
 	return (uint64(b[7]) |
 		uint64(b[6])<<8 |
