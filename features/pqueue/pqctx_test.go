@@ -56,7 +56,7 @@ func CreateNewQueueTestContext() (*PQContext, *TestResponseWriter) {
 	return CreateQueueTestContext()
 }
 
-func TestParsePQConfig(t *testing.T) {
+func TestCtxParsePQConfig(t *testing.T) {
 	Convey("All config parameters should be parsed correctly", t, func() {
 		Convey("Check all parameters are correct", func() {
 			params := []string{
@@ -309,30 +309,30 @@ func TestCtxUpdateLock(t *testing.T) {
 	Convey("Update lock should work fine", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("Should fail with unknown param", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "ab", "TEST_PARAM"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "ab", "TEST_PARAM"})
 			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 		Convey("Failure with incorrect message id", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "$ab", PRM_LOCK_TIMEOUT, "10000"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "$ab", PRM_LOCK_TIMEOUT, "10000"})
 			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Failure with empty message id", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_LOCK_TIMEOUT, "1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_LOCK_TIMEOUT, "1"})
 			So(resp, ShouldEqual, ERR_MSG_ID_NOT_DEFINED)
 		})
 		Convey("Failure with no timeout defined", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "1234"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "1234"})
 			So(resp, ShouldEqual, ERR_MSG_TIMEOUT_NOT_DEFINED)
 		})
 
 		Convey("Failure with no message", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "100"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "100"})
 			So(resp, ShouldEqual, ERR_MSG_NOT_FOUND)
 		})
 
 		Convey("Failure with to wrong timeout", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxLockTimeout))
 		})
 	})
@@ -439,6 +439,68 @@ func TestCtxSetParamValue(t *testing.T) {
 				CPRM_MAX_SIZE, "100000",
 			}
 			VerifyOkResponse(q.Call(PQ_CMD_SET_PARAM, params))
+		})
+	})
+}
+
+func TestCtxDeleteByReceipt(t *testing.T) {
+	Convey("All call scenarios should return expected response", t, func() {
+		q, _ := CreateNewQueueTestContext()
+		Convey("Should return expired error", func() {
+			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{PRM_RECEIPT, "1-2"})
+			So(resp, ShouldEqual, ERR_RECEIPT_EXPIRED)
+		})
+		Convey("Should return invalid receipt error", func() {
+			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{PRM_RECEIPT, "!@#$%%"})
+			So(resp, ShouldEqual, ERR_INVALID_RECEIPT)
+		})
+		Convey("Should return no receipt provided error", func() {
+			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{})
+			So(resp, ShouldEqual, ERR_NO_RECEIPT)
+		})
+		Convey("Should return unknown parameter error", func() {
+			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{"UNKNOWN"})
+			So(resp.GetResponse(), ShouldContainSubstring, "UNKNOWN")
+		})
+	})
+}
+
+func TestCtxUnlockByReceipt(t *testing.T) {
+	Convey("All call scenarios should return expected response", t, func() {
+		q, _ := CreateNewQueueTestContext()
+		Convey("Should return expired error", func() {
+			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{PRM_RECEIPT, "1-2"})
+			So(resp, ShouldEqual, ERR_RECEIPT_EXPIRED)
+		})
+		Convey("Should return invalid receipt error", func() {
+			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{PRM_RECEIPT, "!@#$%%"})
+			So(resp, ShouldEqual, ERR_INVALID_RECEIPT)
+		})
+		Convey("Should return no receipt provided error", func() {
+			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{})
+			So(resp, ShouldEqual, ERR_NO_RECEIPT)
+		})
+		Convey("Should return unknown parameter error", func() {
+			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{"UNKNOWN"})
+			So(resp.GetResponse(), ShouldContainSubstring, "UNKNOWN")
+		})
+	})
+}
+
+func TestCtxUpdateLockByReceipt(t *testing.T) {
+	Convey("All call scenarios should return expected response", t, func() {
+		q, _ := CreateNewQueueTestContext()
+		Convey("Should return no timeout parameter error", func() {
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{PRM_RECEIPT, "1-2"})
+			So(resp, ShouldEqual, ERR_MSG_TIMEOUT_NOT_DEFINED)
+		})
+		Convey("Should return invalid timeout error", func() {
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{PRM_RECEIPT, "1-2", PRM_LOCK_TIMEOUT, "-1"})
+			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxLockTimeout))
+		})
+		Convey("Should return unknown parameter error", func() {
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{"UNKNOWN"})
+			So(resp.GetResponse(), ShouldContainSubstring, "UNKNOWN")
 		})
 	})
 }

@@ -38,8 +38,6 @@ func ServerError(errorText string) *ErrorResponse {
 	return &ErrorResponse{errorText, CODE_SERVER_ERR}
 }
 
-var ERR_UNKNOWN_CMD = InvalidRequest("Unknown CMD")
-
 var ERR_NO_SVC = InvalidRequest("Service is not created")
 var ERR_SVC_UNKNOWN_TYPE = InvalidRequest("Unknown service type")
 var ERR_SVC_ALREADY_EXISTS = ConflictRequest("Service exists already")
@@ -47,7 +45,10 @@ var ERR_ITEM_ALREADY_EXISTS = ConflictRequest("Message exists already")
 var ERR_MSG_NOT_LOCKED = InvalidRequest("Message is not locked")
 var ERR_MSG_NOT_FOUND = NotFoundRequest("Message not found")
 var ERR_MSG_IS_LOCKED = ConflictRequest("Message is locked")
-var ERR_PRIORITY_OUT_OF_RANGE = InvalidRequest("The priority is out of range")
+
+var ERR_INVALID_RECEIPT = InvalidRequest("Receipt is invalid")
+var ERR_NO_RECEIPT = InvalidRequest("No receipt provided")
+var ERR_RECEIPT_EXPIRED = InvalidRequest("Receipt has expired")
 
 var ERR_CONN_CLOSING = NewError("Connection will be closed soon", CODE_SERVER_UNAVAILABLE)
 

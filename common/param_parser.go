@@ -26,7 +26,7 @@ func ParseInt64Param(params []string, minValue, maxValue int64) ([]string, int64
 
 func makeStrDesc(valName string, minLen, maxLen int64) string {
 	return fmt.Sprintf("Parameter %s must be followed by a string value with the min length %d and max length %d",
-		minLen, maxLen)
+		valName, minLen, maxLen)
 }
 
 func ParseStringParam(params []string, minLen, maxLen int64) ([]string, string, *ErrorResponse) {
@@ -83,4 +83,16 @@ func ParseServiceType(params []string) ([]string, string, *ErrorResponse) {
 		return params[2:], svcType, nil
 	}
 	return nil, "", InvalidRequest(valName + " must be followed by service type")
+}
+
+func Parse36BaseUIntValue(v string) (uint64, error) {
+	return strconv.ParseUint(v, 36, 0)
+}
+
+func Parse36BaseIntValue(v string) (int64, error) {
+	return strconv.ParseInt(v, 36, 0)
+}
+
+func ParseReceiptParam(params []string) ([]string, string, *ErrorResponse) {
+	return ParseStringParam(params, 3, 256)
 }

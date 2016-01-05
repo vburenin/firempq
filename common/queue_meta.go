@@ -1,7 +1,5 @@
 package common
 
-import "strconv"
-
 const (
 	STYPE_PRIORITY_QUEUE = "pqueue" // High priority goes first.
 )
@@ -14,7 +12,7 @@ func NewServiceDescription(name, sType string, exportId uint64) *ServiceDescript
 		CreateTs:  Uts(),
 		Disabled:  false,
 		ToDelete:  false,
-		ServiceId: MakeServiceId(exportId),
+		ServiceId: EncodeTo36Base(exportId),
 	}
 }
 
@@ -32,8 +30,3 @@ type ServiceDescriptionList []*ServiceDescription
 func (p ServiceDescriptionList) Len() int           { return len(p) }
 func (p ServiceDescriptionList) Less(i, j int) bool { return p[i].ExportId < p[j].ExportId }
 func (p ServiceDescriptionList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-
-// MakeServiceId creates a string value of service INT id.
-func MakeServiceId(exportId uint64) string {
-	return strconv.FormatUint(exportId, 36)
-}

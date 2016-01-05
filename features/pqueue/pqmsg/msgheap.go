@@ -94,7 +94,10 @@ func (self *MsgHeap) MinMsg() *PQMsgMetaData {
 }
 
 func (self *MsgHeap) GetMsg(sn uint64) *PQMsgMetaData {
-	return self.data[self.index[sn]]
+	if pos, ok := self.index[sn]; ok {
+		return self.data[pos]
+	}
+	return nil
 }
 
 func (self *MsgHeap) Len() int {

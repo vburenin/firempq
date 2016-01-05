@@ -11,6 +11,7 @@ import (
 	. "firempq/common"
 	. "firempq/conf"
 	. "firempq/features/pqueue/pqmsg"
+	"strings"
 )
 
 type PQueue struct {
@@ -75,7 +76,6 @@ func (pq *PQueue) NewContext(rw ResponseWriter) ServiceContext {
 }
 
 const (
-	PQ_STATUS_MAX_PRIORITY     = "MaxPriority"
 	PQ_STATUS_MAX_SIZE         = "MaxSize"
 	PQ_STATUS_MSG_TTL          = "MsgTtl"
 	PQ_STATUS_DELIVERY_DELAY   = "DeliveryDelay"
@@ -84,7 +84,6 @@ const (
 	PQ_STATUS_CREATE_TS        = "CreateTs"
 	PQ_STATUS_LAST_PUSH_TS     = "LastPushTs"
 	PQ_STATUS_LAST_POP_TS      = "LastPopTs"
-	PQ_STATUS_INACTIVITY_TTL   = "InactivityTtl"
 	PQ_STATUS_TOTAL_MSGS       = "TotalMessages"
 	PQ_STATUS_IN_FLIGHT_MSG    = "InFlightMessages"
 	PQ_STATUS_AVAILABLE_MSGS   = "AvailableMessages"
@@ -352,8 +351,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []IResp
 		pq.payloadLock.Lock()
 		pq.lock.Unlock()
 		payload := pq.GetPayloadFromDB(snDb)
-		msgs = append(msgs,
-			NewMsgResponseItem(msg.StrId, payload, msg.ExpireTs, msg.PopCount, msg.UnlockTs))
+		msgs = append(msgs, NewMsgResponseItem(msg, payload))
 
 		if !lock {
 			pq.DeleteFullItemFromDB(snDb)
@@ -364,9 +362,9 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []IResp
 	return msgs
 }
 
-// UpdateLock sets a user defined message lock timeout.
+// UpdateLockById sets a user defined message lock timeout.
 // It works only for locked messages.
-func (pq *PQueue) UpdateLock(msgId string, lockTimeout int64) IResponse {
+func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) IResponse {
 	pq.lock.Lock()
 	defer pq.lock.Unlock()
 
@@ -401,6 +399,69 @@ func (pq *PQueue) UnlockMessageById(msgId string) IResponse {
 	}
 	// Message exists, push it into the front of the queue.
 	pq.returnToFront(msg)
+	return OK_RESPONSE
+}
+
+// WARNING: this function acquires lock! It automatically releases lock if message is not found.
+func (pq *PQueue) acquireLockAndGetReceiptMessage(rcpt string) (*PQMsgMetaData, *ErrorResponse) {
+	parts := strings.SplitN(rcpt, "-", 2)
+
+	if len(parts) != 2 {
+		return nil, ERR_INVALID_RECEIPT
+	}
+	sn, err := Parse36BaseUIntValue(parts[0])
+	if err != nil {
+		return nil, ERR_INVALID_RECEIPT
+	}
+
+	popCount, err := Parse36BaseIntValue(parts[1])
+	if err != nil {
+		return nil, ERR_INVALID_RECEIPT
+	}
+
+	// To improve performance the lock is acquired here. The caller must unlock it.
+	pq.lock.Lock()
+	msg := pq.trackHeap.GetMsg(sn)
+	if msg != nil && msg.UnlockTs > 0 && msg.PopCount == popCount {
+		return msg, nil
+	}
+	pq.lock.Unlock()
+	return nil, ERR_RECEIPT_EXPIRED
+}
+
+// UpdateLockByRcpt sets a user defined message lock timeout tp the message that matches receipt.
+func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) IResponse {
+	// This call may acquire lock.
+	msg, err := pq.acquireLockAndGetReceiptMessage(rcpt)
+	if err != nil {
+		return err
+	}
+	msg.UnlockTs = Uts() + lockTimeout
+	pq.trackHeap.Push(msg)
+	pq.StoreItemBodyInDB(EncodeUint64ToString(msg.SerialNumber), msg.StringMarshal())
+	pq.lock.Unlock()
+	return OK_RESPONSE
+}
+
+func (pq *PQueue) DeleteByReceipt(rcpt string) IResponse {
+	// This call may acquire lock.
+	msg, err := pq.acquireLockAndGetReceiptMessage(rcpt)
+	if err != nil {
+		return err
+	}
+	pq.deleteMessage(msg.SerialNumber)
+	pq.lock.Unlock()
+	return OK_RESPONSE
+}
+
+func (pq *PQueue) UnlockByReceipt(rcpt string) IResponse {
+	// This call may acquire lock.
+	msg, err := pq.acquireLockAndGetReceiptMessage(rcpt)
+	if err != nil {
+		return err
+	}
+	pq.returnToFront(msg)
+	pq.lock.Unlock()
 	return OK_RESPONSE
 }
 

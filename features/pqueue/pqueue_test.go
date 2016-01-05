@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"firempq/common"
 	"firempq/db"
 	"firempq/log"
 	"firempq/testutils"
 
+	. "firempq/common"
 	. "firempq/features/pqueue/pqmsg"
 	. "firempq/testutils"
 
@@ -28,8 +28,8 @@ func getConfig() *PQConfig {
 	}
 }
 
-func getDesc() *common.ServiceDescription {
-	return &common.ServiceDescription{
+func getDesc() *ServiceDescription {
+	return &ServiceDescription{
 		ExportId:  10,
 		SType:     "PQueue",
 		Name:      "name",
@@ -67,8 +67,8 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 		VerifyServiceSize(q, 2)
 
 		// Unlock item data1 it should become available again.
-		q.UpdateLock("data1", 0)
-		q.checkTimeouts(common.Uts() + 110)
+		q.UpdateLockById("data1", 0)
+		q.checkTimeouts(Uts() + 110)
 		VerifySingleItem(q.Pop(10000, 0, 1, true), "data1", "p1")
 		VerifyServiceSize(q, 2)
 
@@ -87,7 +87,7 @@ func TestAutoExpiration(t *testing.T) {
 		q.Push("data2", "p2", 1000, 0, 12)
 		q.Push("data3", "p3", 10000, 0, 12)
 		VerifyServiceSize(q, 3)
-		q.checkTimeouts(common.Uts() + 1300)
+		q.checkTimeouts(Uts() + 1300)
 		VerifyServiceSize(q, 1)
 	})
 }
@@ -180,7 +180,7 @@ func TestPushLotsOfMessages(t *testing.T) {
 		counter := 0
 		loops := 0
 		for counter < totalMsg && loops < totalMsg && work {
-			resp, ok := q.Pop(0, 10, 10, false).(*common.ItemsResponse)
+			resp, ok := q.Pop(0, 10, 10, false).(*ItemsResponse)
 			if !ok {
 				break
 			}
@@ -235,7 +235,7 @@ func TestStatus(t *testing.T) {
 	Convey("Queue status should be correct", t, func() {
 		q := CreateNewTestQueue()
 		Convey("Empty status should be default", func() {
-			s, _ := q.GetCurrentStatus().(*common.DictResponse)
+			s, _ := q.GetCurrentStatus().(*DictResponse)
 			status := s.GetDict()
 			So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 100001)
 			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
@@ -250,7 +250,7 @@ func TestStatus(t *testing.T) {
 			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 0)
 
 			So(q.GetServiceId(), ShouldEqual, "1")
-			So(q.GetTypeName(), ShouldEqual, common.STYPE_PRIORITY_QUEUE)
+			So(q.GetTypeName(), ShouldEqual, STYPE_PRIORITY_QUEUE)
 		})
 		Convey("Status for several messages in flight", func() {
 			q.Push("d1", "p", 10000, 0, 9)
@@ -260,16 +260,16 @@ func TestStatus(t *testing.T) {
 			VerifySingleItem(q.Pop(100000, 0, 1, true), "d1", "p")
 			VerifyServiceSize(q, 3)
 
-			s, _ := q.GetCurrentStatus().(*common.DictResponse)
+			s, _ := q.GetCurrentStatus().(*DictResponse)
 			status := s.GetDict()
 			So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 100001)
 			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
 			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
 			So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 10000)
 			So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 4)
-			So(status[PQ_STATUS_CREATE_TS], ShouldBeLessThanOrEqualTo, common.Uts())
-			So(status[PQ_STATUS_LAST_PUSH_TS], ShouldBeLessThanOrEqualTo, common.Uts())
-			So(status[PQ_STATUS_LAST_POP_TS], ShouldBeLessThanOrEqualTo, common.Uts())
+			So(status[PQ_STATUS_CREATE_TS], ShouldBeLessThanOrEqualTo, Uts())
+			So(status[PQ_STATUS_LAST_PUSH_TS], ShouldBeLessThanOrEqualTo, Uts())
+			So(status[PQ_STATUS_LAST_POP_TS], ShouldBeLessThanOrEqualTo, Uts())
 			So(status[PQ_STATUS_TOTAL_MSGS], ShouldEqual, 3)
 			So(status[PQ_STATUS_IN_FLIGHT_MSG], ShouldEqual, 1)
 			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 2)
@@ -283,7 +283,7 @@ func TestSetParams(t *testing.T) {
 		q := CreateNewTestQueue()
 		VerifyOkResponse(q.SetParams(10000, 20000, 30000, 40000, 50000))
 
-		s, _ := q.GetCurrentStatus().(*common.DictResponse)
+		s, _ := q.GetCurrentStatus().(*DictResponse)
 		status := s.GetDict()
 		So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 10000)
 		So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 20000)
@@ -299,27 +299,27 @@ func TestGetMessageInfo(t *testing.T) {
 		q.Push("d1", "p", 10000, 1000, 9)
 		q.Push("d2", "p", 10000, 0, 11)
 
-		So(q.GetMessageInfo("d3"), ShouldResemble, common.ERR_MSG_NOT_FOUND)
+		So(q.GetMessageInfo("d3"), ShouldResemble, ERR_MSG_NOT_FOUND)
 
-		m1, _ := q.GetMessageInfo("d1").(*common.DictResponse)
-		m2, _ := q.GetMessageInfo("d2").(*common.DictResponse)
+		m1, _ := q.GetMessageInfo("d1").(*DictResponse)
+		m2, _ := q.GetMessageInfo("d2").(*DictResponse)
 
 		msgInfo1 := m1.GetDict()
 		msgInfo2 := m2.GetDict()
 
 		So(msgInfo1[MSG_INFO_ID], ShouldEqual, "d1")
 		So(msgInfo1[MSG_INFO_LOCKED], ShouldEqual, true)
-		So(msgInfo1[MSG_INFO_UNLOCK_TS], ShouldBeGreaterThan, common.Uts())
+		So(msgInfo1[MSG_INFO_UNLOCK_TS], ShouldBeGreaterThan, Uts())
 		So(msgInfo1[MSG_INFO_POP_COUNT], ShouldEqual, 0)
 		So(msgInfo1[MSG_INFO_PRIORITY], ShouldEqual, 9)
-		So(msgInfo1[MSG_INFO_EXPIRE_TS], ShouldBeGreaterThan, common.Uts())
+		So(msgInfo1[MSG_INFO_EXPIRE_TS], ShouldBeGreaterThan, Uts())
 
 		So(msgInfo2[MSG_INFO_ID], ShouldEqual, "d2")
 		So(msgInfo2[MSG_INFO_LOCKED], ShouldEqual, false)
-		So(msgInfo2[MSG_INFO_UNLOCK_TS], ShouldBeLessThanOrEqualTo, common.Uts())
+		So(msgInfo2[MSG_INFO_UNLOCK_TS], ShouldBeLessThanOrEqualTo, Uts())
 		So(msgInfo2[MSG_INFO_POP_COUNT], ShouldEqual, 0)
 		So(msgInfo2[MSG_INFO_PRIORITY], ShouldEqual, 11)
-		So(msgInfo2[MSG_INFO_EXPIRE_TS], ShouldBeGreaterThan, common.Uts())
+		So(msgInfo2[MSG_INFO_EXPIRE_TS], ShouldBeGreaterThan, Uts())
 
 	})
 }
@@ -328,8 +328,8 @@ func TestUnlockErrors(t *testing.T) {
 	Convey("Attempts to unlock not locked and not existing messages should result in error", t, func() {
 		q := CreateNewTestQueue()
 		q.Push("d1", "p", 10000, 0, 11)
-		So(q.UnlockMessageById("d1"), ShouldResemble, common.ERR_MSG_NOT_LOCKED)
-		So(q.UnlockMessageById("d2"), ShouldResemble, common.ERR_MSG_NOT_FOUND)
+		So(q.UnlockMessageById("d1"), ShouldResemble, ERR_MSG_NOT_LOCKED)
+		So(q.UnlockMessageById("d2"), ShouldResemble, ERR_MSG_NOT_FOUND)
 	})
 }
 
@@ -337,8 +337,8 @@ func TestDeleteMessageErrors(t *testing.T) {
 	Convey("Attempts to delete locked and not existing message should result in error", t, func() {
 		q := CreateNewTestQueue()
 		q.Push("d1", "p", 10000, 100, 11)
-		So(q.DeleteById("d1"), ShouldResemble, common.ERR_MSG_IS_LOCKED)
-		So(q.DeleteById("d2"), ShouldResemble, common.ERR_MSG_NOT_FOUND)
+		So(q.DeleteById("d1"), ShouldResemble, ERR_MSG_IS_LOCKED)
+		So(q.DeleteById("d2"), ShouldResemble, ERR_MSG_NOT_FOUND)
 	})
 }
 
@@ -346,7 +346,7 @@ func TestPushError(t *testing.T) {
 	q := CreateNewTestQueue()
 	q.Push("d1", "p", 10000, 100, 11)
 	Convey("Push should result in errors", t, func() {
-		So(q.Push("d1", "p", 10000, 100, 1), ShouldResemble, common.ERR_ITEM_ALREADY_EXISTS)
+		So(q.Push("d1", "p", 10000, 100, 1), ShouldResemble, ERR_ITEM_ALREADY_EXISTS)
 	})
 }
 
@@ -354,7 +354,7 @@ func TestExpiration(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
 		q.Push("d1", "p", 10000, 0, 11)
-		r, _ := q.TimeoutItems(common.Uts() + 100000).(*common.IntResponse)
+		r, _ := q.TimeoutItems(Uts() + 100000).(*IntResponse)
 		So(r.Value, ShouldEqual, 1)
 		VerifyServiceSize(q, 0)
 	})
@@ -364,7 +364,7 @@ func TestReleaseInFlight(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
 		q.Push("d1", "p", 10000, 100, 11)
-		r, _ := q.ReleaseInFlight(common.Uts() + 1000).(*common.IntResponse)
+		r, _ := q.ReleaseInFlight(Uts() + 1000).(*IntResponse)
 		So(r.Value, ShouldEqual, 1)
 		VerifySingleItem(q.Pop(0, 0, 1, false), "d1", "p")
 	})
@@ -410,6 +410,57 @@ func TestSize(t *testing.T) {
 	})
 }
 
+func TestUnlockByReceipt(t *testing.T) {
+	Convey("Unlock by receipt should have correct behavior", t, func() {
+		q := CreateNewTestQueue()
+		q.Push("d1", "p", 10000, 0, 11)
+		resp := q.Pop(100000, 0, 2, true)
+		VerifyServiceSize(q, 1)
+		VerifyItemsResponse(resp, 1)
+
+		rcpt := resp.(*ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		So(len(rcpt), ShouldBeGreaterThan, 2)
+		VerifyOkResponse(q.UnlockByReceipt(rcpt))
+		VerifyServiceSize(q, 1)
+
+		So(q.UnlockByReceipt(rcpt), ShouldEqual, ERR_RECEIPT_EXPIRED)
+		q.Pop(100000, 0, 2, true)
+		So(q.UnlockByReceipt(rcpt), ShouldEqual, ERR_RECEIPT_EXPIRED)
+	})
+}
+
+func TestDeleteByReceipt(t *testing.T) {
+	Convey("Delete by receipt should have correct behavior", t, func() {
+		q := CreateNewTestQueue()
+		q.Push("d1", "p", 10000, 0, 11)
+		resp := q.Pop(100000, 0, 2, true)
+		VerifyServiceSize(q, 1)
+		VerifyItemsResponse(resp, 1)
+
+		rcpt := resp.(*ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		So(len(rcpt), ShouldBeGreaterThan, 2)
+		VerifyOkResponse(q.DeleteByReceipt(rcpt))
+		VerifyServiceSize(q, 0)
+
+		So(q.UnlockByReceipt(rcpt), ShouldEqual, ERR_RECEIPT_EXPIRED)
+	})
+}
+
+func TestUpdateLockByReceipt(t *testing.T) {
+	Convey("Delete by receipt should have correct behavior", t, func() {
+		q := CreateNewTestQueue()
+		q.Push("d1", "p", 10000, 0, 11)
+		resp := q.Pop(100000, 0, 2, true)
+		VerifyServiceSize(q, 1)
+		VerifyItemsResponse(resp, 1)
+
+		rcpt := resp.(*ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		So(len(rcpt), ShouldBeGreaterThan, 2)
+		VerifyOkResponse(q.UpdateLockByRcpt(rcpt, 10000))
+		VerifyServiceSize(q, 1)
+	})
+}
+
 func TestSizeLimit(t *testing.T) {
 	Convey("Fourth element should fail with size limit error", t, func() {
 		q := CreateNewTestQueue()
@@ -417,7 +468,7 @@ func TestSizeLimit(t *testing.T) {
 		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11))
-		So(q.Push("4", "p", 10000, 0, 11), ShouldResemble, common.ERR_SIZE_EXCEEDED)
+		So(q.Push("4", "p", 10000, 0, 11), ShouldResemble, ERR_SIZE_EXCEEDED)
 		VerifyServiceSize(q, 3)
 	})
 }

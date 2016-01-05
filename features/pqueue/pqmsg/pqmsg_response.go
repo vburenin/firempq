@@ -7,29 +7,27 @@ import (
 )
 
 type MsgResponseItem struct {
-	msgId    string
-	payload  string
-	expireTs int64
-	popCount int64
-	unlockTs int64
+	msg     *PQMsgMetaData
+	payload string
 }
 
-func NewMsgResponseItem(id string, payload string, expireTs, popCount, unlockTs int64) *MsgResponseItem {
+func NewMsgResponseItem(msg *PQMsgMetaData, payload string) *MsgResponseItem {
 	return &MsgResponseItem{
-		msgId:    id,
-		payload:  payload,
-		expireTs: expireTs,
-		popCount: popCount,
-		unlockTs: unlockTs,
+		msg:     msg,
+		payload: payload,
 	}
 }
 
 func (p *MsgResponseItem) GetId() string {
-	return p.msgId
+	return p.msg.StrId
 }
 
 func (p *MsgResponseItem) GetPayload() string {
 	return p.payload
+}
+
+func (p *MsgResponseItem) GetReceipt() string {
+	return EncodeTo36Base(p.msg.SerialNumber) + "-" + EncodeTo36Base(uint64(p.msg.PopCount))
 }
 
 func (p *MsgResponseItem) Encode() string {
@@ -37,18 +35,25 @@ func (p *MsgResponseItem) Encode() string {
 	buf.WriteString(EncodeMapSize(5))
 
 	buf.WriteString(" ID")
-	buf.WriteString(EncodeString(p.msgId))
+	buf.WriteString(EncodeString(p.msg.StrId))
 
 	buf.WriteString(" PL")
 	buf.WriteString(EncodeString(p.payload))
 
 	buf.WriteString(" ETS")
-	buf.WriteString(EncodeInt64(p.expireTs))
+	buf.WriteString(EncodeInt64(p.msg.ExpireTs))
 
 	buf.WriteString(" POPCNT")
-	buf.WriteString(EncodeInt64(p.popCount))
+	buf.WriteString(EncodeInt64(p.msg.PopCount))
 
 	buf.WriteString(" UTS")
-	buf.WriteString(EncodeInt64(p.unlockTs))
+	buf.WriteString(EncodeInt64(p.msg.UnlockTs))
+
+	if p.msg.UnlockTs > 0 {
+		buf.WriteString(" RCPT ")
+		buf.WriteString(EncodeTo36Base(p.msg.SerialNumber))
+		buf.WriteString("-")
+		buf.WriteString(EncodeTo36Base(uint64(p.msg.PopCount)))
+	}
 	return UnsafeBytesToString(buf.Bytes())
 }

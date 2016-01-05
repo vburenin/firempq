@@ -18,8 +18,14 @@ func EncodeRespString(data string) string {
 	return strings.Join(output, "")
 }
 
+// Encode int64 into net format.
 func EncodeRespInt64(val int64) string {
 	return ":" + strconv.FormatInt(val, 10)
+}
+
+// EncodeTo36Base creates a string value of service INT id.
+func EncodeTo36Base(exportId uint64) string {
+	return strconv.FormatUint(exportId, 36)
 }
 
 func EncodeUint64ToString(v uint64) string {

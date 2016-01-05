@@ -40,7 +40,10 @@ const (
 	PQ_CMD_UNLOCK_BY_ID        = "UNLCK"
 	PQ_CMD_DELETE_LOCKED_BY_ID = "DELLOCKED"
 	PQ_CMD_DELETE_BY_ID        = "DEL"
-	PQ_CMD_UPD_LOCK            = "UPDLOCK"
+	PQ_CMD_DELETE_BY_RCPT      = "RDEL"
+	PQ_CMD_UNLOCK_BY_RCPT      = "RUNLCK"
+	PQ_CMD_UPD_LOCK_BY_ID      = "UPDLCK"
+	PQ_CMD_UPD_LOCK_BY_RCPT    = "RUPDLCK"
 	PQ_CMD_PUSH                = "PUSH"
 	PQ_CMD_POP                 = "POP"
 	PQ_CMD_POPLOCK             = "POPLCK"
@@ -52,6 +55,7 @@ const (
 
 const (
 	PRM_ID           = "ID"
+	PRM_RECEIPT      = "RCPT"
 	PRM_POP_WAIT     = "WAIT"
 	PRM_LOCK_TIMEOUT = "TIMEOUT"
 	PRM_PRIORITY     = "PRIORITY"
@@ -135,14 +139,20 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.Pop(params)
 	case PQ_CMD_MSG_INFO:
 		return ctx.GetMessageInfo(params)
+	case PQ_CMD_DELETE_BY_RCPT:
+		return ctx.DeleteByReceipt(params)
+	case PQ_CMD_UNLOCK_BY_RCPT:
+		return ctx.UnlockByReceipt(params)
 	case PQ_CMD_DELETE_LOCKED_BY_ID:
 		return ctx.DeleteLockedById(params)
 	case PQ_CMD_DELETE_BY_ID:
 		return ctx.DeleteById(params)
 	case PQ_CMD_PUSH:
 		return ctx.Push(params)
-	case PQ_CMD_UPD_LOCK:
-		return ctx.UpdateLock(params)
+	case PQ_CMD_UPD_LOCK_BY_ID:
+		return ctx.UpdateLockById(params)
+	case PQ_CMD_UPD_LOCK_BY_RCPT:
+		return ctx.UpdateLockByRcpt(params)
 	case PQ_CMD_UNLOCK_BY_ID:
 		return ctx.UnlockMessageById(params)
 	case PQ_CMD_STATUS:
@@ -178,13 +188,37 @@ func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
 	return msgId, nil
 }
 
+// parseReceiptOnly is looking for message receipt only.
+func parseReceiptOnly(params []string) (string, *ErrorResponse) {
+	var err *ErrorResponse
+	var rcpt string
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_RECEIPT:
+			params, rcpt, err = ParseReceiptParam(params)
+		default:
+			return "", UnknownParam(params[0])
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if len(rcpt) == 0 {
+		return "", ERR_NO_RECEIPT
+	}
+	return rcpt, nil
+}
+
 // PopLock gets message from the queue setting lock timeout.
 func (ctx *PQContext) PopLock(params []string) IResponse {
 	var err *ErrorResponse
 	var limit int64 = 1
 	var popWaitTimeout int64 = 0
-	var lockTimeout int64 = ctx.pq.config.PopLockTimeout
 	var asyncId string
+
+	lockTimeout := ctx.pq.config.PopLockTimeout
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -279,18 +313,42 @@ func (ctx *PQContext) DeleteById(params []string) IResponse {
 	return ctx.pq.DeleteById(msgId)
 }
 
+// DeleteByReceipt deletes locked message using provided receipt.
+// This is a preferable method to unlock messages. It helps to avoid
+// race condition in case if when message lock has timed out and was
+// picked up by other consumer.
+func (ctx *PQContext) DeleteByReceipt(params []string) IResponse {
+	rcpt, err := parseReceiptOnly(params)
+	if err != nil {
+		return err
+	}
+	return ctx.pq.DeleteByReceipt(rcpt)
+}
+
+// UnlockByReceipt unlocks locked message using provided receipt.
+// Unlocking by receipt is making sure message was not relocked
+// by something else.
+func (ctx *PQContext) UnlockByReceipt(params []string) IResponse {
+	rcpt, err := parseReceiptOnly(params)
+	if err != nil {
+		return err
+	}
+	return ctx.pq.UnlockByReceipt(rcpt)
+}
+
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
 func (ctx *PQContext) Push(params []string) IResponse {
-	cfg := ctx.pq.config
 	var err *ErrorResponse
 	var msgId string
-	var msgTtl int64 = cfg.MsgTtl
 	var priority int64 = 0
-	var delay int64 = cfg.DeliveryDelay
-	var payload string = ""
 	var syncWait bool
 	var asyncId string
+	var payload string
+
+	cfg := ctx.pq.config
+	delay := cfg.DeliveryDelay
+	msgTtl := cfg.MsgTtl
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -346,9 +404,39 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 }
 
-// UpdateLock sets a user defined message lock timeout.
+// UpdateLockByRcpt updates message lock according to provided receipt.
+func (ctx *PQContext) UpdateLockByRcpt(params []string) IResponse {
+	var err *ErrorResponse
+	var rcpt string
+	var lockTimeout int64 = -1
+
+	for len(params) > 0 {
+		switch params[0] {
+		case PRM_RECEIPT:
+			params, rcpt, err = ParseReceiptParam(params)
+		case PRM_LOCK_TIMEOUT:
+			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
+		default:
+			return UnknownParam(params[0])
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(rcpt) == 0 {
+		return ERR_NO_RECEIPT
+	}
+
+	if lockTimeout < 0 {
+		return ERR_MSG_TIMEOUT_NOT_DEFINED
+	}
+	return ctx.pq.UpdateLockByRcpt(rcpt, lockTimeout)
+}
+
+// UpdateLockById sets a user defined message lock timeout.
 // It works only for locked messages.
-func (ctx *PQContext) UpdateLock(params []string) IResponse {
+func (ctx *PQContext) UpdateLockById(params []string) IResponse {
 	var err *ErrorResponse
 	var msgId string
 	var lockTimeout int64 = -1
@@ -374,7 +462,7 @@ func (ctx *PQContext) UpdateLock(params []string) IResponse {
 	if lockTimeout < 0 {
 		return ERR_MSG_TIMEOUT_NOT_DEFINED
 	}
-	return ctx.pq.UpdateLock(msgId, lockTimeout)
+	return ctx.pq.UpdateLockById(msgId, lockTimeout)
 }
 
 func (ctx *PQContext) UnlockMessageById(params []string) IResponse {
