@@ -32,7 +32,7 @@ func (p *MsgResponseItem) GetReceipt() string {
 
 func (p *MsgResponseItem) Encode() string {
 	var buf bytes.Buffer
-	buf.WriteString(EncodeMapSize(5))
+	buf.WriteString(EncodeMapSize(6))
 
 	buf.WriteString(" ID")
 	buf.WriteString(EncodeString(p.msg.StrId))
