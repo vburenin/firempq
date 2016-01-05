@@ -58,6 +58,7 @@ func (s *ServiceFacade) loadAllServices() {
 	}
 }
 
+// CreateService creates a service of the specified type.
 func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
@@ -87,6 +88,7 @@ func (s *ServiceFacade) CreateService(svcType string, svcName string, params []s
 	return common.OK_RESPONSE
 }
 
+// DropService drops service.
 func (s *ServiceFacade) DropService(svcName string) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
@@ -101,31 +103,22 @@ func (s *ServiceFacade) DropService(svcName string) IResponse {
 	return common.OK_RESPONSE
 }
 
-func (s *ServiceFacade) ListServices(svcPrefix string, svcType string) IResponse {
-
-	if svcType != "" {
-		_, ok := GetServiceConstructor(svcType)
-		if !ok {
-			return common.ERR_SVC_UNKNOWN_TYPE
-		}
-	}
+// ListServiceNames returns a list of available services.
+func (s *ServiceFacade) ListServiceNames(svcPrefix string) IResponse {
 
 	services := make([]string, 0)
-
 	s.rwLock.RLock()
-	for svcName, svc := range s.allSvcs {
-		if svcType != "" && svcType != svc.GetTypeName() {
-			continue
-		}
+	for svcName, _ := range s.allSvcs {
 		if svcPrefix == "?" || strings.HasPrefix(svcName, svcPrefix) {
-			services = append(services, svcName+" "+svc.GetTypeName())
+			services = append(services, svcName)
 		}
 	}
 	s.rwLock.RUnlock()
 
-	return common.NewStrArrayResponse(services)
+	return common.NewStrArrayResponse("+SVCLIST", services)
 }
 
+// GetService look up of a service with appropriate name.
 func (s *ServiceFacade) GetService(name string) (ISvc, bool) {
 	s.rwLock.RLock()
 	svc, ok := s.allSvcs[name]
@@ -133,6 +126,7 @@ func (s *ServiceFacade) GetService(name string) (ISvc, bool) {
 	return svc, ok
 }
 
+// Close closes all available services walking through all of them.
 func (s *ServiceFacade) Close() {
 	s.rwLock.Lock()
 	for _, svc := range s.allSvcs {

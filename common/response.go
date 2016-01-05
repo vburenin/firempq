@@ -76,11 +76,15 @@ func (r *IntResponse) IsError() bool {
 
 // StrArrayResponse a response containing array of strings.
 type StrArrayResponse struct {
-	val []string
+	val    []string
+	header string
 }
 
-func NewStrArrayResponse(val []string) *StrArrayResponse {
-	return &StrArrayResponse{val: val}
+func NewStrArrayResponse(header string, val []string) *StrArrayResponse {
+	return &StrArrayResponse{
+		val:    val,
+		header: header,
+	}
 }
 
 func (r *StrArrayResponse) IsError() bool {
@@ -89,10 +93,11 @@ func (r *StrArrayResponse) IsError() bool {
 
 func (r *StrArrayResponse) genResponse() []byte {
 	var buffer bytes.Buffer
-	buffer.WriteString("+DATA *")
+	buffer.WriteString(r.header)
+	buffer.WriteString(" *")
 	buffer.WriteString(strconv.Itoa(len(r.val)))
 	for _, v := range r.val {
-		buffer.WriteString("\n")
+		buffer.WriteString(" ")
 		buffer.WriteString(v)
 	}
 	return buffer.Bytes()

@@ -223,16 +223,14 @@ func (s *SessionHandler) quitHandler(tokens []string) IResponse {
 // List all active services.
 func (s *SessionHandler) listServicesHandler(tokens []string) IResponse {
 	svcPrefix := ""
-	svcType := ""
+	if len(tokens) > 1 {
+		return InvalidRequest("LIST accept service name prefix only")
+	}
 	if len(tokens) == 1 {
 		svcPrefix = tokens[0]
-	} else if len(tokens) == 2 {
-		svcType = tokens[1]
-	} else if len(tokens) > 2 {
-		return InvalidRequest("LIST accept service name prefix and service type only")
 	}
 
-	return s.svcs.ListServices(svcPrefix, svcType)
+	return s.svcs.ListServiceNames(svcPrefix)
 }
 
 // Ping responder.
