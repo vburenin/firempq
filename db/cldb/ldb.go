@@ -64,10 +64,10 @@ func NewLevelDBStorage(dbName string) (*CLevelDBStorage, error) {
 
 func (ds *CLevelDBStorage) GetStats() map[string]interface{} {
 	return map[string]interface{}{
-		"DBName":       ds.dbName,
+		"DbName":       ds.dbName,
 		"CacheSize":    len(ds.itemCache),
 		"TmpCacheSize": len(ds.tmpItemCache),
-		"Close":        ds.closed,
+		"Closed":       ds.closed,
 	}
 }
 
