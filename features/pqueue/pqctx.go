@@ -37,11 +37,11 @@ const MAX_ASYNC_ID = 8
 const PAYLOAD_LIMIT = 512 * 1024
 
 const (
-	PQ_CMD_UNLOCK_BY_ID        = "UNLCK"
-	PQ_CMD_DELETE_LOCKED_BY_ID = "DELLOCKED"
+	PQ_CMD_DELETE_LOCKED_BY_ID = "DELLCK"
 	PQ_CMD_DELETE_BY_ID        = "DEL"
 	PQ_CMD_DELETE_BY_RCPT      = "RDEL"
 	PQ_CMD_UNLOCK_BY_RCPT      = "RUNLCK"
+	PQ_CMD_UNLOCK_BY_ID        = "UNLCK"
 	PQ_CMD_UPD_LOCK_BY_ID      = "UPDLCK"
 	PQ_CMD_UPD_LOCK_BY_RCPT    = "RUPDLCK"
 	PQ_CMD_PUSH                = "PUSH"
@@ -50,7 +50,7 @@ const (
 	PQ_CMD_MSG_INFO            = "MSGINFO"
 	PQ_CMD_STATUS              = "STATUS"
 	PQ_CMD_CHECK_TIMEOUTS      = "CHKTS"
-	PQ_CMD_SET_PARAM           = "SET"
+	PQ_CMD_SET_CFG             = "SETCFG"
 )
 
 const (
@@ -157,7 +157,7 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.UnlockMessageById(params)
 	case PQ_CMD_STATUS:
 		return ctx.GetCurrentStatus(params)
-	case PQ_CMD_SET_PARAM:
+	case PQ_CMD_SET_CFG:
 		return ctx.SetParamValue(params)
 	case PQ_CMD_CHECK_TIMEOUTS:
 		return ctx.CheckTimeouts(params)
