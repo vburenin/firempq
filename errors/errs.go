@@ -1,6 +1,12 @@
 package common
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+
+	. "firempq/encoding"
+	. "firempq/utils"
+)
 
 var CODE_INVALID_REQ int64 = 400
 var CODE_NOT_FOUND int64 = 404
@@ -9,6 +15,29 @@ var CODE_SERVER_ERR int64 = 500
 var CODE_SERVER_UNAVAILABLE int64 = 501
 var CODE_GONE int64 = 410
 var CODE_TEMPORARY_ERROR int64 = 412
+
+// ErrorResponse is an error response.
+type ErrorResponse struct {
+	ErrorText string
+	ErrorCode int64
+}
+
+func (e *ErrorResponse) Error() string {
+	return e.ErrorText
+}
+
+func (e *ErrorResponse) GetResponse() string {
+	return EncodeError(e.ErrorCode, e.ErrorText)
+}
+
+func (e *ErrorResponse) WriteResponse(buff io.Writer) error {
+	_, err := buff.Write(UnsafeStringToBytes(e.GetResponse()))
+	return err
+}
+
+func (e *ErrorResponse) IsError() bool {
+	return true
+}
 
 func NewError(errorText string, errorCode int64) *ErrorResponse {
 	return &ErrorResponse{errorText, errorCode}
@@ -72,3 +101,9 @@ var ERR_UNKNOWN_ERROR = NewError("Unknown server error", 500)
 var ERR_TS_PARAMETER_NEEDED = InvalidRequest("TS parameters must be provided")
 
 var ERR_SIZE_EXCEEDED = TemporaryError("Service capacity reached its limit")
+
+// Parsers errors
+
+var ERR_TOK_TOO_MANY_TOKENS = InvalidRequest("Too many tokens")
+var ERR_TOK_TOKEN_TOO_LONG = InvalidRequest("Token is too long")
+var ERR_TOK_PARSING_ERROR = InvalidRequest("Error during token parsing")

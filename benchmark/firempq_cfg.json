@@ -1,0 +1,19 @@
+{
+  "LogLevel": 5,
+  "Port": 9033,
+  "Interface": "",
+  "DbFlushInterval": 100,
+  "DbBufferSize": 10000,
+  "UpdateInterval": 100,
+  "DatabasePath": "databasepath",
+  "PQueueConfig": {
+    "DefaultMessageTtl": 3600000,
+    "DefaultDeliveryDelay": 0,
+    "DefaultLockTimeout": 1200000,
+    "DefaultPopCountLimit": 10,
+    "ExpirationBatchSize": 1000,
+    "UnlockBatchSize": 1000,
+    "MaxPopWaitTimeout": 30000,
+    "MaxPopBatchSize": 100
+  }
+}

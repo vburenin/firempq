@@ -1,8 +1,6 @@
-package features
+package db
 
 import (
-	"firempq/db"
-
 	. "firempq/api"
 )
 
@@ -15,7 +13,7 @@ type DBService struct {
 func (d *DBService) InitServiceDB(serviceId string) {
 	d.itemPrefix = MakeItemPrefix(serviceId)
 	d.payloadPrefix = MakePayloadPrefix(serviceId)
-	d.database = db.GetDatabase()
+	d.database = GetDatabase()
 }
 
 // MakeItemPrefix makes a prefix which will be used to identify to which service item belongs to.

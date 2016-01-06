@@ -1,13 +1,13 @@
-package common
+package encoding
 
 import (
-	"fmt"
 	"io"
 	"strconv"
 	"strings"
 
 	. "firempq/api"
-	. "firempq/common/response_encoder"
+	. "firempq/encoding"
+	. "firempq/utils"
 )
 
 type CallFuncType func([]string) IResponse
@@ -115,29 +115,4 @@ func (self *ItemsResponse) WriteResponse(buff io.Writer) error {
 
 func (self *ItemsResponse) IsError() bool {
 	return false
-}
-
-// ErrorResponse is an error response.
-type ErrorResponse struct {
-	ErrorText string
-	ErrorCode int64
-}
-
-func (e *ErrorResponse) Error() string {
-	return e.ErrorText
-}
-
-func (e *ErrorResponse) GetResponse() string {
-	return fmt.Sprintf("-ERR %s %s",
-		EncodeRespInt64(e.ErrorCode),
-		EncodeRespString(e.ErrorText))
-}
-
-func (e *ErrorResponse) WriteResponse(buff io.Writer) error {
-	_, err := buff.Write(UnsafeStringToBytes(e.GetResponse()))
-	return err
-}
-
-func (e *ErrorResponse) IsError() bool {
-	return true
 }

@@ -1,8 +1,11 @@
-package common
+package encoding
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+
+	. "firempq/utils"
 )
 
 // EncodeRespString encode string into protocol text format.
@@ -45,4 +48,36 @@ func DecodeBytesToUnit64(b []byte) uint64 {
 		uint64(b[2])<<40 |
 		uint64(b[1])<<48 |
 		uint64(b[0])<<56)
+}
+
+func EncodeUint64(v uint64) string {
+	return " :" + strconv.FormatUint(v, 10)
+}
+
+func EncodeInt64(v int64) string {
+	return " :" + strconv.FormatInt(v, 10)
+}
+
+func EncodeBool(v bool) string {
+	if v {
+		return " ?t"
+	} else {
+		return " ?f"
+	}
+}
+
+func EncodeString(v string) string {
+	return " $" + strconv.Itoa(len(v)) + " " + v
+}
+
+func EncodeMapSize(v int) string {
+	return " %" + strconv.Itoa(v)
+}
+
+func EncodeArraySize(v int) string {
+	return " *" + strconv.Itoa(v)
+}
+
+func EncodeError(errorCode int64, errorText string) string {
+	return fmt.Sprintf("-ERR %s %s", EncodeRespInt64(errorCode), EncodeRespString(errorText))
 }

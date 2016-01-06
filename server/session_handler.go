@@ -1,15 +1,20 @@
 package server
 
 import (
-	"firempq/facade"
-	"firempq/log"
 	"net"
+	"strconv"
+	"sync"
+
+	"firempq/db"
+	"firempq/log"
 
 	. "firempq/api"
 	. "firempq/common"
-	"firempq/db"
-	"strconv"
-	"sync"
+	. "firempq/errors"
+	. "firempq/parsers"
+	. "firempq/response"
+	. "firempq/services"
+	. "firempq/utils"
 )
 
 var EOM = []byte{'\n'}
@@ -32,14 +37,14 @@ type FuncHandler func([]string) IResponse
 type SessionHandler struct {
 	connLock  sync.Mutex
 	conn      net.Conn
-	tokenizer *Tokenizer
 	active    bool
 	ctx       ServiceContext
-	svcs      *facade.ServiceFacade
 	stopChan  chan struct{}
+	tokenizer *Tokenizer
+	svcs      *ServiceManager
 }
 
-func NewSessionHandler(conn net.Conn, services *facade.ServiceFacade) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *ServiceManager) *SessionHandler {
 	sh := &SessionHandler{
 		conn:      conn,
 		tokenizer: NewTokenizer(),

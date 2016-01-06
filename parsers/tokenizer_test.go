@@ -1,8 +1,10 @@
-package common
+package parsers
 
 import (
 	"io"
 	"testing"
+
+	. "firempq/errors"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

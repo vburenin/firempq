@@ -3,15 +3,13 @@ package ldb
 // Level DB cached wrapper to improve write performance using batching.
 
 import (
-	"firempq/common"
 	"firempq/conf"
 	"firempq/log"
+	"firempq/utils"
 	"sync"
 	"time"
 
 	. "firempq/api"
-
-	//"github.com/jmhodges/levigo"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -155,11 +153,11 @@ func (ds *LevelDBStorage) FlushCache() {
 			wb.Reset()
 			count = 0
 		}
-		key := common.UnsafeStringToBytes(k)
+		key := utils.UnsafeStringToBytes(k)
 		if v == "" {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, common.UnsafeStringToBytes(v))
+			wb.Put(key, utils.UnsafeStringToBytes(v))
 		}
 		count++
 
@@ -171,7 +169,7 @@ func (ds *LevelDBStorage) FlushCache() {
 // IterData returns an iterator over all data with prefix.
 func (ds *LevelDBStorage) IterData(prefix string) ItemIterator {
 	iter := ds.db.NewIterator(new(util.Range), nil)
-	return makeItemIterator(iter, common.UnsafeStringToBytes(prefix))
+	return makeItemIterator(iter, utils.UnsafeStringToBytes(prefix))
 }
 
 // StoreData data directly into the database stores service metadata into database.
@@ -181,8 +179,8 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 	}
 	wb := new(leveldb.Batch)
 	for i := 0; i < len(data); i += 2 {
-		wb.Put(common.UnsafeStringToBytes(data[i]),
-			common.UnsafeStringToBytes(data[i+1]))
+		wb.Put(utils.UnsafeStringToBytes(data[i]),
+			utils.UnsafeStringToBytes(data[i+1]))
 	}
 	return ds.db.Write(wb, nil)
 }
@@ -190,7 +188,7 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 func (ds *LevelDBStorage) DeleteData(id ...string) {
 	wb := new(leveldb.Batch)
 	for _, i := range id {
-		wb.Delete(common.UnsafeStringToBytes(i))
+		wb.Delete(utils.UnsafeStringToBytes(i))
 	}
 	ds.db.Write(wb, nil)
 }
@@ -209,8 +207,8 @@ func (ds *LevelDBStorage) GetData(id string) string {
 		return data
 	}
 	ds.cacheLock.Unlock()
-	value, _ := ds.db.Get(common.UnsafeStringToBytes(id), nil)
-	return common.UnsafeBytesToString(value)
+	value, _ := ds.db.Get(utils.UnsafeStringToBytes(id), nil)
+	return utils.UnsafeBytesToString(value)
 }
 
 // CachedDeleteData deletes item metadata and payload, affects cache only until flushed.

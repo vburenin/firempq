@@ -4,11 +4,17 @@ import (
 	"math"
 	"sync"
 
+	"firempq/log"
+
 	. "firempq/api"
 	. "firempq/common"
 	. "firempq/conf"
-	. "firempq/features/pqueue/pqmsg"
-	"firempq/log"
+	. "firempq/errors"
+	. "firempq/parsers"
+	. "firempq/response"
+	. "firempq/services/pqueue/pqmsg"
+	. "firempq/services/svcmetadata"
+	. "firempq/utils"
 )
 
 type PQContext struct {
@@ -74,12 +80,12 @@ const (
 	CPRM_LOCK_TIMEOUT   = "TIMEOUT"
 )
 
-func CreatePQueue(desc *ServiceDescription, params []string) (ISvc, IResponse) {
+func CreatePQueue(svcs IServices, desc *ServiceDescription, params []string) (ISvc, IResponse) {
 	config, resp := ParsePQConfig(params)
 	if resp.IsError() {
 		return nil, resp
 	}
-	return InitPQueue(desc, config), OK_RESPONSE
+	return InitPQueue(svcs, desc, config), OK_RESPONSE
 }
 
 func ParsePQConfig(params []string) (*PQConfig, IResponse) {

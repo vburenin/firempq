@@ -1,7 +1,7 @@
 package server
 
 import (
-	"firempq/facade"
+	"firempq/services"
 	"firempq/log"
 	"net"
 	"os"
@@ -21,7 +21,7 @@ const (
 type QueueOpFunc func(req []string) error
 
 type ConnectionServer struct {
-	facade     *facade.ServiceFacade
+	facade     *services.ServiceManager
 	listener   net.Listener
 	signalChan chan os.Signal
 	waitGroup  sync.WaitGroup
@@ -29,7 +29,7 @@ type ConnectionServer struct {
 
 func NewSimpleServer(listener net.Listener) IServer {
 	return &ConnectionServer{
-		facade:     facade.CreateFacade(),
+		facade:     services.CreateServiceManager(),
 		listener:   listener,
 		signalChan: make(chan os.Signal, 1),
 	}

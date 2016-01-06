@@ -18,4 +18,6 @@ message PQConfig {
 	required int64 max_size = 5; // Max queue size.
 	required int64 last_push_ts = 6; // Last time item has been pushed into queue.
 	required int64 last_pop_ts = 7; // Last pop time.
+	required string timeout_queue = 8;
+	required string poplimit_queue = 9;
 }

@@ -1,7 +1,7 @@
 package pqueue
 
 import (
-	"firempq/features"
+	"firempq/db"
 	"firempq/log"
 	"sort"
 	"sync"
@@ -10,12 +10,18 @@ import (
 	. "firempq/api"
 	. "firempq/common"
 	. "firempq/conf"
-	. "firempq/features/pqueue/pqmsg"
+	. "firempq/encoding"
+	. "firempq/errors"
+	. "firempq/parsers"
+	. "firempq/response"
+	. "firempq/services/pqueue/pqmsg"
+	. "firempq/services/svcmetadata"
+	. "firempq/utils"
 	"strings"
 )
 
 type PQueue struct {
-	features.DBService
+	db.DBService
 	// Payload access should be protected separately.
 	payloadLock sync.Mutex
 	// For messages jumping around all their jumps should be protected.
@@ -27,9 +33,17 @@ type PQueue struct {
 	// All locked messages
 	id2sn map[string]uint64
 	// Set as True if the service is closed.
-	closedState BoolFlag
+	closed BoolFlag
 	// Instance of the database.
 	config *PQConfig
+
+	svcs IServices
+	// The following two queues are used to store failed messages because of timeout or pop limit exceeded error.
+	// If there are any errors appear during push process, those errors will be completely ignored.
+	// This queue will be used to push timed out messages.
+	timeOutPQueue *PQueue
+	// This queue will be used to push messages exceeded pop limit attempts. All errors are ignored.
+	popLimitPQueue *PQueue
 
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *ServiceDescription
@@ -43,10 +57,11 @@ type PQueue struct {
 	lockedMsgCnt int
 }
 
-func InitPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
+func InitPQueue(svcs IServices, desc *ServiceDescription, config *PQConfig) *PQueue {
 	pq := PQueue{
 		desc:               desc,
 		config:             config,
+		svcs:               svcs,
 		id2sn:              make(map[string]uint64),
 		availMsgs:          NewSnHeap(),
 		trackHeap:          NewTsHeap(),
@@ -54,20 +69,20 @@ func InitPQueue(desc *ServiceDescription, config *PQConfig) *PQueue {
 		msgSerialNumber:    0,
 		lockedMsgCnt:       0,
 	}
-	features.SaveServiceConfig(desc.ServiceId, config)
+	SaveServiceConfig(desc.ServiceId, config)
 	// Init inherited service db.
 	pq.InitServiceDB(desc.ServiceId)
 	pq.loadAllMessages()
 	return &pq
 }
 
-func LoadPQueue(desc *ServiceDescription) (ISvc, error) {
+func LoadPQueue(svcs IServices, desc *ServiceDescription) (ISvc, error) {
 	config := &PQConfig{}
-	err := features.LoadServiceConfig(desc.ServiceId, config)
+	err := LoadServiceConfig(desc.ServiceId, config)
 	if err != nil {
 		return nil, err
 	}
-	pq := InitPQueue(desc, config)
+	pq := InitPQueue(svcs, desc, config)
 	return pq, nil
 }
 
@@ -113,7 +128,7 @@ func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeou
 	pq.config.PopCountLimit = popLimit
 	pq.config.PopLockTimeout = lockTimeout
 	pq.lock.Unlock()
-	features.SaveServiceConfig(pq.GetServiceId(), pq.config)
+	SaveServiceConfig(pq.GetServiceId(), pq.config)
 	return OK_RESPONSE
 }
 
@@ -160,11 +175,11 @@ func (pq *PQueue) Clear() {
 
 func (pq *PQueue) Close() {
 	log.Debug("Closing PQueue service: %s", pq.desc.Name)
-	pq.closedState.SetTrue()
+	pq.closed.SetTrue()
 }
 
 func (pq *PQueue) IsClosed() bool {
-	return pq.closedState.IsTrue()
+	return pq.closed.IsTrue()
 }
 
 func (pq *PQueue) TimeoutItems(cutOffTs int64) IResponse {
@@ -542,16 +557,16 @@ func (pq *PQueue) StartUpdate() {
 	go func() {
 		var cnt int64
 		for {
-			pq.closedState.Lock()
-			if pq.closedState.IsFalse() {
+			pq.closed.Lock()
+			if pq.closed.IsFalse() {
 				pq.lock.Lock()
 				cnt = pq.checkTimeouts(Uts())
 				pq.lock.Unlock()
 			} else {
-				pq.closedState.Unlock()
+				pq.closed.Unlock()
 				break
 			}
-			pq.closedState.Unlock()
+			pq.closed.Unlock()
 			if cnt >= CFG_PQ.TimeoutCheckBatchSize {
 				time.Sleep(time.Millisecond)
 			} else {

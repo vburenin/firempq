@@ -5,24 +5,25 @@ import (
 	"sync"
 	"time"
 
-	"firempq/common"
 	"firempq/db"
-	"firempq/facade"
 	"firempq/log"
 
 	. "firempq/api"
-	. "firempq/features/pqueue"
+	. "firempq/common"
+	. "firempq/services"
+	. "firempq/services/pqueue"
 	. "firempq/testutils"
+	. "firempq/utils"
 )
 
 func BenchMassPush() {
-	f := facade.NewFacade()
+	f := NewServiceManager()
 	resp := f.DropService("BenchTest")
 	if !resp.IsError() {
 		log.Info("BenchTest Queue exists alredy! Dropping...")
 	}
 	log.Info("Creating new service")
-	resp = f.CreateService(common.STYPE_PRIORITY_QUEUE, "BenchTest", []string{})
+	resp = f.CreateService("pqueue", "BenchTest", []string{})
 	if resp.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
@@ -34,7 +35,7 @@ func BenchMassPush() {
 	respWriter := NewTestResponseWriter()
 	ctx := svc.NewContext(respWriter)
 
-	ctx.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "10000000"})
+	ctx.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
 	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
@@ -68,28 +69,28 @@ func BenchMassPush() {
 }
 
 func BenchMassPushMultiQueue() {
-	f := facade.NewFacade()
+	f := NewServiceManager()
 	resp1 := f.DropService("BenchTest1")
 	resp2 := f.DropService("BenchTest2")
 	resp3 := f.DropService("BenchTest3")
 	resp4 := f.DropService("BenchTest4")
 
-	resp1 = f.CreateService(common.STYPE_PRIORITY_QUEUE, "BenchTest1", []string{})
+	resp1 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest1", []string{})
 	if resp1.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp2 = f.CreateService(common.STYPE_PRIORITY_QUEUE, "BenchTest2", []string{})
+	resp2 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest2", []string{})
 	if resp2.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp3 = f.CreateService(common.STYPE_PRIORITY_QUEUE, "BenchTest3", []string{})
+	resp3 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest3", []string{})
 	if resp3.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp4 = f.CreateService(common.STYPE_PRIORITY_QUEUE, "BenchTest4", []string{})
+	resp4 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest4", []string{})
 	if resp4.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
@@ -121,10 +122,10 @@ func BenchMassPushMultiQueue() {
 	ctx3 := svc3.NewContext(respWriter3)
 	ctx4 := svc4.NewContext(respWriter4)
 
-	ctx1.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx2.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx3.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx4.Call(PQ_CMD_SET_PARAM, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx1.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx2.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx3.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx4.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
 
 	startTs := time.Now().UnixNano()
 	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
@@ -190,7 +191,7 @@ func sn2db(v uint64) string {
 	b[5] = uint8(v >> 16)
 	b[6] = uint8(v >> 8)
 	b[7] = uint8(v)
-	return common.UnsafeBytesToString(b)
+	return UnsafeBytesToString(b)
 }
 
 func MarshalTest() {
@@ -207,7 +208,7 @@ func MarshalTest() {
 		b[5] = uint8(i >> 16)
 		b[6] = uint8(i >> 8)
 		b[7] = uint8(i)
-		common.UnsafeBytesToString(b)
+		UnsafeBytesToString(b)
 	}
 	ft := time.Now().UnixNano() - st
 	fmt.Println("Data prepared in", float64(ft)/1000000, "ms")

@@ -1,5 +1,5 @@
 syntax = "proto2";
-package common;
+package svcmetadata;
 
 message ServiceDescription {
 	required uint64 export_id = 1;

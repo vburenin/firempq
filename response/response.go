@@ -1,12 +1,15 @@
-package common
+package encoding
 
 import (
 	"bytes"
 	"io"
 	"strconv"
 
-	. "firempq/api"
 	"firempq/log"
+
+	. "firempq/api"
+	. "firempq/errors"
+	. "firempq/utils"
 )
 
 func TranslateError(err error) IResponse {

@@ -1,8 +1,9 @@
 package pqmsg
 
 import (
-	"firempq/common"
 	"firempq/log"
+
+	. "firempq/utils"
 )
 
 type PQMsgMetaData struct {
@@ -34,5 +35,5 @@ func UnmarshalPQMsgMetaData(sn uint64, buf []byte) *PQMsgMetaData {
 
 func (self *PQMsgMetaData) StringMarshal() string {
 	data, _ := self.Marshal()
-	return common.UnsafeBytesToString(data)
+	return UnsafeBytesToString(data)
 }

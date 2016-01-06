@@ -2,8 +2,9 @@ package pqmsg
 
 import (
 	"bytes"
-	. "firempq/common"
-	. "firempq/common/response_encoder"
+
+	. "firempq/encoding"
+	. "firempq/utils"
 )
 
 type MsgResponseItem struct {

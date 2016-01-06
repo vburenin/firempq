@@ -9,9 +9,14 @@ import (
 	"firempq/log"
 	"firempq/testutils"
 
+	. "firempq/api"
 	. "firempq/common"
-	. "firempq/features/pqueue/pqmsg"
+	. "firempq/errors"
+	. "firempq/response"
+	. "firempq/services/pqueue/pqmsg"
+	. "firempq/services/svcmetadata"
 	. "firempq/testutils"
+	. "firempq/utils"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -40,8 +45,12 @@ func getDesc() *ServiceDescription {
 	}
 }
 
+type FakeSvcLoader struct{}
+
+func (f *FakeSvcLoader) GetService(name string) (ISvc, bool) { return nil, false }
+
 func CreateTestQueue() *PQueue {
-	return InitPQueue(getDesc(), getConfig())
+	return InitPQueue(&FakeSvcLoader{}, getDesc(), getConfig())
 }
 
 func CreateNewTestQueue() *PQueue {

@@ -3,13 +3,14 @@ package cldb
 // Level DB cached wrapper to improve write performance using batching.
 
 import (
-	"firempq/common"
-	"firempq/conf"
-	"firempq/log"
 	"sync"
 	"time"
 
+	"firempq/log"
+	"firempq/utils"
+
 	. "firempq/api"
+	. "firempq/conf"
 
 	"github.com/jmhodges/levigo"
 )
@@ -77,7 +78,7 @@ func (ds *CLevelDBStorage) periodicCacheFlush() {
 		select {
 		case <-ds.forceFlushChan:
 			break
-		case <-time.After(conf.CFG.DbFlushInterval * time.Millisecond):
+		case <-time.After(CFG.DbFlushInterval * time.Millisecond):
 			break
 		}
 		ds.flushLock.Lock()
@@ -166,11 +167,11 @@ func (ds *CLevelDBStorage) FlushCache() {
 			wb.Clear()
 			counter = 0
 		}
-		key := common.UnsafeStringToBytes(k)
+		key := utils.UnsafeStringToBytes(k)
 		if v == "" {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, common.UnsafeStringToBytes(v))
+			wb.Put(key, utils.UnsafeStringToBytes(v))
 		}
 		counter++
 	}
@@ -193,8 +194,8 @@ func (ds *CLevelDBStorage) StoreData(data ...string) error {
 	}
 	wb := levigo.NewWriteBatch()
 	for i := 0; i < len(data); i += 2 {
-		wb.Put(common.UnsafeStringToBytes(data[i]),
-			common.UnsafeStringToBytes(data[i+1]))
+		wb.Put(utils.UnsafeStringToBytes(data[i]),
+			utils.UnsafeStringToBytes(data[i+1]))
 	}
 	res := ds.db.Write(defaultWriteOptions, wb)
 	wb.Close()
@@ -204,7 +205,7 @@ func (ds *CLevelDBStorage) StoreData(data ...string) error {
 func (ds *CLevelDBStorage) DeleteData(id ...string) {
 	wb := levigo.NewWriteBatch()
 	for _, i := range id {
-		wb.Delete(common.UnsafeStringToBytes(i))
+		wb.Delete(utils.UnsafeStringToBytes(i))
 	}
 	ds.db.Write(defaultWriteOptions, wb)
 	wb.Close()
@@ -224,8 +225,8 @@ func (ds *CLevelDBStorage) GetData(id string) string {
 		return data
 	}
 	ds.cacheLock.Unlock()
-	value, _ := ds.db.Get(defaultReadOptions, common.UnsafeStringToBytes(id))
-	return common.UnsafeBytesToString(value)
+	value, _ := ds.db.Get(defaultReadOptions, utils.UnsafeStringToBytes(id))
+	return utils.UnsafeBytesToString(value)
 }
 
 // CachedDeleteData deletes item metadata and payload, affects cache only until flushed.

@@ -1,8 +1,10 @@
-package common
+package parsers
 
 import (
 	"fmt"
 	"strconv"
+
+	. "firempq/errors"
 )
 
 func makeIntDesc(valName string, minValue, maxValue int64) string {

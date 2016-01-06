@@ -10,9 +10,12 @@ import (
 	"firempq/log"
 	"firempq/testutils"
 
-	. "firempq/common"
+	. "firempq/api"
 	. "firempq/conf"
-	. "firempq/features/pqueue/pqmsg"
+	. "firempq/errors"
+	. "firempq/response"
+	. "firempq/services/pqueue/pqmsg"
+	. "firempq/services/svcmetadata"
 	. "firempq/testutils"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -42,11 +45,15 @@ func getCtxDesc() *ServiceDescription {
 	}
 }
 
+type FakeCtxSvcLoader struct{}
+
+func (f *FakeCtxSvcLoader) GetService(name string) (ISvc, bool) { return nil, false }
+
 func i2a(v int64) string { return strconv.FormatInt(v, 10) }
 
 func CreateQueueTestContext() (*PQContext, *TestResponseWriter) {
 	rw := NewTestResponseWriter()
-	return InitPQueue(getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
+	return InitPQueue(&FakeCtxSvcLoader{}, getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
 }
 
 func CreateNewQueueTestContext() (*PQContext, *TestResponseWriter) {

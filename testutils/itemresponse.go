@@ -1,15 +1,14 @@
 package testutils
 
 import (
-	"firempq/common"
 
 	. "firempq/api"
-
+	. "firempq/response"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func VerifyItemsResponse(r IResponse, size int) ([]IResponseItem, bool) {
-	ir, ok := r.(*common.ItemsResponse)
+	ir, ok := r.(*ItemsResponse)
 	So(ok, ShouldBeTrue)
 	if ok {
 		items := ir.GetItems()
@@ -46,7 +45,7 @@ func VerifyItems(r IResponse, size int, itemSpecs ...string) bool {
 }
 
 func VerifyOkResponse(r IResponse) {
-	So(r, ShouldEqual, common.OK_RESPONSE)
+	So(r, ShouldEqual, OK_RESPONSE)
 }
 
 func VerifyErrResponse(r IResponse) bool {

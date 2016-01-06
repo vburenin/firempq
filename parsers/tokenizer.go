@@ -1,9 +1,11 @@
-package common
+package parsers
 
 import (
-	"errors"
 	"io"
 	"strconv"
+
+	. "firempq/errors"
+	. "firempq/utils"
 )
 
 const (
@@ -21,10 +23,6 @@ const (
 	END_ASCII_RANGE       = 0x7E
 	INIT_TOKEN_BUFFER_LEN = 48
 )
-
-var ERR_TOK_TOO_MANY_TOKENS = errors.New("Too many tokens")
-var ERR_TOK_TOKEN_TOO_LONG = errors.New("Token is too long")
-var ERR_TOK_PARSING_ERROR = errors.New("Error during token parsing")
 
 type Tokenizer struct {
 	buffer []byte

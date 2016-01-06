@@ -38,3 +38,7 @@ type ServiceContext interface {
 	Call(cmd string, params []string) IResponse
 	Finish()
 }
+
+type IServices interface {
+	GetService(string) (ISvc, bool)
+}

@@ -1,23 +1,55 @@
-package facade
+package services
 
 import (
-	"firempq/common"
-	"firempq/features"
 	"firempq/log"
+	"firempq/services/pqueue"
 	"strings"
 	"sync"
 
 	. "firempq/api"
+	. "firempq/common"
+	. "firempq/errors"
+	. "firempq/response"
+	. "firempq/services/svcmetadata"
 )
 
-type ServiceFacade struct {
+type ServiceConstructor func(IServices, *ServiceDescription, []string) (ISvc, IResponse)
+type ServiceLoader func(IServices, *ServiceDescription) (ISvc, error)
+
+func GetServiceConstructor(serviceType string) (ServiceConstructor, bool) {
+	switch serviceType {
+	case STYPE_PRIORITY_QUEUE:
+		return pqueue.CreatePQueue, true
+	default:
+		return nil, false
+	}
+}
+
+func GetServiceLoader(serviceType string) (ServiceLoader, bool) {
+	switch serviceType {
+	case STYPE_PRIORITY_QUEUE:
+		return pqueue.LoadPQueue, true
+	default:
+		return nil, false
+	}
+}
+
+var smgr *ServiceManager
+var onceNewMgr sync.Once
+
+func CreateServiceManager() *ServiceManager {
+	onceNewMgr.Do(func() { smgr = NewServiceManager() })
+	return smgr
+}
+
+type ServiceManager struct {
 	allSvcs          map[string]ISvc
 	rwLock           sync.RWMutex
 	serviceIdCounter uint64
 }
 
-func NewFacade() *ServiceFacade {
-	f := ServiceFacade{
+func NewServiceManager() *ServiceManager {
+	f := ServiceManager{
 		allSvcs:          make(map[string]ISvc),
 		serviceIdCounter: 0,
 	}
@@ -25,8 +57,8 @@ func NewFacade() *ServiceFacade {
 	return &f
 }
 
-func (s *ServiceFacade) loadAllServices() {
-	descList := features.GetServiceDescriptions()
+func (s *ServiceManager) loadAllServices() {
+	descList := GetServiceDescriptions()
 	if len(descList) > 0 {
 		s.serviceIdCounter = descList[len(descList)-1].ExportId
 	}
@@ -37,7 +69,7 @@ func (s *ServiceFacade) loadAllServices() {
 		}
 		if desc.GetToDelete() {
 			log.Warning("Service should be deleted: %s", desc.GetName())
-			features.DeleteServiceData(desc.GetName())
+			DeleteServiceData(desc.GetName())
 			continue
 		}
 
@@ -48,7 +80,7 @@ func (s *ServiceFacade) loadAllServices() {
 			log.Error("Unknown service '%s' type: %s", desc.Name, desc.SType)
 			continue
 		}
-		svcInstance, err := serviceLoader(desc)
+		svcInstance, err := serviceLoader(s, desc)
 		if err != nil {
 			log.Error("Service '%s' was not loaded because of: %s", desc.Name, err)
 		} else {
@@ -59,52 +91,52 @@ func (s *ServiceFacade) loadAllServices() {
 }
 
 // CreateService creates a service of the specified type.
-func (s *ServiceFacade) CreateService(svcType string, svcName string, params []string) IResponse {
+func (s *ServiceManager) CreateService(svcType string, svcName string, params []string) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
 
 	if _, ok := s.allSvcs[svcName]; ok {
-		return common.ERR_SVC_ALREADY_EXISTS
+		return ERR_SVC_ALREADY_EXISTS
 	}
 	serviceConstructor, ok := GetServiceConstructor(svcType)
 
 	if !ok {
-		return common.ERR_SVC_UNKNOWN_TYPE
+		return ERR_SVC_UNKNOWN_TYPE
 	}
 
-	desc := common.NewServiceDescription(svcName, svcType, s.serviceIdCounter+1)
+	desc := NewServiceDescription(svcName, svcType, s.serviceIdCounter+1)
 
-	svc, resp := serviceConstructor(desc, params)
+	svc, resp := serviceConstructor(s, desc, params)
 	if resp.IsError() {
 		return resp
 	}
 
 	s.serviceIdCounter++
-	features.SaveServiceDescription(desc)
+	SaveServiceDescription(desc)
 
 	svc.StartUpdate()
 	s.allSvcs[svcName] = svc
 
-	return common.OK_RESPONSE
+	return OK_RESPONSE
 }
 
 // DropService drops service.
-func (s *ServiceFacade) DropService(svcName string) IResponse {
+func (s *ServiceManager) DropService(svcName string) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
 	svc, ok := s.allSvcs[svcName]
 	if !ok {
-		return common.ERR_NO_SVC
+		return ERR_NO_SVC
 	}
 	svc.Close()
 	delete(s.allSvcs, svcName)
-	features.DeleteServiceData(svc.GetServiceId())
+	DeleteServiceData(svc.GetServiceId())
 	log.Info("Service '%s' has been removed: (id:%s)", svcName, svc.GetServiceId())
-	return common.OK_RESPONSE
+	return OK_RESPONSE
 }
 
-// ListServiceNames returns a list of available services.
-func (s *ServiceFacade) ListServiceNames(svcPrefix string) IResponse {
+// ListServiceNames returns a list of available
+func (s *ServiceManager) ListServiceNames(svcPrefix string) IResponse {
 
 	services := make([]string, 0)
 	s.rwLock.RLock()
@@ -115,11 +147,11 @@ func (s *ServiceFacade) ListServiceNames(svcPrefix string) IResponse {
 	}
 	s.rwLock.RUnlock()
 
-	return common.NewStrArrayResponse("+SVCLIST", services)
+	return NewStrArrayResponse("+SVCLIST", services)
 }
 
 // GetService look up of a service with appropriate name.
-func (s *ServiceFacade) GetService(name string) (ISvc, bool) {
+func (s *ServiceManager) GetService(name string) (ISvc, bool) {
 	s.rwLock.RLock()
 	svc, ok := s.allSvcs[name]
 	s.rwLock.RUnlock()
@@ -127,7 +159,7 @@ func (s *ServiceFacade) GetService(name string) (ISvc, bool) {
 }
 
 // Close closes all available services walking through all of them.
-func (s *ServiceFacade) Close() {
+func (s *ServiceManager) Close() {
 	s.rwLock.Lock()
 	for _, svc := range s.allSvcs {
 		svc.Close()
