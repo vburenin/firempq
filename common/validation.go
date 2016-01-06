@@ -1,8 +1,13 @@
 package common
 
+const (
+	MinItemIdLength = 1
+	MaxItemIdLength = 256
+)
+
 // ValidateItemId checks if symbol range is in the allowed scope for the item id
 func ValidateItemId(itemId string) bool {
-	if len(itemId) == 0 {
+	if len(itemId) < MinItemIdLength || len(itemId) > MaxItemIdLength {
 		return false
 	}
 	for _, itemId := range itemId {

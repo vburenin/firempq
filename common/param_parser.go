@@ -42,35 +42,27 @@ func ParseStringParam(params []string, minLen, maxLen int64) ([]string, string, 
 }
 
 // ParseUserItemId parses user provided item id that can not start with '_'.
-func ParseUserItemId(params []string, minLen, maxLen int64) ([]string, string, *ErrorResponse) {
-	valName := params[0]
+func ParseUserItemId(params []string) ([]string, string, *ErrorResponse) {
 	if len(params) >= 2 {
-		itemLength := int64(len(params[1]))
-		if itemLength >= minLen && itemLength <= maxLen {
-			if ValidateUserItemId(params[1]) {
-				return params[2:], params[1], nil
-			} else {
-				return nil, "", ERR_USER_ID_IS_WRONG
-			}
+		if ValidateUserItemId(params[1]) {
+			return params[2:], params[1], nil
+		} else {
+			return nil, "", ERR_USER_ID_IS_WRONG
 		}
 	}
-	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+	return nil, "", ERR_USER_ID_IS_WRONG
 }
 
 // ParseItemId parses item id that can use all characters.
-func ParseItemId(params []string, minLen, maxLen int64) ([]string, string, *ErrorResponse) {
-	valName := params[0]
+func ParseItemId(params []string) ([]string, string, *ErrorResponse) {
 	if len(params) >= 2 {
-		itemLength := int64(len(params[1]))
-		if itemLength >= minLen && itemLength <= maxLen {
-			if ValidateItemId(params[1]) {
-				return params[2:], params[1], nil
-			} else {
-				return nil, "", ERR_ID_IS_WRONG
-			}
+		if ValidateItemId(params[1]) {
+			return params[2:], params[1], nil
+		} else {
+			return nil, "", ERR_ID_IS_WRONG
 		}
 	}
-	return nil, "", InvalidRequest(makeStrDesc(valName, minLen, maxLen))
+	return nil, "", ERR_ID_IS_WRONG
 }
 
 func ParseServiceType(params []string) ([]string, string, *ErrorResponse) {

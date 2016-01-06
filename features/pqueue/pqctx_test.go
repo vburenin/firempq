@@ -197,12 +197,12 @@ func TestCtxGetMessageInfo(t *testing.T) {
 		})
 
 		Convey("Wrong message ID format should be detected", func() {
-			resp := q.Call(PQ_CMD_MSG_INFO, []string{PRM_ID, "$"})
+			resp := q.Call(PQ_CMD_MSG_INFO, []string{"$"})
 			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Wrong message ID not found", func() {
-			resp := q.Call(PQ_CMD_MSG_INFO, []string{PRM_ID, "1234"})
+			resp := q.Call(PQ_CMD_MSG_INFO, []string{"1234"})
 			So(resp, ShouldEqual, ERR_MSG_NOT_FOUND)
 		})
 	})
@@ -217,19 +217,15 @@ func TestCtxDeleteLockedByID(t *testing.T) {
 		})
 
 		Convey("Wrong message ID format should be detected", func() {
-			resp := q.Call(PQ_CMD_DELETE_LOCKED_BY_ID, []string{PRM_ID, "$"})
+			resp := q.Call(PQ_CMD_DELETE_LOCKED_BY_ID, []string{"$"})
 			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Message is not locked error should be returned", func() {
 			q.Call(PQ_CMD_PUSH, []string{PRM_PAYLOAD, "t", PRM_ID, "id1", PRM_DELAY, "0"})
-			resp := q.Call(PQ_CMD_DELETE_LOCKED_BY_ID, []string{PRM_ID, "id1"})
+			resp := q.Call(PQ_CMD_DELETE_LOCKED_BY_ID, []string{"id1"})
 			So(resp, ShouldEqual, ERR_MSG_NOT_LOCKED)
 			VerifyServiceSize(q.pq, 1)
-		})
-		Convey("Unknown param failure", func() {
-			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{"TEST_PARAM"})
-			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 	})
 }
@@ -243,18 +239,14 @@ func TestCtxDeleteByID(t *testing.T) {
 		})
 
 		Convey("Wrong message ID format should be detected", func() {
-			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{PRM_ID, "$"})
+			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{"$"})
 			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
 		Convey("Message should be deleted", func() {
 			q.Call(PQ_CMD_PUSH, []string{PRM_PAYLOAD, "t", PRM_ID, "id1", PRM_DELAY, "0"})
-			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{PRM_ID, "id1"})
+			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{"id1"})
 			VerifyOkResponse(resp)
-		})
-		Convey("Unknown param failure", func() {
-			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{"TEST_PARAM"})
-			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 	})
 }
@@ -347,17 +339,12 @@ func TestCtxUnlockMessageByID(t *testing.T) {
 		})
 
 		Convey("Wrong message ID format should be detected", func() {
-			resp := q.Call(PQ_CMD_UNLOCK_BY_ID, []string{PRM_ID, "$"})
+			resp := q.Call(PQ_CMD_UNLOCK_BY_ID, []string{"$"})
 			So(resp, ShouldEqual, ERR_ID_IS_WRONG)
 		})
 
-		Convey("Unknown param failure", func() {
-			resp := q.Call(PQ_CMD_UNLOCK_BY_ID, []string{"TEST_PARAM"})
-			So(resp.GetResponse(), ShouldContainSubstring, "TEST_PARAM")
-		})
-
 		Convey("Message not found error should happend", func() {
-			resp := q.Call(PQ_CMD_UNLOCK_BY_ID, []string{PRM_ID, "id1"})
+			resp := q.Call(PQ_CMD_UNLOCK_BY_ID, []string{"id1"})
 			So(resp, ShouldEqual, ERR_MSG_NOT_FOUND)
 		})
 	})
@@ -447,20 +434,16 @@ func TestCtxDeleteByReceipt(t *testing.T) {
 	Convey("All call scenarios should return expected response", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("Should return expired error", func() {
-			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{PRM_RECEIPT, "1-2"})
+			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{"1-2"})
 			So(resp, ShouldEqual, ERR_RECEIPT_EXPIRED)
 		})
 		Convey("Should return invalid receipt error", func() {
-			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{PRM_RECEIPT, "!@#$%%"})
+			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{"!@#$%%"})
 			So(resp, ShouldEqual, ERR_INVALID_RECEIPT)
 		})
 		Convey("Should return no receipt provided error", func() {
 			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{})
 			So(resp, ShouldEqual, ERR_NO_RECEIPT)
-		})
-		Convey("Should return unknown parameter error", func() {
-			resp := q.Call(PQ_CMD_DELETE_BY_RCPT, []string{"UNKNOWN"})
-			So(resp.GetResponse(), ShouldContainSubstring, "UNKNOWN")
 		})
 	})
 }
@@ -469,20 +452,16 @@ func TestCtxUnlockByReceipt(t *testing.T) {
 	Convey("All call scenarios should return expected response", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("Should return expired error", func() {
-			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{PRM_RECEIPT, "1-2"})
+			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{"1-2"})
 			So(resp, ShouldEqual, ERR_RECEIPT_EXPIRED)
 		})
 		Convey("Should return invalid receipt error", func() {
-			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{PRM_RECEIPT, "!@#$%%"})
+			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{"!@#$%%"})
 			So(resp, ShouldEqual, ERR_INVALID_RECEIPT)
 		})
 		Convey("Should return no receipt provided error", func() {
 			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{})
 			So(resp, ShouldEqual, ERR_NO_RECEIPT)
-		})
-		Convey("Should return unknown parameter error", func() {
-			resp := q.Call(PQ_CMD_UNLOCK_BY_RCPT, []string{"UNKNOWN"})
-			So(resp.GetResponse(), ShouldContainSubstring, "UNKNOWN")
 		})
 	})
 }

@@ -32,8 +32,6 @@ func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
 	}
 }
 
-const MAX_MESSAGE_ID_LENGTH = 128
-const MAX_ASYNC_ID = 8
 const PAYLOAD_LIMIT = 512 * 1024
 
 const (
@@ -167,48 +165,26 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 
 // parseMessageIdOnly is looking for message id only.
 func parseMessageIdOnly(params []string) (string, *ErrorResponse) {
-	var err *ErrorResponse
-	var msgId string
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_ID:
-			params, msgId, err = ParseItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
-		default:
-			return "", UnknownParam(params[0])
+	if len(params) == 1 {
+		if ValidateItemId(params[0]) {
+			return params[0], nil
+		} else {
+			return "", ERR_ID_IS_WRONG
 		}
-		if err != nil {
-			return "", err
-		}
-	}
-
-	if len(msgId) == 0 {
+	} else if len(params) == 0 {
 		return "", ERR_MSG_ID_NOT_DEFINED
 	}
-	return msgId, nil
+	return "", ERR_ONE_ID_ONLY
 }
 
 // parseReceiptOnly is looking for message receipt only.
 func parseReceiptOnly(params []string) (string, *ErrorResponse) {
-	var err *ErrorResponse
-	var rcpt string
-
-	for len(params) > 0 {
-		switch params[0] {
-		case PRM_RECEIPT:
-			params, rcpt, err = ParseReceiptParam(params)
-		default:
-			return "", UnknownParam(params[0])
-		}
-		if err != nil {
-			return "", err
-		}
+	if len(params) == 1 {
+		return params[0], nil
+	} else if len(params) > 1 {
+		return "", ERR_ONE_RECEIPT_ONLY
 	}
-
-	if len(rcpt) == 0 {
-		return "", ERR_NO_RECEIPT
-	}
-	return rcpt, nil
+	return "", ERR_NO_RECEIPT
 }
 
 // PopLock gets message from the queue setting lock timeout.
@@ -229,7 +205,7 @@ func (ctx *PQContext) PopLock(params []string) IResponse {
 		case PRM_POP_WAIT:
 			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
 		case PRM_ASYNC:
-			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
+			params, asyncId, err = ParseItemId(params)
 		default:
 			return UnknownParam(params[0])
 		}
@@ -258,7 +234,7 @@ func (ctx *PQContext) Pop(params []string) IResponse {
 		case PRM_POP_WAIT:
 			params, popWaitTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxPopWaitTimeout)
 		case PRM_ASYNC:
-			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
+			params, asyncId, err = ParseItemId(params)
 		default:
 			return UnknownParam(params[0])
 		}
@@ -353,7 +329,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_ID:
-			params, msgId, err = ParseUserItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
+			params, msgId, err = ParseUserItemId(params)
 		case PRM_PRIORITY:
 			params, priority, err = ParseInt64Param(params, 0, math.MaxInt64)
 		case PRM_PAYLOAD:
@@ -366,7 +342,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 			params = params[1:]
 			syncWait = true
 		case PRM_ASYNC:
-			params, asyncId, err = ParseItemId(params, 1, MAX_ASYNC_ID)
+			params, asyncId, err = ParseItemId(params)
 		default:
 			return UnknownParam(params[0])
 		}
@@ -444,7 +420,7 @@ func (ctx *PQContext) UpdateLockById(params []string) IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case PRM_ID:
-			params, msgId, err = ParseItemId(params, 1, MAX_MESSAGE_ID_LENGTH)
+			params, msgId, err = ParseItemId(params)
 		case PRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
 		default:

@@ -49,6 +49,7 @@ var ERR_MSG_IS_LOCKED = ConflictRequest("Message is locked")
 var ERR_INVALID_RECEIPT = InvalidRequest("Receipt is invalid")
 var ERR_NO_RECEIPT = InvalidRequest("No receipt provided")
 var ERR_RECEIPT_EXPIRED = InvalidRequest("Receipt has expired")
+var ERR_ONE_RECEIPT_ONLY = InvalidRequest("Only one receipt at the time is currently supported")
 
 var ERR_CONN_CLOSING = NewError("Connection will be closed soon", CODE_SERVER_UNAVAILABLE)
 
@@ -57,8 +58,12 @@ var ERR_MSG_ID_NOT_DEFINED = InvalidRequest("Message ID is not defined")
 var ERR_MSG_TIMEOUT_NOT_DEFINED = InvalidRequest("Message timeout is not defined")
 var ERR_ASYNC_WAIT = InvalidRequest("ASYNC param can be used only if WAIT timeout greater than 0")
 var ERR_ASYNC_PUSH = InvalidRequest("ASYNC must be used with SYNCWAIT")
-var ERR_ID_IS_WRONG = InvalidRequest("Only [_a-zA-Z0-9]* symbols are allowed for id")
-var ERR_USER_ID_IS_WRONG = InvalidRequest("Only ^[a-zA-Z0-9][_a-zA-Z0-9]* symbols are allowed for id")
+var ERR_ID_IS_WRONG = InvalidRequest(
+	"ID length must be in range[1, 256]. Only [_a-zA-Z0-9]* symbols are allowed for id")
+var ERR_USER_ID_IS_WRONG = InvalidRequest(
+	"ID length must be in range[1, 256]. Only ^[a-zA-Z0-9][_a-zA-Z0-9]* symbols are allowed for id")
+
+var ERR_ONE_ID_ONLY = InvalidRequest("Only one ID at the time is currently supported")
 
 var ERR_CMD_WITH_NO_PARAMS = InvalidRequest("Command doesn't accept any parameters")
 var ERR_CMD_PARAM_NOT_PROVIDED = InvalidRequest("At least one parameter should be provided")
