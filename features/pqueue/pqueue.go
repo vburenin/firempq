@@ -516,7 +516,6 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 			}
 		}
 		if msg.ExpireTs < ts {
-			println(msg.ExpireTs, msg.UnlockTs, msg.PopCount, msg.SerialNumber, ts)
 			cntDel++
 			h.Pop()
 			delete(pq.id2sn, msg.StrId)
