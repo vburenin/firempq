@@ -13,7 +13,7 @@ import (
 
 type PQContext struct {
 	pq             *PQueue
-	idgen          *IdGen
+	idGen          *IdGen
 	callsCount     int64
 	responseWriter ResponseWriter
 	asyncGroup     sync.WaitGroup
@@ -28,7 +28,7 @@ func NewPQContext(pq *PQueue, r ResponseWriter) *PQContext {
 		callsCount:     0,
 		responseWriter: r,
 		asyncCount:     512,
-		idgen:          NewIdGen(),
+		idGen:          NewIdGen(),
 	}
 }
 
@@ -351,7 +351,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		}
 	}
 	if len(msgId) == 0 {
-		msgId = ctx.idgen.GenRandId()
+		msgId = ctx.idGen.GenRandId()
 	}
 
 	if syncWait {
