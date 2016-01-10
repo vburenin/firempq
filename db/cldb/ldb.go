@@ -135,7 +135,6 @@ func (ds *CLevelDBStorage) DeleteDataWithPrefix(prefix string) int {
 			limitCounter = 0
 			ds.db.Write(defaultWriteOptions, wb)
 			wb.Clear()
-			wb = levigo.NewWriteBatch()
 		}
 
 	}
