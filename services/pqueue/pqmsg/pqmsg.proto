@@ -11,13 +11,19 @@ message PQueueMsgData {
 
 
 message PQConfig {
-	required int64 msg_ttl = 1; // Default message TTL.
-	required int64 delivery_delay = 2; // Default delivery delay.
-	required int64 pop_lock_timeout = 3; // Timeout before message is getting released.
-	required int64 pop_count_limit = 4; // Pop count limit. 0 - unlimited. >0 Will be removed after this number of attempts.
+	required int64 msg_ttl = 1;
+	// Default message TTL.
+	required int64 delivery_delay = 2;
+	// Default delivery delay.
+	required int64 pop_lock_timeout = 3;
+	// Timeout before message is getting released.
+	required int64 pop_count_limit = 4;
+	// Pop count limit. 0 - unlimited. >0 Will be removed after this number of attempts.
 	required int64 max_size = 5; // Max queue size.
-	required int64 last_push_ts = 6; // Last time item has been pushed into queue.
-	required int64 last_pop_ts = 7; // Last pop time.
-	required string timeout_queue = 8;
-	required string poplimit_queue = 9;
+	// Last time item has been pushed into queue.
+	required int64 last_push_ts = 6;
+	// Last pop time.
+	required int64 last_pop_ts = 7;
+	// Messages exceeded number of pop attemts will be moved into this queue if configured
+	required string pop_limit_queue_name = 8;
 }

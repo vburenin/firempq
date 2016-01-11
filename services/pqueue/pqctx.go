@@ -78,6 +78,7 @@ const (
 	CPRM_DELIVERY_DELAY = "DELAY"
 	CPRM_POP_LIMIT      = "POPLIMIT"
 	CPRM_LOCK_TIMEOUT   = "TIMEOUT"
+	CPRM_FAIL_QUEUE     = "FAILQ"
 )
 
 func CreatePQueue(svcs IServices, desc *ServiceDescription, params []string) (ISvc, IResponse) {
@@ -96,6 +97,7 @@ func ParsePQConfig(params []string) (*PQConfig, IResponse) {
 	delay := CFG_PQ.DefaultDeliveryDelay
 	lockTimeout := CFG_PQ.DefaultLockTimeout
 	popLimit := CFG_PQ.DefaultPopCountLimit
+	failQueue := ""
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -109,6 +111,8 @@ func ParsePQConfig(params []string) (*PQConfig, IResponse) {
 			params, popLimit, err = ParseInt64Param(params, 0, math.MaxInt64)
 		case CPRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
+		case CPRM_FAIL_QUEUE:
+			params, failQueue, err = ParseItemId(params)
 		default:
 			return nil, UnknownParam(params[0])
 		}
@@ -118,13 +122,14 @@ func ParsePQConfig(params []string) (*PQConfig, IResponse) {
 	}
 
 	cfg := &PQConfig{
-		MaxSize:        maxSize,
-		MsgTtl:         msgTtl,
-		DeliveryDelay:  delay,
-		PopLockTimeout: lockTimeout,
-		PopCountLimit:  popLimit,
-		LastPushTs:     Uts(),
-		LastPopTs:      Uts(),
+		MaxSize:           maxSize,
+		MsgTtl:            msgTtl,
+		DeliveryDelay:     delay,
+		PopLockTimeout:    lockTimeout,
+		PopCountLimit:     popLimit,
+		LastPushTs:        Uts(),
+		LastPopTs:         Uts(),
+		PopLimitQueueName: failQueue,
 	}
 
 	return cfg, OK_RESPONSE
@@ -490,6 +495,7 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 	popLimit := cfg.PopCountLimit
 	deliveryDelay := cfg.DeliveryDelay
 	lockTimeout := cfg.PopLockTimeout
+	failQueue := ""
 
 	if len(params) == 0 {
 		return ERR_CMD_PARAM_NOT_PROVIDED
@@ -507,6 +513,8 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 			params, popLimit, err = ParseInt64Param(params, 0, math.MaxInt64)
 		case CPRM_LOCK_TIMEOUT:
 			params, lockTimeout, err = ParseInt64Param(params, 0, CFG_PQ.MaxLockTimeout)
+		case CPRM_FAIL_QUEUE:
+			params, failQueue, err = ParseItemId(params)
 		default:
 			return UnknownParam(params[0])
 		}
@@ -514,7 +522,7 @@ func (ctx *PQContext) SetParamValue(params []string) IResponse {
 			return err
 		}
 	}
-	return ctx.pq.SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout)
+	return ctx.pq.SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout, failQueue)
 }
 
 func (ctx *PQContext) Finish() {

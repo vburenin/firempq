@@ -7,7 +7,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func VerifyItemsResponse(r IResponse, size int) ([]IResponseItem, bool) {
+func VerifyItemsRespSize(r IResponse, size int) ([]IResponseItem, bool) {
 	ir, ok := r.(*ItemsResponse)
 	So(ok, ShouldBeTrue)
 	if ok {
@@ -20,7 +20,7 @@ func VerifyItemsResponse(r IResponse, size int) ([]IResponseItem, bool) {
 
 func VerifySingleItem(r IResponse, itemId, payload string) bool {
 
-	if items, ok := VerifyItemsResponse(r, 1); ok {
+	if items, ok := VerifyItemsRespSize(r, 1); ok {
 		So(items[0].GetId(), ShouldEqual, itemId)
 		So(items[0].GetPayload(), ShouldEqual, payload)
 		return items[0].GetId() == itemId && items[0].GetPayload() == payload
@@ -30,7 +30,7 @@ func VerifySingleItem(r IResponse, itemId, payload string) bool {
 
 func VerifyItems(r IResponse, size int, itemSpecs ...string) bool {
 	So(size*2, ShouldEqual, len(itemSpecs))
-	items, ok := VerifyItemsResponse(r, size)
+	items, ok := VerifyItemsRespSize(r, size)
 	if size*2 == len(itemSpecs) && ok {
 		for i := 0; i < len(itemSpecs); i += 2 {
 			itemPos := i / 2

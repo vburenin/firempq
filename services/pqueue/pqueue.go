@@ -3,7 +3,7 @@ package pqueue
 import (
 	"firempq/db"
 	"firempq/log"
-	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,10 +17,10 @@ import (
 	. "firempq/services/pqueue/pqmsg"
 	. "firempq/services/svcmetadata"
 	. "firempq/utils"
-	"strings"
 )
 
 type PQueue struct {
+	// A wrapper on top of common database operations.
 	db.DBService
 	// Payload access should be protected separately.
 	payloadLock sync.Mutex
@@ -38,12 +38,9 @@ type PQueue struct {
 	config *PQConfig
 
 	svcs IServices
-	// The following two queues are used to store failed messages because of timeout or pop limit exceeded error.
-	// If there are any errors appear during push process, those errors will be completely ignored.
-	// This queue will be used to push timed out messages.
-	timeOutPQueue *PQueue
+
 	// This queue will be used to push messages exceeded pop limit attempts. All errors are ignored.
-	popLimitPQueue *PQueue
+	popLimitMoveChan chan *PQMsgMetaData
 
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *ServiceDescription
@@ -68,10 +65,11 @@ func InitPQueue(svcs IServices, desc *ServiceDescription, config *PQConfig) *PQu
 		newMsgNotification: make(chan struct{}),
 		msgSerialNumber:    0,
 		lockedMsgCnt:       0,
+		popLimitMoveChan:   make(chan *PQMsgMetaData, 16384),
 	}
-	SaveServiceConfig(desc.ServiceId, config)
 	// Init inherited service db.
 	pq.InitServiceDB(desc.ServiceId)
+	SaveServiceConfig(desc.ServiceId, config)
 	pq.loadAllMessages()
 	return &pq
 }
@@ -90,6 +88,33 @@ func (pq *PQueue) NewContext(rw ResponseWriter) ServiceContext {
 	return NewPQContext(pq, rw)
 }
 
+// StartUpdate runs a loop of periodic data updates.
+func (pq *PQueue) StartUpdate() {
+	// Run a goroutine to move failed pops.
+	go pq.moveToPopLimitedQueue()
+	// Run timeout/unlock goroutine.
+	go func() {
+		var cnt int64
+		for {
+			pq.closed.Lock()
+			if pq.closed.IsFalse() {
+				pq.lock.Lock()
+				cnt = pq.checkTimeouts(Uts())
+				pq.lock.Unlock()
+			} else {
+				pq.closed.Unlock()
+				break
+			}
+			pq.closed.Unlock()
+			if cnt >= CFG_PQ.TimeoutCheckBatchSize {
+				time.Sleep(time.Millisecond)
+			} else {
+				time.Sleep(CFG.UpdateInterval * time.Millisecond)
+			}
+		}
+	}()
+}
+
 const (
 	PQ_STATUS_MAX_SIZE         = "MaxSize"
 	PQ_STATUS_MSG_TTL          = "MsgTtl"
@@ -102,31 +127,41 @@ const (
 	PQ_STATUS_TOTAL_MSGS       = "TotalMessages"
 	PQ_STATUS_IN_FLIGHT_MSG    = "InFlightMessages"
 	PQ_STATUS_AVAILABLE_MSGS   = "AvailableMessages"
+	PQ_STATUS_FAIL_QUEUE       = "FailQueue"
 )
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
-	res[PQ_STATUS_MAX_SIZE] = pq.config.GetMaxSize()
-	res[PQ_STATUS_MSG_TTL] = pq.config.GetMsgTtl()
-	res[PQ_STATUS_DELIVERY_DELAY] = pq.config.GetDeliveryDelay()
-	res[PQ_STATUS_POP_LOCK_TIMEOUT] = pq.config.GetPopLockTimeout()
-	res[PQ_STATUS_POP_COUNT_LIMIT] = pq.config.GetPopCountLimit()
-	res[PQ_STATUS_CREATE_TS] = pq.desc.GetCreateTs()
-	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.GetLastPushTs()
-	res[PQ_STATUS_LAST_POP_TS] = pq.config.GetLastPopTs()
+	res[PQ_STATUS_MAX_SIZE] = pq.config.MaxSize
+	res[PQ_STATUS_MSG_TTL] = pq.config.MsgTtl
+	res[PQ_STATUS_DELIVERY_DELAY] = pq.config.DeliveryDelay
+	res[PQ_STATUS_POP_LOCK_TIMEOUT] = pq.config.PopLockTimeout
+	res[PQ_STATUS_POP_COUNT_LIMIT] = pq.config.PopCountLimit
+	res[PQ_STATUS_CREATE_TS] = pq.desc.CreateTs
+	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.LastPushTs
+	res[PQ_STATUS_LAST_POP_TS] = pq.config.LastPopTs
 	res[PQ_STATUS_TOTAL_MSGS] = pq.GetSize()
 	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.lockedMsgCnt
 	res[PQ_STATUS_AVAILABLE_MSGS] = pq.GetSize() - pq.lockedMsgCnt
+	res[PQ_STATUS_FAIL_QUEUE] = pq.config.PopLimitQueueName
 	return res
 }
 
-func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout int64) IResponse {
+func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout int64, failQueue string) IResponse {
+	if failQueue != "" {
+		if fq := pq.getFailQueue(failQueue); fq == nil {
+			return InvalidRequest("PQueue doesn't exist: " + failQueue)
+		}
+	}
 	pq.lock.Lock()
 	pq.config.MsgTtl = msgTtl
 	pq.config.MaxSize = maxSize
 	pq.config.DeliveryDelay = deliveryDelay
 	pq.config.PopCountLimit = popLimit
 	pq.config.PopLockTimeout = lockTimeout
+	if failQueue != "" {
+		pq.config.PopLimitQueueName = failQueue
+	}
 	pq.lock.Unlock()
 	SaveServiceConfig(pq.GetServiceId(), pq.config)
 	return OK_RESPONSE
@@ -176,6 +211,11 @@ func (pq *PQueue) Clear() {
 func (pq *PQueue) Close() {
 	log.Debug("Closing PQueue service: %s", pq.desc.Name)
 	pq.closed.SetTrue()
+	// This should break a goroutine loop.
+	select {
+	case pq.popLimitMoveChan <- nil:
+	default:
+	}
 }
 
 func (pq *PQueue) IsClosed() bool {

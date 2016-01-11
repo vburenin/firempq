@@ -45,12 +45,32 @@ func getDesc() *ServiceDescription {
 	}
 }
 
-type FakeSvcLoader struct{}
+type FakeSvcLoader struct {
+	data map[string]*PQueue
+}
 
-func (f *FakeSvcLoader) GetService(name string) (ISvc, bool) { return nil, false }
+func NewFakeSvcLoader() *FakeSvcLoader {
+	return &FakeSvcLoader{
+		data: make(map[string]*PQueue),
+	}
+}
+
+func (f *FakeSvcLoader) GetService(name string) (ISvc, bool) {
+	svc, ok := f.data[name]
+	return svc, ok
+}
 
 func CreateTestQueue() *PQueue {
-	return InitPQueue(&FakeSvcLoader{}, getDesc(), getConfig())
+	return InitPQueue(NewFakeSvcLoader(), getDesc(), getConfig())
+}
+
+func CreateTestQueueWithName(fsl *FakeSvcLoader, name string) *PQueue {
+	d := getDesc()
+	c := getConfig()
+	d.Name = name
+	q := InitPQueue(fsl, d, c)
+	fsl.data[name] = q
+	return q
 }
 
 func CreateNewTestQueue() *PQueue {
@@ -68,6 +88,7 @@ func cmp(t *testing.T, a, b string) {
 
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	Convey("Test push and pop messages", t, func() {
 		q.Push("data1", "p1", 10000, 0, 12)
 		q.Push("data2", "p2", 10000, 0, 12)
@@ -91,6 +112,7 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 
 func TestAutoExpiration(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	Convey("Two messages should expire, one message should still be in the queue", t, func() {
 		q.Push("data1", "p1", 1000, 0, 12)
 		q.Push("data2", "p2", 1000, 0, 12)
@@ -103,6 +125,7 @@ func TestAutoExpiration(t *testing.T) {
 
 func TestUnlockById(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	Convey("Locked message should become visible again after it gets unlocked", t, func() {
 		q.Push("data1", "p1", 1000, 0, 12)
 		q.Push("data2", "p2", 1000, 0, 12)
@@ -115,6 +138,7 @@ func TestUnlockById(t *testing.T) {
 
 func TestDeleteById(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	Convey("Delete not locked message", t, func() {
 		q.Push("data1", "p1", 1000, 0, 12)
 		VerifyServiceSize(q, 1)
@@ -138,6 +162,7 @@ func TestDeleteLockedById(t *testing.T) {
 
 func TestPopWaitBatch(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	go func() {
 		time.Sleep(time.Second / 10)
 		q.Push("d1", "1", 10000, 0, 12)
@@ -151,6 +176,7 @@ func TestPopWaitBatch(t *testing.T) {
 
 func TestPopWaitTimeout(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	Convey("Messages should be delivered after 0.1 seconds", t, func() {
 		q.Push("d1", "1", 10000, 10000, 12)
 		q.Push("d2", "2", 10000, 10000, 12)
@@ -175,6 +201,7 @@ func TestDeliveryDelay(t *testing.T) {
 
 func TestPushLotsOfMessages(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	q.StartUpdate()
 	totalMsg := 10000
 	Convey("10k messages should be pushed and received being removed", t, func() {
@@ -204,6 +231,7 @@ func TestPushLotsOfMessages(t *testing.T) {
 
 func TestMessageLoad(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	Convey("Push some messages and load them", t, func() {
 		q.Push("d1", "p", 100000, 0, 10)
 		q.Push("d2", "p", 100000, 0, 11)
@@ -243,6 +271,7 @@ func TestMessageLoad(t *testing.T) {
 func TestStatus(t *testing.T) {
 	Convey("Queue status should be correct", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		Convey("Empty status should be default", func() {
 			s, _ := q.GetCurrentStatus().(*DictResponse)
 			status := s.GetDict()
@@ -290,7 +319,8 @@ func TestStatus(t *testing.T) {
 func TestSetParams(t *testing.T) {
 	Convey("Parameters should be set", t, func() {
 		q := CreateNewTestQueue()
-		VerifyOkResponse(q.SetParams(10000, 20000, 30000, 40000, 50000))
+		defer q.Close()
+		VerifyOkResponse(q.SetParams(10000, 20000, 30000, 40000, 50000, ""))
 
 		s, _ := q.GetCurrentStatus().(*DictResponse)
 		status := s.GetDict()
@@ -299,12 +329,14 @@ func TestSetParams(t *testing.T) {
 		So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 30000)
 		So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 40000)
 		So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 50000)
+		So(status[PQ_STATUS_FAIL_QUEUE], ShouldEqual, "")
 	})
 }
 
 func TestGetMessageInfo(t *testing.T) {
 	Convey("Pushed message should return parameters", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 1000, 9)
 		q.Push("d2", "p", 10000, 0, 11)
 
@@ -336,6 +368,7 @@ func TestGetMessageInfo(t *testing.T) {
 func TestUnlockErrors(t *testing.T) {
 	Convey("Attempts to unlock not locked and not existing messages should result in error", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 11)
 		So(q.UnlockMessageById("d1"), ShouldResemble, ERR_MSG_NOT_LOCKED)
 		So(q.UnlockMessageById("d2"), ShouldResemble, ERR_MSG_NOT_FOUND)
@@ -345,6 +378,7 @@ func TestUnlockErrors(t *testing.T) {
 func TestDeleteMessageErrors(t *testing.T) {
 	Convey("Attempts to delete locked and not existing message should result in error", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 100, 11)
 		So(q.DeleteById("d1"), ShouldResemble, ERR_MSG_IS_LOCKED)
 		So(q.DeleteById("d2"), ShouldResemble, ERR_MSG_NOT_FOUND)
@@ -353,6 +387,7 @@ func TestDeleteMessageErrors(t *testing.T) {
 
 func TestPushError(t *testing.T) {
 	q := CreateNewTestQueue()
+	defer q.Close()
 	q.Push("d1", "p", 10000, 100, 11)
 	Convey("Push should result in errors", t, func() {
 		So(q.Push("d1", "p", 10000, 100, 1), ShouldResemble, ERR_ITEM_ALREADY_EXISTS)
@@ -362,6 +397,7 @@ func TestPushError(t *testing.T) {
 func TestExpiration(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 11)
 		r, _ := q.TimeoutItems(Uts() + 100000).(*IntResponse)
 		So(r.Value, ShouldEqual, 1)
@@ -372,6 +408,7 @@ func TestExpiration(t *testing.T) {
 func TestReleaseInFlight(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 100, 11)
 		r, _ := q.ReleaseInFlight(Uts() + 1000).(*IntResponse)
 		So(r.Value, ShouldEqual, 1)
@@ -382,6 +419,7 @@ func TestReleaseInFlight(t *testing.T) {
 func TestPopCountExpiration(t *testing.T) {
 	Convey("Item should disappear on fifth attempt to pop it", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 1)
 		VerifySingleItem(q.Pop(0, 0, 1, true), "d1", "p")
 		VerifyOkResponse(q.UnlockMessageById("d1"))
@@ -396,7 +434,7 @@ func TestPopCountExpiration(t *testing.T) {
 		VerifyOkResponse(q.UnlockMessageById("d1"))
 
 		// PopAttempts end here.
-		VerifyItemsResponse(q.Pop(0, 0, 1, true), 0)
+		VerifyItemsRespSize(q.Pop(0, 0, 1, true), 0)
 
 		VerifyServiceSize(q, 0)
 	})
@@ -405,6 +443,7 @@ func TestPopCountExpiration(t *testing.T) {
 func TestSize(t *testing.T) {
 	Convey("Size of different structures should be valid", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 11)
 		q.Push("d2", "p", 10000, 0, 11)
 		q.Push("d3", "p", 10000, 0, 11)
@@ -422,10 +461,11 @@ func TestSize(t *testing.T) {
 func TestUnlockByReceipt(t *testing.T) {
 	Convey("Unlock by receipt should have correct behavior", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 11)
 		resp := q.Pop(100000, 0, 2, true)
 		VerifyServiceSize(q, 1)
-		VerifyItemsResponse(resp, 1)
+		VerifyItemsRespSize(resp, 1)
 
 		rcpt := resp.(*ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
@@ -441,10 +481,11 @@ func TestUnlockByReceipt(t *testing.T) {
 func TestDeleteByReceipt(t *testing.T) {
 	Convey("Delete by receipt should have correct behavior", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 11)
 		resp := q.Pop(100000, 0, 2, true)
 		VerifyServiceSize(q, 1)
-		VerifyItemsResponse(resp, 1)
+		VerifyItemsRespSize(resp, 1)
 
 		rcpt := resp.(*ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
@@ -458,10 +499,11 @@ func TestDeleteByReceipt(t *testing.T) {
 func TestUpdateLockByReceipt(t *testing.T) {
 	Convey("Delete by receipt should have correct behavior", t, func() {
 		q := CreateNewTestQueue()
+		defer q.Close()
 		q.Push("d1", "p", 10000, 0, 11)
 		resp := q.Pop(100000, 0, 2, true)
 		VerifyServiceSize(q, 1)
-		VerifyItemsResponse(resp, 1)
+		VerifyItemsRespSize(resp, 1)
 
 		rcpt := resp.(*ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
@@ -473,11 +515,56 @@ func TestUpdateLockByReceipt(t *testing.T) {
 func TestSizeLimit(t *testing.T) {
 	Convey("Fourth element should fail with size limit error", t, func() {
 		q := CreateNewTestQueue()
-		q.SetParams(10000, 3, 10000, 0, 50000)
+		defer q.Close()
+		q.SetParams(10000, 3, 10000, 0, 50000, "")
 		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11))
 		So(q.Push("4", "p", 10000, 0, 11), ShouldResemble, ERR_SIZE_EXCEEDED)
 		VerifyServiceSize(q, 3)
+	})
+}
+
+func TestMessagesMovedToAnotherQueue(t *testing.T) {
+	Convey("Elements should move from one queue to the other when number of pop attempts exceeded", t, func() {
+
+		log.InitLogging()
+		log.SetLevel(1)
+		db.SetDatabase(testutils.NewInMemDBService())
+
+		fsl := NewFakeSvcLoader()
+		q1 := CreateTestQueueWithName(fsl, "q1")
+		failQueue := CreateTestQueueWithName(fsl, "fq")
+		q1.SetParams(100000, 10000, 0, 2, 1000, "fq")
+
+		q1.StartUpdate()
+		failQueue.StartUpdate()
+
+		defer q1.Close()
+		defer failQueue.Close()
+
+		Convey("Two elements should be moved to another queue", func() {
+			VerifyOkResponse(q1.Push("d1", "p", 10000, 0, 11))
+			VerifyOkResponse(q1.Push("d2", "p", 10000, 0, 11))
+			VerifyServiceSize(q1, 2)
+
+			VerifyItemsRespSize(q1.Pop(100, 0, 10, true), 2)
+			q1.checkTimeouts(Uts() + 10000)
+			VerifyServiceSize(q1, 2)
+
+			VerifyItemsRespSize(q1.Pop(100, 0, 10, true), 2)
+			q1.checkTimeouts(Uts() + 10000)
+			VerifyServiceSize(q1, 0)
+
+			// Need to wait while message transferring is happening.
+			for i := 0; i < 10000; i++ {
+				time.Sleep(time.Microsecond * 1)
+				if failQueue.GetSize() == 2 {
+					break
+				}
+			}
+			VerifyServiceSize(failQueue, 2)
+		})
+
 	})
 }
