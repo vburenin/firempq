@@ -25,7 +25,7 @@ func EncodeTo36Base(exportId uint64) string {
 }
 
 // EncodeUint64ToString encodes uint64 to the sequence of bytes.
-func EncodeUint64ToString(v uint64) string {
+func Sn2Bin(v uint64) string {
 	b := make([]byte, 8)
 	b[0] = byte(v >> 56)
 	b[1] = byte(v >> 48)

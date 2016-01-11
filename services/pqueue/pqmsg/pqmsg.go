@@ -4,6 +4,7 @@ import (
 	"firempq/log"
 
 	. "firempq/utils"
+	"firempq/encoding"
 )
 
 type PQMsgMetaData struct {
@@ -22,6 +23,10 @@ func NewPQMsgMetaData(id string, priority int64, expireTs int64, sn uint64) *PQM
 			StrId:    id,
 		},
 	}
+}
+
+func (pqm *PQMsgMetaData) Sn2Bin() string {
+	return encoding.Sn2Bin(pqm.SerialNumber)
 }
 
 func UnmarshalPQMsgMetaData(sn uint64, buf []byte) *PQMsgMetaData {

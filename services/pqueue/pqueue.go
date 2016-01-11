@@ -325,7 +325,7 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	pq.trackHeap.Push(msg)
 	// Payload is a race conditional case, since it is not always flushed on disk and may or may not exist in memory.
 	pq.payloadLock.Lock()
-	pq.StoreFullItemInDB(EncodeUint64ToString(sn), msg.StringMarshal(), payload)
+	pq.StoreFullItemInDB(Sn2Bin(sn), msg.StringMarshal(), payload)
 	pq.payloadLock.Unlock()
 	pq.lock.Unlock()
 
@@ -348,8 +348,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []IResp
 		}
 
 		msg := pq.availMsgs.Pop()
-		sn := msg.SerialNumber
-		snDb := EncodeUint64ToString(sn)
+		snDb := msg.Sn2Bin()
 
 		if lock {
 			pq.lockedMsgCnt++
@@ -389,7 +388,7 @@ func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) IResponse {
 		if msg.UnlockTs > 0 {
 			msg.UnlockTs = Uts() + lockTimeout
 			pq.trackHeap.Push(msg)
-			pq.StoreItemBodyInDB(EncodeUint64ToString(sn), msg.StringMarshal())
+			pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
 			return OK_RESPONSE
 		} else {
 			return ERR_MSG_NOT_LOCKED
@@ -453,7 +452,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) IResponse {
 	}
 	msg.UnlockTs = Uts() + lockTimeout
 	pq.trackHeap.Push(msg)
-	pq.StoreItemBodyInDB(EncodeUint64ToString(msg.SerialNumber), msg.StringMarshal())
+	pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
 	pq.lock.Unlock()
 	return OK_RESPONSE
 }
@@ -482,16 +481,82 @@ func (pq *PQueue) UnlockByReceipt(rcpt string) IResponse {
 
 func (pq *PQueue) deleteMessage(sn uint64) bool {
 	if msg := pq.trackHeap.Remove(sn); msg != nil {
-		delete(pq.id2sn, msg.StrId)
+		// message that has UnlockTs > 0 must not be in avail msgs queue.
 		if msg.UnlockTs == 0 {
 			pq.availMsgs.Remove(sn)
-			pq.payloadLock.Lock()
-			pq.DeleteFullItemFromDB(EncodeUint64ToString(sn))
-			pq.payloadLock.Unlock()
 		}
+		delete(pq.id2sn, msg.StrId)
+		pq.payloadLock.Lock()
+		pq.DeleteFullItemFromDB(msg.Sn2Bin())
+		pq.payloadLock.Unlock()
 		return true
 	}
 	return false
+}
+
+func (pq *PQueue) getFailQueue(name string) *PQueue {
+	// Get service and make sure it is still available.
+	popQ, ok := pq.svcs.GetService(name)
+	if !ok {
+		log.Debug("No '%s' queue to push messages (exceeded pop limit) from '%s'",
+			pq.config.PopLimitQueueName, pq.desc.Name)
+		return nil
+	}
+	// Make sure retrieved service has an appropriate type.
+	popLimitPq, ok := popQ.(*PQueue)
+	if !ok {
+		log.Debug("'%s' has a wrong type to push pop limit exceeded messages from '%s'",
+			pq.config.PopLimitQueueName, pq.desc.Name)
+		return nil
+	}
+	return popLimitPq
+}
+
+func (pq *PQueue) moveToPopLimitedQueue() {
+	log.Debug("%s: Starting pop limit loop", pq.desc.Name)
+	var msg *PQMsgMetaData
+	for pq.closed.IsFalse() {
+		select {
+		case msg = <-pq.popLimitMoveChan:
+		case <-GetQuitChan():
+			break
+		}
+
+		// Nil can be received only in case of service is closing.
+		if msg == nil {
+			return
+		}
+
+		popLimitPq := pq.getFailQueue(pq.config.PopLimitQueueName)
+		if popLimitPq == nil {
+			pq.config.PopLimitQueueName = ""
+			SaveServiceConfig(pq.GetServiceId(), pq.config)
+			break
+		}
+
+		// Make sure service is not closed while we are pushing messages into it.
+		popLimitPq.closed.Lock()
+		for msg != nil {
+			binSn := msg.Sn2Bin()
+			popLimitPq.Push(msg.StrId,
+				pq.GetPayloadFromDB(binSn),
+				popLimitPq.config.MsgTtl,
+				popLimitPq.config.DeliveryDelay,
+				msg.Priority)
+			pq.DeleteFullItemFromDB(binSn)
+			select {
+			case msg = <-pq.popLimitMoveChan:
+				// Same thing. Service is closing.
+				if msg == nil {
+					return
+				}
+			default:
+				msg = nil
+			}
+		}
+		popLimitPq.closed.Unlock()
+	}
+	log.Debug("%s: Finishing pop limit loop", pq.desc.Name)
 }
 
 // Attempts to return a message into the front of the queue.
@@ -500,13 +565,19 @@ func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
 	pq.lockedMsgCnt--
 	popLimit := pq.config.PopCountLimit
 	if popLimit > 0 && msg.PopCount >= popLimit {
-		pq.deleteMessage(msg.SerialNumber)
-		return
+		if pq.config.PopLimitQueueName == "" {
+			pq.deleteMessage(msg.SerialNumber)
+		} else {
+			pq.trackHeap.Remove(msg.SerialNumber)
+			delete(pq.id2sn, msg.StrId)
+			pq.popLimitMoveChan <- msg
+		}
+	} else {
+		msg.UnlockTs = 0
+		pq.availMsgs.Push(msg)
+		pq.trackHeap.Push(msg)
+		pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
 	}
-	msg.UnlockTs = 0
-	pq.availMsgs.Push(msg)
-	pq.trackHeap.Push(msg)
-	pq.StoreItemBodyInDB(EncodeUint64ToString(msg.SerialNumber), msg.StringMarshal())
 }
 
 func (pq *PQueue) CheckTimeouts(ts int64) IResponse {
@@ -523,21 +594,13 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 		if msg.UnlockTs > 0 {
 			if msg.UnlockTs < ts {
 				cntRet++
-				h.Pop()
-				msg.UnlockTs = 0
 				pq.returnToFront(msg)
 			} else {
 				break
 			}
-		}
-		if msg.ExpireTs < ts {
+		} else if msg.ExpireTs < ts {
 			cntDel++
-			h.Pop()
-			delete(pq.id2sn, msg.StrId)
-			pq.availMsgs.Remove(msg.SerialNumber)
-			pq.payloadLock.Lock()
-			pq.DeleteFullItemFromDB(EncodeUint64ToString(msg.SerialNumber))
-			pq.payloadLock.Unlock()
+			pq.deleteMessage(msg.SerialNumber)
 		} else {
 			break
 		}
@@ -552,86 +615,48 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	return cntDel + cntRet
 }
 
-// StartUpdate runs a loop of periodic data updates.
-func (pq *PQueue) StartUpdate() {
-	go func() {
-		var cnt int64
-		for {
-			pq.closed.Lock()
-			if pq.closed.IsFalse() {
-				pq.lock.Lock()
-				cnt = pq.checkTimeouts(Uts())
-				pq.lock.Unlock()
-			} else {
-				pq.closed.Unlock()
-				break
-			}
-			pq.closed.Unlock()
-			if cnt >= CFG_PQ.TimeoutCheckBatchSize {
-				time.Sleep(time.Millisecond)
-			} else {
-				time.Sleep(CFG.UpdateInterval * time.Millisecond)
-			}
-		}
-	}()
-}
-
-// MessageSlice data type to sort messages.
-type MessageSlice []*PQMsgMetaData
-
-func (p MessageSlice) Len() int           { return len(p) }
-func (p MessageSlice) Less(i, j int) bool { return p[i].SerialNumber < p[j].SerialNumber }
-func (p MessageSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-
 func (pq *PQueue) loadAllMessages() {
 	nowTs := Uts()
 	log.Debug("Initializing queue: %s", pq.desc.Name)
 	msgIter := pq.GetItemIterator()
-	msgs := MessageSlice{}
 	delSn := []uint64{}
 
-	cfg := pq.config
 	for ; msgIter.Valid(); msgIter.Next() {
 		sn := DecodeBytesToUnit64(msgIter.GetTrimKey())
-		pqmsg := UnmarshalPQMsgMetaData(sn, msgIter.GetValue())
+		msg := UnmarshalPQMsgMetaData(sn, msgIter.GetValue())
 		// Message data has errors.
-		if pqmsg == nil {
+		if msg == nil {
 			continue
 		}
 
 		// Store list if message IDs that should be removed.
-		if pqmsg.ExpireTs <= nowTs || (pqmsg.PopCount >= cfg.PopCountLimit && cfg.PopCountLimit > 0) {
+		if msg.ExpireTs <= nowTs && msg.UnlockTs == 0 {
 			delSn = append(delSn, sn)
 		} else {
-			msgs = append(msgs, pqmsg)
+			// Don't count expired message to figure out the serial number.
+			// It may happen so that there is a chance to even reset a serial number
+			if sn > pq.msgSerialNumber {
+				pq.msgSerialNumber = sn
+			}
+			pq.id2sn[msg.StrId] = sn
+			pq.trackHeap.Push(msg)
+			if msg.UnlockTs == 0 {
+				pq.availMsgs.Push(msg)
+			} else {
+				pq.lockedMsgCnt++
+			}
 		}
 	}
+
 	msgIter.Close()
 
-	log.Debug("Loaded %d messages for %s queue", len(msgs), pq.desc.Name)
 	if len(delSn) > 0 {
 		log.Debug("Deleting %d expired messages", len(delSn))
 		for _, dsn := range delSn {
-			pq.DeleteFullItemFromDB(EncodeUint64ToString(dsn))
+			pq.DeleteFullItemFromDB(Sn2Bin(dsn))
 		}
 	}
-	// Sorting data guarantees that messages will be available in the same order as they arrived.
-	sort.Sort(msgs)
 
-	// Update serial number to match the latest message.
-	if len(msgs) > 0 {
-		pq.msgSerialNumber = msgs[len(msgs)-1].SerialNumber
-	}
-
-	for _, msg := range msgs {
-		pq.id2sn[msg.StrId] = msg.SerialNumber
-		pq.trackHeap.Push(msg)
-		if msg.UnlockTs == 0 {
-			pq.availMsgs.Push(msg)
-		} else {
-			pq.lockedMsgCnt++
-		}
-	}
 	log.Debug("Total messages: %d", len(pq.id2sn))
 	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
 	log.Debug("Available messages: %d", pq.availMsgs.Len())
