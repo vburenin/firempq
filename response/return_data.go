@@ -36,22 +36,15 @@ func (self *DictResponse) getResponseChunks() []string {
 	for k, v := range self.dict {
 		data = append(data, " ")
 		data = append(data, k)
-		data = append(data, " ")
 		switch t := v.(type) {
 		case string:
-			data = append(data, t)
+			data = append(data, EncodeString(t))
 		case int:
-			data = append(data, ":")
-			data = append(data, strconv.Itoa(t))
+			data = append(data, EncodeInt64(int64(t)))
 		case int64:
-			data = append(data, ":")
-			data = append(data, strconv.Itoa(int(t)))
+			data = append(data, EncodeInt64(t))
 		case bool:
-			if t {
-				data = append(data, "?t")
-			} else {
-				data = append(data, "?f")
-			}
+			data = append(data, EncodeBool(t))
 		}
 	}
 	return data
@@ -62,14 +55,8 @@ func (self *DictResponse) GetResponse() string {
 }
 
 func (self *DictResponse) WriteResponse(buff io.Writer) error {
-	var err error
-	for _, s := range self.getResponseChunks() {
-		_, err = buff.Write(UnsafeStringToBytes(s))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := buff.Write(UnsafeStringToBytes(self.GetResponse()))
+	return err
 }
 
 func (self *DictResponse) IsError() bool { return false }
@@ -103,14 +90,8 @@ func (self *ItemsResponse) GetResponse() string {
 }
 
 func (self *ItemsResponse) WriteResponse(buff io.Writer) error {
-	var err error
-	for _, s := range self.getResponseChunks() {
-		_, err = buff.Write(UnsafeStringToBytes(s))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := buff.Write(UnsafeStringToBytes(self.GetResponse()))
+	return err
 }
 
 func (self *ItemsResponse) IsError() bool {
