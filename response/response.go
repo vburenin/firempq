@@ -121,7 +121,9 @@ type AsyncResponse struct {
 }
 
 func NewAsyncResponse(asyncId string, resp IResponse) IResponse {
-	return &AsyncResponse{"+ASYNC " + asyncId + " ", resp}
+	return &AsyncResponse{
+		asyncHeader: "+ASYNC " + asyncId + " ",
+		resp:        resp}
 }
 
 func (r *AsyncResponse) GetResponse() string {
