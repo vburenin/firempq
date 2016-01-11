@@ -63,31 +63,41 @@ func (s *ServiceManager) loadAllServices() {
 		s.serviceIdCounter = descList[len(descList)-1].ExportId
 	}
 	for _, desc := range descList {
-		if desc.GetDisabled() {
-			log.Error("Service is disabled. Skipping: %s", desc.Name)
-			continue
+		if _, ok := s.allSvcs[desc.Name]; ok {
+			log.Warning("Service with the same name detected: %s", desc.Name)
 		}
-		if desc.GetToDelete() {
-			log.Warning("Service should be deleted: %s", desc.GetName())
-			DeleteServiceData(desc.GetName())
-			continue
-		}
-
-		log.Info("Loading service data for: %s", desc.Name)
-		serviceLoader, ok := GetServiceLoader(desc.SType)
-
-		if !ok {
-			log.Error("Unknown service '%s' type: %s", desc.Name, desc.SType)
-			continue
-		}
-		svcInstance, err := serviceLoader(s, desc)
-		if err != nil {
-			log.Error("Service '%s' was not loaded because of: %s", desc.Name, err)
-		} else {
-			s.allSvcs[desc.Name] = svcInstance
-			svcInstance.StartUpdate()
+		if svc, ok := s.loadService(desc); ok {
+			s.allSvcs[desc.Name] = svc
 		}
 	}
+	for _, svc := range s.allSvcs {
+		svc.StartUpdate()
+	}
+}
+
+func (s *ServiceManager) loadService(desc *ServiceDescription) (ISvc, bool) {
+	if desc.Disabled {
+		log.Error("Service is disabled. Skipping: %s", desc.Name)
+		return nil, false
+	}
+	if desc.ToDelete {
+		log.Warning("Service should be deleted: %s", desc.Name)
+		DeleteServiceData(desc.Name)
+		return nil, false
+	}
+	log.Info("Loading service data for: %s", desc.Name)
+
+	serviceLoader, ok := GetServiceLoader(desc.SType)
+	if !ok {
+		log.Error("Unknown service '%s' type: %s", desc.Name, desc.SType)
+		return nil, false
+	}
+	svcInstance, err := serviceLoader(s, desc)
+	if err != nil {
+		log.Error("Service '%s' was not loaded because of: %s", desc.Name, err)
+		return nil, false
+	}
+	return svcInstance, true
 }
 
 // CreateService creates a service of the specified type.
