@@ -275,7 +275,7 @@ func TestStatus(t *testing.T) {
 		Convey("Empty status should be default", func() {
 			s, _ := q.GetCurrentStatus().(*DictResponse)
 			status := s.GetDict()
-			So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 100001)
+			So(status[PQ_STATUS_MAX_QUEUE_SIZE], ShouldEqual, 100001)
 			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
 			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
 			So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 10000)
@@ -300,7 +300,7 @@ func TestStatus(t *testing.T) {
 
 			s, _ := q.GetCurrentStatus().(*DictResponse)
 			status := s.GetDict()
-			So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 100001)
+			So(status[PQ_STATUS_MAX_QUEUE_SIZE], ShouldEqual, 100001)
 			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
 			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
 			So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 10000)
@@ -325,7 +325,7 @@ func TestSetParams(t *testing.T) {
 		s, _ := q.GetCurrentStatus().(*DictResponse)
 		status := s.GetDict()
 		So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 10000)
-		So(status[PQ_STATUS_MAX_SIZE], ShouldEqual, 20000)
+		So(status[PQ_STATUS_MAX_QUEUE_SIZE], ShouldEqual, 20000)
 		So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 30000)
 		So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 40000)
 		So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 50000)

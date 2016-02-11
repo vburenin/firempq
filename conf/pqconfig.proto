@@ -1,0 +1,26 @@
+syntax = "proto3";
+package conf;
+
+message PQConfig {
+	// Default message TTL.
+	int64 msg_ttl = 1;
+	// Default delivery delay.
+	int64 delivery_delay = 2;
+	// Timeout before message is getting released.
+	int64 pop_lock_timeout = 3;
+	// Pop count limit. 0 - unlimited. >0 Will be removed after this number of attempts.
+	int64 pop_count_limit = 4;
+	// Max queue size.
+	int64 max_msgs_in_queue = 5;
+	// Max message size in bytes;
+	int64 max_msg_size = 6;
+	// Last time item has been pushed into queue.
+	int64 last_push_ts = 7;
+	// Last pop time.
+	int64 last_pop_ts = 8;
+	// Pop wait timeout.
+	int64 pop_wait_timeout = 9;
+	// Messages exceeded number of pop attemts will be moved into this queue if configured
+	string pop_limit_queue_name = 10;
+}
+

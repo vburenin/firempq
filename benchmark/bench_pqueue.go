@@ -35,7 +35,7 @@ func BenchMassPush() {
 	respWriter := NewTestResponseWriter()
 	ctx := svc.NewContext(respWriter)
 
-	ctx.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "10000000"})
+	ctx.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
 	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
@@ -63,7 +63,7 @@ func BenchMassPush() {
 	db.GetDatabase().FlushCache()
 	//println("waiting...")
 	//time.Sleep(time.Second * 1200)
-	f.DropService("BenchTest")
+	//f.DropService("BenchTest")
 	f.Close()
 	db.GetDatabase().Close()
 }
@@ -122,10 +122,10 @@ func BenchMassPushMultiQueue() {
 	ctx3 := svc3.NewContext(respWriter3)
 	ctx4 := svc4.NewContext(respWriter4)
 
-	ctx1.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx2.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx3.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx4.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx1.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx2.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx3.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx4.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
 
 	startTs := time.Now().UnixNano()
 	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}

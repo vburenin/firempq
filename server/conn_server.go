@@ -1,9 +1,10 @@
 package server
 
 import (
-	"firempq/services"
 	"firempq/log"
+	"firempq/services"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	. "firempq/api"
 	"firempq/common"
 	"firempq/db"
+	"firempq/server/sqsproto"
 )
 
 const (
@@ -21,21 +23,29 @@ const (
 type QueueOpFunc func(req []string) error
 
 type ConnectionServer struct {
-	facade     *services.ServiceManager
-	listener   net.Listener
-	signalChan chan os.Signal
-	waitGroup  sync.WaitGroup
+	serviceManager *services.ServiceManager
+	listener       net.Listener
+	signalChan     chan os.Signal
+	waitGroup      sync.WaitGroup
 }
 
 func NewSimpleServer(listener net.Listener) IServer {
 	return &ConnectionServer{
-		facade:     services.CreateServiceManager(),
-		listener:   listener,
-		signalChan: make(chan os.Signal, 1),
+		serviceManager: services.CreateServiceManager(),
+		listener:       listener,
+		signalChan:     make(chan os.Signal, 1),
 	}
 }
 
 func (self *ConnectionServer) Start() {
+	httpServer := http.Server{
+		Addr: ":8000",
+		Handler: &sqsproto.SQSRequestHandler{
+			ServiceManager: self.serviceManager,
+		},
+	}
+	go httpServer.ListenAndServe()
+
 	signal.Notify(self.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go self.waitForSignal()
 
@@ -60,7 +70,7 @@ func (self *ConnectionServer) Start() {
 func (self *ConnectionServer) Shutdown() {
 	self.waitGroup.Wait()
 	log.Info("Closing queues...")
-	self.facade.Close()
+	self.serviceManager.Close()
 	db.GetDatabase().Close()
 	log.Info("Server stopped.")
 }
@@ -88,6 +98,6 @@ func (self *ConnectionServer) handleConnection(conn net.Conn) {
 	defer self.waitGroup.Done()
 
 	self.waitGroup.Add(1)
-	session_handler := NewSessionHandler(conn, self.facade)
+	session_handler := NewSessionHandler(conn, self.serviceManager)
 	session_handler.DispatchConn()
 }

@@ -115,25 +115,18 @@ func (pq *PQueue) StartUpdate() {
 	}()
 }
 
-const (
-	PQ_STATUS_MAX_SIZE         = "MaxSize"
-	PQ_STATUS_MSG_TTL          = "MsgTtl"
-	PQ_STATUS_DELIVERY_DELAY   = "DeliveryDelay"
-	PQ_STATUS_POP_LOCK_TIMEOUT = "PopLockTimeout"
-	PQ_STATUS_POP_COUNT_LIMIT  = "PopCountLimit"
-	PQ_STATUS_CREATE_TS        = "CreateTs"
-	PQ_STATUS_LAST_PUSH_TS     = "LastPushTs"
-	PQ_STATUS_LAST_POP_TS      = "LastPopTs"
-	PQ_STATUS_TOTAL_MSGS       = "TotalMessages"
-	PQ_STATUS_IN_FLIGHT_MSG    = "InFlightMessages"
-	PQ_STATUS_AVAILABLE_MSGS   = "AvailableMessages"
-	PQ_STATUS_FAIL_QUEUE       = "FailQueue"
-)
+// ServiceConfig returns service config as an empty interface type.
+// User service type getter to find out the expected config type.
+func (pq *PQueue) ServiceConfig() interface{} {
+	return pq.config
+}
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
-	res[PQ_STATUS_MAX_SIZE] = pq.config.MaxSize
+	res[PQ_STATUS_MAX_QUEUE_SIZE] = pq.config.MaxMsgsInQueue
+	res[PQ_STATUS_POP_WAIT_TIMEOUT] = pq.config.PopWaitTimeout
 	res[PQ_STATUS_MSG_TTL] = pq.config.MsgTtl
+	res[PQ_STATUS_MAX_MSG_SIZE] = pq.config.MaxMsgSize
 	res[PQ_STATUS_DELIVERY_DELAY] = pq.config.DeliveryDelay
 	res[PQ_STATUS_POP_LOCK_TIMEOUT] = pq.config.PopLockTimeout
 	res[PQ_STATUS_POP_COUNT_LIMIT] = pq.config.PopCountLimit
@@ -147,7 +140,7 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeout int64, failQueue string) IResponse {
+func (pq *PQueue) SetParams(msgTtl, maxMsgSize, maxMsgsInQueue, deliveryDelay, popLimit, lockTimeout int64, failQueue string) IResponse {
 	if failQueue != "" {
 		if fq := pq.getFailQueue(failQueue); fq == nil {
 			return InvalidRequest("PQueue doesn't exist: " + failQueue)
@@ -155,7 +148,8 @@ func (pq *PQueue) SetParams(msgTtl, maxSize, deliveryDelay, popLimit, lockTimeou
 	}
 	pq.lock.Lock()
 	pq.config.MsgTtl = msgTtl
-	pq.config.MaxSize = maxSize
+	pq.config.MaxMsgSize = maxMsgSize
+	pq.config.MaxMsgsInQueue = maxMsgsInQueue
 	pq.config.DeliveryDelay = deliveryDelay
 	pq.config.PopCountLimit = popLimit
 	pq.config.PopLockTimeout = lockTimeout
@@ -336,7 +330,7 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 
 func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
 
-	if pq.config.MaxSize > 0 && int64(len(pq.id2sn)) >= pq.config.MaxSize {
+	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2sn)) >= pq.config.MaxMsgsInQueue {
 		return ERR_SIZE_EXCEEDED
 	}
 

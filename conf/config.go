@@ -17,7 +17,8 @@ type PQueueConfigData struct {
 	DefaultDeliveryDelay  int64
 	DefaultLockTimeout    int64
 	DefaultPopCountLimit  int64
-	DefaultMaxSize        int64
+	DefaultMaxQueueSize   int64
+	DefaultPopWaitTimeout int64
 	TimeoutCheckBatchSize int64
 
 	MaxPopWaitTimeout int64
@@ -25,6 +26,7 @@ type PQueueConfigData struct {
 	MaxLockTimeout    int64
 	MaxDeliveryDelay  int64
 	MaxMessageTtl     int64
+	MaxMessageSize    int64
 }
 
 // Config is a generic service config type.
@@ -63,13 +65,15 @@ func NewDefaultConfig() *Config {
 		BinaryLogPageSize:   2 * 1024 * 1024 * 1025, // 2Gb
 		PQueueConfig: PQueueConfigData{
 			// Max number of messages which can be pushed into the queue. 0 - no limit.
-			DefaultMaxSize: 0,
+			DefaultMaxQueueSize: 0,
 			// 10 minutes
 			DefaultMessageTtl: 10 * 60 * 1000,
 			// No delay
 			DefaultDeliveryDelay: 0,
 			// Locked by default 60 seconds.
 			DefaultLockTimeout: 60 * 1000,
+			// Pop operations will not wait by default.
+			DefaultPopWaitTimeout: 0,
 			// Do not time out too many messages at once, it may significantly increase latency.
 			TimeoutCheckBatchSize: 1000,
 			// Pop wait can not be set larger than 30 seconds.
@@ -82,6 +86,8 @@ func NewDefaultConfig() *Config {
 			MaxDeliveryDelay: 3600000 * 12,
 			// Max Message TTL is 14 days.
 			MaxMessageTtl: 3600000 * 24 * 14,
+			// Max Message size is 256KB.
+			MaxMessageSize: 256 * 1024,
 		},
 	}
 	CFG = &cfg

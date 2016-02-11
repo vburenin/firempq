@@ -68,7 +68,7 @@ func TestCtxParsePQConfig(t *testing.T) {
 		Convey("Check all parameters are correct", func() {
 			params := []string{
 				CPRM_MSG_TTL, "100",
-				CPRM_MAX_SIZE, "200",
+				CPRM_MAX_MSGS_IN_QUEUE, "200",
 				CPRM_DELIVERY_DELAY, "300",
 				CPRM_POP_LIMIT, "400",
 				CPRM_LOCK_TIMEOUT, "500",
@@ -86,7 +86,7 @@ func TestCtxParsePQConfig(t *testing.T) {
 			So(err.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxMessageTtl))
 		})
 		Convey("Max size parse error", func() {
-			_, err := ParsePQConfig([]string{CPRM_MAX_SIZE, "-1"})
+			_, err := ParsePQConfig([]string{CPRM_MAX_MSGS_IN_QUEUE, "-1"})
 			So(err.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 		Convey("Delivery delay parse error", func() {
@@ -405,7 +405,7 @@ func TestCtxSetParamValue(t *testing.T) {
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(CFG_PQ.MaxMessageTtl))
 		})
 		Convey("Queue Max Size", func() {
-			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_SIZE, "-1"})
+			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "-1"})
 			So(resp.GetResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 		Convey("Message delivery delay error", func() {
@@ -430,7 +430,7 @@ func TestCtxSetParamValue(t *testing.T) {
 			params := []string{
 				CPRM_DELIVERY_DELAY, "100",
 				CPRM_MSG_TTL, "10000",
-				CPRM_MAX_SIZE, "100000",
+				CPRM_MAX_MSGS_IN_QUEUE, "100000",
 			}
 			VerifyOkResponse(q.Call(PQ_CMD_SET_CFG, params))
 		})

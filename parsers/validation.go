@@ -1,24 +1,23 @@
 package parsers
 
 const (
-	MinItemIdLength = 1
-	MaxItemIdLength = 256
+	MaxItemIdLength      = 256
+	MaxServiceNameLength = 80
 )
 
 // ValidateItemId checks if symbol range is in the allowed scope for the item id
 func ValidateItemId(itemId string) bool {
-	if len(itemId) < MinItemIdLength || len(itemId) > MaxItemIdLength {
+	if len(itemId) == 0 || len(itemId) > MaxItemIdLength {
 		return false
 	}
 	for _, itemId := range itemId {
 		if (itemId >= '0' && itemId <= '9') ||
 			(itemId >= 'a' && itemId <= 'z') ||
 			(itemId >= 'A' && itemId <= 'Z') ||
-			itemId == '_' {
+			itemId == '_' || itemId == '-' {
 			continue
-		} else {
-			return false
 		}
+		return false
 	}
 	return true
 }
@@ -30,4 +29,11 @@ func ValidateUserItemId(itemId string) bool {
 		return true
 	}
 	return false
+}
+
+func ValidateServiceName(svcName string) bool {
+	if len(svcName) > MaxServiceNameLength {
+		return false
+	}
+	return ValidateItemId(svcName)
 }

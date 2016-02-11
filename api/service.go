@@ -28,6 +28,7 @@ type ISvc interface {
 	GetTypeName() string
 	GetSize() int
 	GetStatus() map[string]interface{}
+	ServiceConfig() interface{}
 	GetServiceId() string
 	Clear()
 	Close()
