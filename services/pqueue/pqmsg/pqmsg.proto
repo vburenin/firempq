@@ -2,14 +2,9 @@ syntax = "proto3";
 package pqmsg;
 
 
-message Attr {
-	enum Type {
-		STRTYPE = 0;
-		INTTYPE = 1;
-	}
-	string str_value = 1;
-	int64 int_value = 2;
-	Type data_type = 3;
+message MsgAttr {
+	string value = 1;
+	string type_name = 2;
 }
 
 message PQueueMsgData {
@@ -18,5 +13,5 @@ message PQueueMsgData {
 	int64 pop_count = 3;
 	int64 unlock_ts = 4;
 	string str_id = 5;
-	map<string, Attr> attrs = 6;
+	map<string, MsgAttr> attributes = 6;
 }
