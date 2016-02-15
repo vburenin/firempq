@@ -1,14 +1,19 @@
 package sqsproto
 
 import (
-	"firempq/api"
+	"firempq/common"
 	"firempq/log"
 	"firempq/server/sqsproto/create_queue"
+	"firempq/server/sqsproto/get_queue_url"
+	"firempq/server/sqsproto/send_message"
 	"firempq/server/sqsproto/sqs_response"
 	"firempq/server/sqsproto/sqserr"
 	"firempq/server/sqsproto/urlutils"
 	"firempq/services"
+	"firempq/services/pqueue"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 )
@@ -30,13 +35,14 @@ func (self *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) 
 	case "CreateQueue":
 		return create_queue.CreateQueue(self.ServiceManager, sqsQuery)
 	case "GetQueueUrl":
+		return get_queue_url.GetQueueUrl(self.ServiceManager, sqsQuery)
 	case "ListQueues":
 	case "ListDeadLetterSourceQueues":
 	}
 	return sqserr.InvalidActionError(sqsQuery.Action)
 }
 
-func (self *SQSRequestHandler) handleQueueActions(svc api.ISvc, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
 	case "CreateQueue":
 	case "DeleteQueue":
@@ -54,6 +60,7 @@ func (self *SQSRequestHandler) handleQueueActions(svc api.ISvc, sqsQuery *urluti
 	case "ListDeadLetterSourceQueues":
 	case "ReceiveMessage":
 	case "SendMessage":
+		return send_message.SendMessage(pq, sqsQuery)
 	case "SendMessageBatch":
 	}
 	return nil
@@ -71,7 +78,16 @@ func (self *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		if !ok {
 			resp = sqserr.InvalidActionError("No queue")
 		}
-		resp = self.handleQueueActions(svc, sqsQuery)
+		if svc.GetTypeName() != common.STYPE_PRIORITY_QUEUE {
+			resp = sqserr.QueueDoesNotExist()
+		} else {
+			fmt.Println(r.Method)
+			fmt.Println(r.URL.RawQuery)
+			data, _ := ioutil.ReadAll(r.Body)
+			fmt.Println(string(data))
+			pq, _ := svc.(*pqueue.PQueue)
+			resp = self.handleQueueActions(pq, sqsQuery)
+		}
 
 	} else if r.URL.Path == "/" {
 		resp = self.handleManageActions(sqsQuery)

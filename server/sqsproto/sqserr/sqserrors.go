@@ -2,7 +2,7 @@ package sqserr
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/urlutils"
+	"firempq/server/sqsproto/sqsencoding"
 	"fmt"
 )
 
@@ -21,7 +21,7 @@ func (self *SQSError) Error() string {
 }
 
 func (self *SQSError) XmlDocument() string {
-	return urlutils.EncodeXmlDocument(self)
+	return sqsencoding.EncodeXmlDocument(self)
 }
 
 func (self *SQSError) HttpCode() int {
@@ -88,6 +88,16 @@ func InvalidQueueNameError() *SQSError {
 	}
 }
 
+func QueueDoesNotExist() *SQSError {
+	return &SQSError{
+		Code:         "AWS.SimpleQueueService.NonExistentQueue",
+		HttpRespCode: 400,
+		Message:      "The specified queue does not exist for this wsdl version.",
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
 func QueueAlreadyExistsError(msg string) *SQSError {
 	return &SQSError{
 		Code:         "QueueAlreadyExists",
@@ -103,6 +113,16 @@ func ServerSideError(msg string) *SQSError {
 		Code:         "InternalFailure",
 		HttpRespCode: 500,
 		Message:      msg,
+		Type:         "Server",
+		RequestId:    "reqid",
+	}
+}
+
+func InvalidParameterValueError(msg string, params ...interface{}) *SQSError {
+	return &SQSError{
+		Code:         "InvalidParameterValue",
+		HttpRespCode: 400,
+		Message:      fmt.Sprintf(msg, params...),
 		Type:         "Sender",
 		RequestId:    "reqid",
 	}
