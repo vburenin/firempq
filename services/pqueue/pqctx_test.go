@@ -14,7 +14,6 @@ import (
 	. "firempq/conf"
 	. "firempq/errors"
 	. "firempq/response"
-	. "firempq/services/pqueue/pqmsg"
 	. "firempq/services/svcmetadata"
 	. "firempq/testutils"
 
@@ -23,7 +22,8 @@ import (
 
 func getCtxConfig() *PQConfig {
 	return &PQConfig{
-		MaxSize:        100001,
+		MaxMsgsInQueue: 100001,
+		MaxMsgSize:     256000,
 		MsgTtl:         100000,
 		DeliveryDelay:  1,
 		PopLockTimeout: 10000,
@@ -76,7 +76,7 @@ func TestCtxParsePQConfig(t *testing.T) {
 			cfg, resp := ParsePQConfig(params)
 			VerifyOkResponse(resp)
 			So(cfg.MsgTtl, ShouldEqual, 100)
-			So(cfg.MaxSize, ShouldEqual, 200)
+			So(cfg.MaxMsgsInQueue, ShouldEqual, 200)
 			So(cfg.DeliveryDelay, ShouldEqual, 300)
 			So(cfg.PopCountLimit, ShouldEqual, 400)
 			So(cfg.PopLockTimeout, ShouldEqual, 500)

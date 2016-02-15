@@ -10,11 +10,11 @@ func ValidateItemId(itemId string) bool {
 	if len(itemId) == 0 || len(itemId) > MaxItemIdLength {
 		return false
 	}
-	for _, itemId := range itemId {
-		if (itemId >= '0' && itemId <= '9') ||
-			(itemId >= 'a' && itemId <= 'z') ||
-			(itemId >= 'A' && itemId <= 'Z') ||
-			itemId == '_' || itemId == '-' {
+	for _, chr := range itemId {
+		if (chr >= '0' && chr <= '9') ||
+			(chr >= 'a' && chr <= 'z') ||
+			(chr >= 'A' && chr <= 'Z') ||
+			chr == '_' || chr == '-' {
 			continue
 		}
 		return false

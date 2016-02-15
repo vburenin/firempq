@@ -8,7 +8,9 @@ import (
 
 	. "firempq/api"
 	. "firempq/common"
+	"firempq/conf"
 	. "firempq/errors"
+	"firempq/parsers"
 	. "firempq/response"
 	. "firempq/services/svcmetadata"
 )
@@ -102,30 +104,36 @@ func (s *ServiceManager) loadService(desc *ServiceDescription) (ISvc, bool) {
 
 // CreateService creates a service of the specified type.
 func (s *ServiceManager) CreateService(svcType string, svcName string, params []string) IResponse {
+	switch svcType {
+	case STYPE_PRIORITY_QUEUE:
+		pqConf, resp := pqueue.ParsePQConfig(params)
+		if resp.IsError() {
+			return resp
+		}
+		return s.CreatePQueue(svcName, pqConf)
+	default:
+		return ERR_SVC_UNKNOWN_TYPE
+	}
+}
+
+func (s *ServiceManager) CreatePQueue(svcName string, config *conf.PQConfig) IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
-
+	if !parsers.ValidateServiceName(svcName) {
+		return ERR_WRONG_SVC_NAME
+	}
 	if _, ok := s.allSvcs[svcName]; ok {
 		return ERR_SVC_ALREADY_EXISTS
 	}
-	serviceConstructor, ok := GetServiceConstructor(svcType)
 
-	if !ok {
-		return ERR_SVC_UNKNOWN_TYPE
-	}
-
-	desc := NewServiceDescription(svcName, svcType, s.serviceIdCounter+1)
-
-	svc, resp := serviceConstructor(s, desc, params)
-	if resp.IsError() {
-		return resp
-	}
+	desc := NewServiceDescription(svcName, STYPE_PRIORITY_QUEUE, s.serviceIdCounter+1)
+	svc := pqueue.InitPQueue(s, desc, config)
 
 	s.serviceIdCounter++
 	SaveServiceDescription(desc)
+	s.allSvcs[svcName] = svc
 
 	svc.StartUpdate()
-	s.allSvcs[svcName] = svc
 
 	return OK_RESPONSE
 }

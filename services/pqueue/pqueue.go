@@ -117,7 +117,7 @@ func (pq *PQueue) StartUpdate() {
 
 // ServiceConfig returns service config as an empty interface type.
 // User service type getter to find out the expected config type.
-func (pq *PQueue) ServiceConfig() interface{} {
+func (pq *PQueue) Config() *PQConfig {
 	return pq.config
 }
 
@@ -328,7 +328,7 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 	return OK_RESPONSE
 }
 
-func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
+func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64, attributes map[string]*MsgAttr) IResponse {
 
 	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2sn)) >= pq.config.MaxMsgsInQueue {
 		return ERR_SIZE_EXCEEDED
@@ -349,6 +349,10 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 	sn := pq.msgSerialNumber
 	msg.SerialNumber = sn
 	pq.id2sn[msgId] = sn
+
+	if attributes != nil {
+		msg.Attributes = attributes
+	}
 
 	if delay == 0 {
 		pq.availMsgs.Push(msg)
@@ -576,7 +580,7 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 				pq.GetPayloadFromDB(binSn),
 				popLimitPq.config.MsgTtl,
 				popLimitPq.config.DeliveryDelay,
-				msg.Priority)
+				msg.Priority, nil)
 			pq.DeleteFullItemFromDB(binSn)
 			select {
 			case msg = <-pq.popLimitMoveChan:

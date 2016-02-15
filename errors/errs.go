@@ -68,6 +68,7 @@ func ServerError(errorText string) *ErrorResponse {
 }
 
 var ERR_NO_SVC = InvalidRequest("Service is not created")
+var ERR_WRONG_SVC_NAME = InvalidRequest("Name can only include alphanumeric characters, hyphens, or underscores. 1 to 80 in length")
 var ERR_SVC_UNKNOWN_TYPE = InvalidRequest("Unknown service type")
 var ERR_SVC_ALREADY_EXISTS = ConflictRequest("Service exists already")
 var ERR_ITEM_ALREADY_EXISTS = ConflictRequest("Message exists already")
