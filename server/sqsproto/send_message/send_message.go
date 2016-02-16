@@ -1,11 +1,15 @@
 package send_message
 
 import (
+	"crypto/md5"
+	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
-	"crypto/md5"
 	"firempq/common"
 	"firempq/conf"
 	"firempq/server/sqsproto/sqs_response"
@@ -16,9 +20,6 @@ import (
 	"firempq/services/pqueue"
 	"firempq/services/pqueue/pqmsg"
 	"firempq/utils"
-	"net/http"
-	"sort"
-	"strings"
 )
 
 type SendMessageResponse struct {
@@ -49,7 +50,11 @@ func (self *ReqMsgAttr) Parse(paramName string, value string) *sqserr.SQSError {
 	case "Value.StringValue":
 		self.StringValue = value
 	case "Value.BinaryValue":
-		self.BinaryValue = value
+		binValue, err := base64.RawStdEncoding.DecodeString(value)
+		if err != nil {
+			return sqserr.InvalidParameterValueError("Invalid binary data: %s", err.Error())
+		}
+		self.BinaryValue = string(binValue)
 	}
 	return nil
 }
@@ -144,18 +149,22 @@ func SendMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQ
 			return sqserr.InvalidParameterValueError("The request must contain non-empty message attribute name.")
 		}
 		reqMsgAttr, _ := a.(*ReqMsgAttr)
+
 		sqs_err := validation.ValidateMessageAttrName(reqMsgAttr.Name)
 		if sqs_err != nil {
 			return sqs_err
 		}
+
 		sqs_err = validation.ValidateMessageAttrName(reqMsgAttr.DataType)
 		if sqs_err != nil {
 			return sqs_err
 		}
+
 		if reqMsgAttr.BinaryValue != "" && reqMsgAttr.StringValue != "" {
 			return sqserr.InvalidParameterValueError(
 				"Message attribute name '%s' has multiple values.", reqMsgAttr.Name)
 		}
+
 		if _, ok := outAttrs[reqMsgAttr.Name]; ok {
 			return sqserr.InvalidParameterValueError(
 				"Message attribute name '%s' already exists.", reqMsgAttr.Name)
