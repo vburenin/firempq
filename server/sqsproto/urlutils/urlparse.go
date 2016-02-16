@@ -16,6 +16,7 @@ type SQSQuery struct {
 	Expires         string
 	QueueName       string
 	QueueNamePrefix string
+	QueueUrl        string
 	ParamsList      []string
 }
 
@@ -78,13 +79,14 @@ func ParseSQSQuery(req *http.Request) (*SQSQuery, error) {
 			sqsQuery.QueueName = value
 		case "QueueNamePrefix":
 			sqsQuery.QueueNamePrefix = value
+		case "QueueUrl":
+			sqsQuery.QueueUrl = value
 		default:
 			sqsQuery.ParamsList = append(sqsQuery.ParamsList, key, value)
 		}
 	}
 	return sqsQuery, err
 }
-
 
 func getQueryString(req *http.Request) (string, error) {
 	if req.Method == "POST" {

@@ -11,10 +11,9 @@ import (
 	"firempq/server/sqsproto/urlutils"
 	"firempq/services"
 	"firempq/services/pqueue"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -66,37 +65,44 @@ func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *u
 	return nil
 }
 
-func (self *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var resp sqs_response.SQSResponse = nil
+func (self *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSResponse {
+	var queuePath string
+
 	sqsQuery, err := urlutils.ParseSQSQuery(r)
 	if err != nil {
-		sqserr.ServiceDeniedError()
+		return sqserr.ServiceDeniedError()
 	}
-	if strings.HasPrefix(r.URL.Path, "/queue/") {
-		sqsQuery.QueueName = strings.SplitN(r.URL.Path, "/queue/", 2)[1]
+	if sqsQuery.QueueUrl != "" {
+		queueUrl, err := url.ParseRequestURI(sqsQuery.QueueUrl)
+		if err != nil {
+			return sqserr.ServiceDeniedError()
+		}
+		queuePath = queueUrl.Path
+	} else {
+		queuePath = r.URL.Path
+	}
+	if strings.HasPrefix(queuePath, "/queue/") {
+		sqsQuery.QueueName = strings.SplitN(queuePath, "/queue/", 2)[1]
 		svc, ok := self.ServiceManager.GetService(sqsQuery.QueueName)
 		if !ok {
-			resp = sqserr.InvalidActionError("No queue")
+			return sqserr.InvalidActionError("No queue")
 		}
 		if svc.GetTypeName() != common.STYPE_PRIORITY_QUEUE {
-			resp = sqserr.QueueDoesNotExist()
+			return sqserr.QueueDoesNotExist()
 		} else {
-			fmt.Println(r.Method)
-			fmt.Println(r.URL.RawQuery)
-			data, _ := ioutil.ReadAll(r.Body)
-			fmt.Println(string(data))
 			pq, _ := svc.(*pqueue.PQueue)
-			resp = self.handleQueueActions(pq, sqsQuery)
+			return self.handleQueueActions(pq, sqsQuery)
 		}
 
 	} else if r.URL.Path == "/" {
-		resp = self.handleManageActions(sqsQuery)
-	} else {
+		return self.handleManageActions(sqsQuery)
+	}
+	return sqserr.ServiceDeniedError()
+}
 
-	}
-	if resp == nil {
-		return
-	}
+func (self *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resp := self.dispatchSQSQuery(r)
+
 	log.Info(resp.XmlDocument())
 	w.WriteHeader(resp.HttpCode())
 	io.WriteString(w, resp.XmlDocument())
