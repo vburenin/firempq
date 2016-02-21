@@ -369,7 +369,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 
 	if syncWait {
 		if len(asyncId) == 0 {
-			res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority, nil)
+			res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 			if !res.IsError() {
 				ctx.pq.WaitFlush()
 			}
@@ -377,7 +377,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 		} else {
 			go func() {
 				ctx.asyncGroup.Add(1)
-				res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority, nil)
+				res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 				if !res.IsError() {
 					ctx.pq.WaitFlush()
 				}
@@ -390,7 +390,7 @@ func (ctx *PQContext) Push(params []string) IResponse {
 	if len(asyncId) > 0 {
 		return NewAsyncResponse(asyncId, ERR_ASYNC_PUSH)
 	}
-	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority, nil)
+	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 }
 
 // UpdateLockByRcpt updates message lock according to provided receipt.

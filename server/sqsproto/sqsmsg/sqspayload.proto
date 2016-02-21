@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package sqsmsg;
+
+
+message UserAttribute {
+	string type = 1;
+	string value = 2;
+}
+
+message SQSMessagePayload {
+	string payload = 1;
+	string MD5_of_message_body = 2;
+	string MD5_of_message_attributes = 3;
+	string sender_id = 4;
+	string sent_timestamp = 5;
+	map<string, UserAttribute> user_attributes = 6;
+}

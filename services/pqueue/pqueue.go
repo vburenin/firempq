@@ -251,7 +251,9 @@ func (pq *PQueue) Pop(lockTimeout, popWaitTimeout, limit int64, lock bool) IResp
 		return NewItemsResponse(msgItems)
 	}
 
+	endTs := Uts() + popWaitTimeout
 	for {
+		waitLeft := endTs - Uts()
 		select {
 		case <-GetQuitChan():
 			return NewItemsResponse(msgItems)
@@ -260,7 +262,7 @@ func (pq *PQueue) Pop(lockTimeout, popWaitTimeout, limit int64, lock bool) IResp
 			if len(msgItems) > 0 {
 				return NewItemsResponse(msgItems)
 			}
-		case <-time.After(time.Duration(popWaitTimeout) * time.Millisecond):
+		case <-time.After(time.Duration(waitLeft) * time.Millisecond):
 			return NewItemsResponse(pq.popMessages(lockTimeout, limit, lock))
 		}
 	}
@@ -328,7 +330,7 @@ func (pq *PQueue) DeleteById(msgId string) IResponse {
 	return OK_RESPONSE
 }
 
-func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64, attributes map[string]*MsgAttr) IResponse {
+func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IResponse {
 
 	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2sn)) >= pq.config.MaxMsgsInQueue {
 		return ERR_SIZE_EXCEEDED
@@ -349,10 +351,6 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64, att
 	sn := pq.msgSerialNumber
 	msg.SerialNumber = sn
 	pq.id2sn[msgId] = sn
-
-	if attributes != nil {
-		msg.Attributes = attributes
-	}
 
 	if delay == 0 {
 		pq.availMsgs.Push(msg)
@@ -474,9 +472,10 @@ func (pq *PQueue) acquireLockAndGetReceiptMessage(rcpt string) (*PQMsgMetaData, 
 	// To improve performance the lock is acquired here. The caller must unlock it.
 	pq.lock.Lock()
 	msg := pq.trackHeap.GetMsg(sn)
-	if msg != nil && msg.UnlockTs > 0 && msg.PopCount == popCount {
+	if msg != nil && msg.PopCount == popCount {
 		return msg, nil
 	}
+
 	pq.lock.Unlock()
 	return nil, ERR_RECEIPT_EXPIRED
 }
@@ -488,10 +487,17 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) IResponse {
 	if err != nil {
 		return err
 	}
+
+	if msg.UnlockTs == 0 {
+		pq.availMsgs.Remove(msg.SerialNumber)
+	}
+
 	msg.UnlockTs = Uts() + lockTimeout
+
 	pq.trackHeap.Push(msg)
 	pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
 	pq.lock.Unlock()
+
 	return OK_RESPONSE
 }
 
@@ -512,7 +518,9 @@ func (pq *PQueue) UnlockByReceipt(rcpt string) IResponse {
 	if err != nil {
 		return err
 	}
-	pq.returnToFront(msg)
+	if msg.UnlockTs > 0 {
+		pq.returnToFront(msg)
+	}
 	pq.lock.Unlock()
 	return OK_RESPONSE
 }
@@ -580,7 +588,7 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 				pq.GetPayloadFromDB(binSn),
 				popLimitPq.config.MsgTtl,
 				popLimitPq.config.DeliveryDelay,
-				msg.Priority, nil)
+				msg.Priority)
 			pq.DeleteFullItemFromDB(binSn)
 			select {
 			case msg = <-pq.popLimitMoveChan:

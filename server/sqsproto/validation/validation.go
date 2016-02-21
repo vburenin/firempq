@@ -47,3 +47,55 @@ func ValidateMessageAttrType(attrName, v string) *sqserr.SQSError {
 	}
 	return nil
 }
+
+func ValidateBatchRequestId(id string) *sqserr.SQSError {
+	idLen := len(id)
+	ok := true
+	if idLen > 0 && idLen < 81 {
+		for _, chr := range id {
+			if (chr >= '0' && chr <= '9') ||
+				(chr >= 'a' && chr <= 'z') ||
+				(chr >= 'A' && chr <= 'Z') ||
+				chr == '_' || chr == '-' {
+				continue
+			}
+			ok = false
+			break
+		}
+	}
+	if ok {
+		return nil
+	}
+	return sqserr.Error400(
+		"AWS.SimpleQueueService.InvalidBatchEntryId",
+		"A batch entry id can only contain alphanumeric characters, hyphens and underscores. "+
+			"It can be at most 80 letters long.")
+}
+
+type BatchIdValidation struct {
+	uniqIds map[string]struct{}
+}
+
+func NewBatchIdValidation(reqSize int) (*BatchIdValidation, *sqserr.SQSError) {
+	if reqSize == 0 {
+		return nil, sqserr.EmptyBatchRequestError()
+	}
+
+	if reqSize > 10 {
+		return nil, sqserr.TooManyEntriesInBatchRequestError()
+	}
+	return &BatchIdValidation{
+		uniqIds: make(map[string]struct{}, reqSize),
+	}, nil
+}
+
+func (self *BatchIdValidation) Validate(id string) *sqserr.SQSError {
+	if err := ValidateBatchRequestId(id); err != nil {
+		return err
+	}
+	if _, ok := self.uniqIds[id]; ok {
+		return sqserr.NotDistinctIdsError(id)
+	}
+	self.uniqIds[id] = struct{}{}
+	return nil
+}

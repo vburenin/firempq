@@ -1,20 +1,26 @@
 package sqsproto
 
 import (
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
 	"firempq/common"
-	"firempq/log"
+	"firempq/server/sqsproto/change_message_visibility"
 	"firempq/server/sqsproto/create_queue"
+	"firempq/server/sqsproto/delete_message"
 	"firempq/server/sqsproto/get_queue_url"
+	"firempq/server/sqsproto/list_queues"
+	"firempq/server/sqsproto/purge_queue"
+	"firempq/server/sqsproto/receive_message"
 	"firempq/server/sqsproto/send_message"
+	"firempq/server/sqsproto/send_message_batch"
 	"firempq/server/sqsproto/sqs_response"
 	"firempq/server/sqsproto/sqserr"
 	"firempq/server/sqsproto/urlutils"
 	"firempq/services"
 	"firempq/services/pqueue"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
 )
 
 type SQSRequestHandler struct {
@@ -36,6 +42,7 @@ func (self *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) 
 	case "GetQueueUrl":
 		return get_queue_url.GetQueueUrl(self.ServiceManager, sqsQuery)
 	case "ListQueues":
+		return list_queues.ListQueues(self.ServiceManager, sqsQuery)
 	case "ListDeadLetterSourceQueues":
 	}
 	return sqserr.InvalidActionError(sqsQuery.Action)
@@ -43,24 +50,25 @@ func (self *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) 
 
 func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
-	case "CreateQueue":
 	case "DeleteQueue":
-	case "GetQueueUrl":
 	case "SetQueueAttributes":
 	case "GetQueueAttributes":
-	case "ListQueues":
 	case "PurgeQueue":
-	case "AddPermission":
-	case "RemovePermission":
-	case "ChangeMessageVisiblity":
+		return purge_queue.PurgeQueue(pq, sqsQuery)
+	case "ChangeMessageVisibility":
+		return change_message_visibility.ChangeMessageVisibility(pq, sqsQuery)
 	case "ChangeMessageVisibilityBatch":
-	case "DeleteMessage":
 	case "DeleteMessageBatch":
-	case "ListDeadLetterSourceQueues":
+	case "DeleteMessage":
+		return delete_message.DeleteMessage(pq, sqsQuery)
 	case "ReceiveMessage":
+		return receive_message.ReceiveMessage(pq, sqsQuery)
 	case "SendMessage":
 		return send_message.SendMessage(pq, sqsQuery)
 	case "SendMessageBatch":
+		return send_message_batch.SendMessageBatch(pq, sqsQuery)
+	case "AddPermission":
+	case "RemovePermission":
 	}
 	return nil
 }
@@ -102,8 +110,11 @@ func (self *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQ
 
 func (self *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp := self.dispatchSQSQuery(r)
+	if resp == nil {
+		return
+	}
 
-	log.Info(resp.XmlDocument())
+	//log.Info(resp.XmlDocument())
 	w.WriteHeader(resp.HttpCode())
 	io.WriteString(w, resp.XmlDocument())
 	io.WriteString(w, "\n")

@@ -14,18 +14,13 @@ import (
 
 type GetQueueUrlResult struct {
 	XMLName   xml.Name `xml:"http://queue.amazonaws.com/doc/2012-11-05/ GetQueueUrlResult"`
-	QueueUrl  string   `xml:"CreateQueueResult>QueueUrl"`
+	QueueUrl  string   `xml:"GetQueueUrlResult>QueueUrl"`
 	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *GetQueueUrlResult) XmlDocument() string { return sqsencoding.EncodeXmlDocument(self) }
-func (self *GetQueueUrlResult) HttpCode() int       { return http.StatusOK }
-
-func ParseMessageAttributes(sqsQuery *urlutils.SQSQuery) (map[string]string, *sqserr.SQSError) {
-	for {
-
-	}
-}
+func (self *GetQueueUrlResult) XmlDocument() string                  { return sqsencoding.EncodeXmlDocument(self) }
+func (self *GetQueueUrlResult) HttpCode() int                        { return http.StatusOK }
+func (self *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
 
 func GetQueueUrl(svcMgr *services.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	svc, ok := svcMgr.GetService(sqsQuery.QueueName)

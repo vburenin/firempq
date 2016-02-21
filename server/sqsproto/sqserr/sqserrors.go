@@ -16,12 +16,28 @@ type SQSError struct {
 	HttpRespCode int      `xml:"-"`
 }
 
+type BatchResultErrorEntry struct {
+	Id          string
+	SenderFault bool
+	Message     string
+	Code        string
+}
+
 func (self *SQSError) Error() string {
 	return self.Code + ": " + self.Message
 }
 
 func (self *SQSError) XmlDocument() string {
 	return sqsencoding.EncodeXmlDocument(self)
+}
+
+func (self *SQSError) BatchResult(docId string) interface{} {
+	return &BatchResultErrorEntry{
+		Id:          docId,
+		SenderFault: self.Type == "Sender",
+		Message:     self.Message,
+		Code:        self.Code,
+	}
 }
 
 func (self *SQSError) HttpCode() int {
@@ -123,6 +139,67 @@ func InvalidParameterValueError(msg string, params ...interface{}) *SQSError {
 		Code:         "InvalidParameterValue",
 		HttpRespCode: 400,
 		Message:      fmt.Sprintf(msg, params...),
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
+func MissingParameterError(msg string, params ...interface{}) *SQSError {
+	return &SQSError{
+		Code:         "MissingParameter",
+		HttpRespCode: 400,
+		Message:      fmt.Sprintf(msg, params...),
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
+func InvalidReceiptHandleError(msg string) *SQSError {
+	return &SQSError{
+		Code:         "ReceiptHandleIsInvalid",
+		HttpRespCode: 404,
+		Message:      msg,
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
+
+func Error400(code, msg string, params ...interface{}) *SQSError {
+	return &SQSError{
+		Code:         code,
+		HttpRespCode: 400,
+		Message:      fmt.Sprintf(msg, params...),
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
+func EmptyBatchRequestError() *SQSError {
+	return &SQSError{
+		Code:         "AWS.SimpleQueueService.EmptyBatchRequest",
+		HttpRespCode: 400,
+		Message:      "There should be at least one request entry in the request.",
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
+func TooManyEntriesInBatchRequestError() *SQSError {
+	return &SQSError{
+		Code:         "AWS.SimpleQueueService.TooManyEntriesInBatchRequest",
+		HttpRespCode: 400,
+		Message:      "Maximum number of entries per request is 10",
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
+func NotDistinctIdsError(id string) *SQSError {
+	return &SQSError{
+		Code:         "AWS.SimpleQueueService.BatchEntryIdsNotDistinct",
+		HttpRespCode: 400,
+		Message:      fmt.Sprintf("Id %s repeated.", id),
 		Type:         "Sender",
 		RequestId:    "reqid",
 	}

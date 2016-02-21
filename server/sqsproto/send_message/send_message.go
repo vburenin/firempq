@@ -15,23 +15,38 @@ import (
 	"firempq/server/sqsproto/sqs_response"
 	"firempq/server/sqsproto/sqsencoding"
 	"firempq/server/sqsproto/sqserr"
+	"firempq/server/sqsproto/sqsmsg"
 	"firempq/server/sqsproto/urlutils"
 	"firempq/server/sqsproto/validation"
 	"firempq/services/pqueue"
-	"firempq/services/pqueue/pqmsg"
 	"firempq/utils"
 )
 
 type SendMessageResponse struct {
 	XMLName                xml.Name `xml:"http://queue.amazonaws.com/doc/2012-11-05/ SendMessageResponse"`
 	MessageId              string   `xml:"SendMessageResult>MessageId"`
-	MD5OfMessageBody       string   `xml:"SendMessageResult>MD5OfMessageBody"`
+	MD5OfMessageBody       string   `xml:"SendMessageResult>MD5OfMessageBody,omitempty"`
 	MD5OfMessageAttributes string   `xml:"SendMessageResult>MD5OfMessageAttributes,omitempty"`
 	RequestId              string   `xml:"ResponseMetadata>RequestId"`
 }
 
+type SendMessageBatchResult struct {
+	Id                     string `xml:"Id,omitempty"`
+	MessageId              string `xml:"MessageId,omitempty"`
+	MD5OfMessageBody       string `xml:"MD5OfMessageBody,omitempty"`
+	MD5OfMessageAttributes string `xml:"MD5OfMessageAttributes,omitempty"`
+}
+
 func (self *SendMessageResponse) HttpCode() int       { return http.StatusOK }
 func (self *SendMessageResponse) XmlDocument() string { return sqsencoding.EncodeXmlDocument(self) }
+func (self *SendMessageResponse) BatchResult(docId string) interface{} {
+	return &SendMessageBatchResult{
+		Id:                     docId,
+		MessageId:              self.MessageId,
+		MD5OfMessageBody:       self.MD5OfMessageBody,
+		MD5OfMessageAttributes: self.MD5OfMessageAttributes,
+	}
+}
 
 type ReqMsgAttr struct {
 	Name        string
@@ -59,18 +74,18 @@ func (self *ReqMsgAttr) Parse(paramName string, value string) *sqserr.SQSError {
 	return nil
 }
 
-func EncodeAttrTo(name string, data *pqmsg.MsgAttr, b []byte) []byte {
+func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	nLen := len(name)
 	b = append(b, byte(nLen>>24), byte(nLen>>16), byte(nLen>>8), byte(nLen))
 	b = append(b, utils.UnsafeStringToBytes(name)...)
 
-	tLen := len(data.TypeName)
+	tLen := len(data.Type)
 	b = append(b, byte(tLen>>24), byte(tLen>>16), byte(tLen>>8), byte(tLen))
-	b = append(b, utils.UnsafeStringToBytes(data.TypeName)...)
+	b = append(b, utils.UnsafeStringToBytes(data.Type)...)
 
-	if strings.HasPrefix(data.TypeName, "String") || strings.HasPrefix(data.TypeName, "Number") {
+	if strings.HasPrefix(data.Type, "String") || strings.HasPrefix(data.Type, "Number") {
 		b = append(b, 1)
-	} else if strings.HasPrefix(data.TypeName, "Binary") {
+	} else if strings.HasPrefix(data.Type, "Binary") {
 		b = append(b, 2)
 	}
 	valLen := len(data.Value)
@@ -79,10 +94,10 @@ func EncodeAttrTo(name string, data *pqmsg.MsgAttr, b []byte) []byte {
 	return b
 }
 
-// TODO(vburenin): If Binary content is present MD5 checksum is wrong for some reason.
+// Calculates MD5 for message attributes.
 // Amazon doc: http://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/SQSMessageAttributes.html
-// It looks like it is SQS bug on AWS side.
-func calcAttrMd5(attrMap map[string]*pqmsg.MsgAttr) string {
+// There is a caveat, all binary content must be base64 encoded when transferred over the wire.
+func CalcAttrMd5(attrMap map[string]*sqsmsg.UserAttribute) string {
 	if len(attrMap) == 0 {
 		return ""
 	}
@@ -91,7 +106,7 @@ func calcAttrMd5(attrMap map[string]*pqmsg.MsgAttr) string {
 	dataLen := 0
 	for k, v := range attrMap {
 		keys = append(keys, k)
-		dataLen += len(k) + len(v.TypeName) + len(v.Value) + 13 // 4(name) + 4(type) + 4(val) + 1(wireType) == 13
+		dataLen += len(k) + len(v.Type) + len(v.Value) + 13 // 4(name) + 4(type) + 4(val) + 1(wireType) == 13
 	}
 	sort.Strings(keys)
 
@@ -127,21 +142,17 @@ func (self *MessageParams) Parse(paramName, value string) *sqserr.SQSError {
 
 var IdGen = common.NewIdGen()
 
-func SendMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-	var err *sqserr.SQSError
+func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_response.SQSResponse {
 	out := &MessageParams{
 		DelaySeconds: -1,
 		MessageBody:  "",
 	}
-
-	attrs, err := urlutils.ParseNNotationAttr("MessageAttribute.", sqsQuery.ParamsList, out.Parse, NewReqQueueAttr)
-
+	attrs, err := urlutils.ParseNNotationAttr("MessageAttribute.", paramList, out.Parse, NewReqQueueAttr)
 	if err != nil {
 		return err
 	}
-
 	attrsLen := len(attrs)
-	outAttrs := make(map[string]*pqmsg.MsgAttr)
+	outAttrs := make(map[string]*sqsmsg.UserAttribute)
 
 	for i := 1; i <= attrsLen; i++ {
 		a, ok := attrs[i]
@@ -178,14 +189,14 @@ func SendMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQ
 		}
 
 		if reqMsgAttr.BinaryValue != "" {
-			outAttrs[reqMsgAttr.Name] = &pqmsg.MsgAttr{
-				TypeName: reqMsgAttr.DataType,
-				Value:    reqMsgAttr.BinaryValue,
+			outAttrs[reqMsgAttr.Name] = &sqsmsg.UserAttribute{
+				Type:  reqMsgAttr.DataType,
+				Value: reqMsgAttr.BinaryValue,
 			}
 		} else {
-			outAttrs[reqMsgAttr.Name] = &pqmsg.MsgAttr{
-				TypeName: reqMsgAttr.DataType,
-				Value:    reqMsgAttr.StringValue,
+			outAttrs[reqMsgAttr.Name] = &sqsmsg.UserAttribute{
+				Type:  reqMsgAttr.DataType,
+				Value: reqMsgAttr.StringValue,
 			}
 		}
 	}
@@ -197,15 +208,26 @@ func SendMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQ
 		return sqserr.InvalidParameterValueError(
 			"Delay secods must be between 0 and %d", conf.CFG_PQ.MaxDeliveryDelay/1000)
 	}
+	bodyMd5str := fmt.Sprintf("%x", md5.Sum(utils.UnsafeStringToBytes(out.MessageBody)))
+	attrMd5 := CalcAttrMd5(outAttrs)
 
-	resp := pq.Push(msgId, out.MessageBody, pq.Config().MsgTtl, out.DelaySeconds, 1, outAttrs)
+	msgPayload := sqsmsg.SQSMessagePayload{
+		UserAttributes:         outAttrs,
+		MD5OfMessageBody:       bodyMd5str,
+		MD5OfMessageAttributes: attrMd5,
+		SenderId:               senderId,
+		SentTimestamp:          strconv.FormatInt(utils.Uts(), 10),
+		Payload:                out.MessageBody,
+	}
+
+	d, _ := msgPayload.Marshal()
+	payload := utils.UnsafeBytesToString(d)
+
+	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds, 1)
 	if resp.IsError() {
 		e, _ := resp.(error)
 		return sqserr.InvalidParameterValueError(e.Error())
 	}
-
-	bodyMd5str := fmt.Sprintf("%x", md5.Sum(utils.UnsafeStringToBytes(out.MessageBody)))
-	attrMd5 := calcAttrMd5(outAttrs)
 
 	return &SendMessageResponse{
 		MessageId:              msgId,
@@ -213,4 +235,8 @@ func SendMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQ
 		MD5OfMessageAttributes: attrMd5,
 		RequestId:              "req",
 	}
+}
+
+func SendMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+	return PushAMessage(pq, sqsQuery.SenderId, sqsQuery.ParamsList)
 }

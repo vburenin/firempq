@@ -18,6 +18,7 @@ type SQSQuery struct {
 	QueueNamePrefix string
 	QueueUrl        string
 	ParamsList      []string
+	SenderId        string
 }
 
 var maxFormSize = int64(30 * 1024 * 1024)
@@ -85,6 +86,7 @@ func ParseSQSQuery(req *http.Request) (*SQSQuery, error) {
 			sqsQuery.ParamsList = append(sqsQuery.ParamsList, key, value)
 		}
 	}
+	sqsQuery.SenderId = req.RemoteAddr
 	return sqsQuery, err
 }
 

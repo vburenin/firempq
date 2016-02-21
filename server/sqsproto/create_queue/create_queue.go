@@ -41,8 +41,9 @@ type CreateQueueResponse struct {
 	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *CreateQueueResponse) XmlDocument() string { return sqsencoding.EncodeXmlDocument(self) }
-func (self *CreateQueueResponse) HttpCode() int       { return http.StatusOK }
+func (self *CreateQueueResponse) XmlDocument() string                  { return sqsencoding.EncodeXmlDocument(self) }
+func (self *CreateQueueResponse) HttpCode() int                        { return http.StatusOK }
+func (self *CreateQueueResponse) BatchResult(docId string) interface{} { return nil }
 
 func NewQueueAttributes() *QueueAttributes {
 	return &QueueAttributes{

@@ -92,8 +92,8 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
 	Convey("Test push and pop messages", t, func() {
-		q.Push("data1", "p1", 10000, 0, 12, nil)
-		q.Push("data2", "p2", 10000, 0, 12, nil)
+		q.Push("data1", "p1", 10000, 0, 12)
+		q.Push("data2", "p2", 10000, 0, 12)
 		VerifyServiceSize(q, 2)
 		VerifyItems(q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
 		VerifyServiceSize(q, 2)
@@ -116,9 +116,9 @@ func TestAutoExpiration(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
 	Convey("Two messages should expire, one message should still be in the queue", t, func() {
-		q.Push("data1", "p1", 1000, 0, 12, nil)
-		q.Push("data2", "p2", 1000, 0, 12, nil)
-		q.Push("data3", "p3", 10000, 0, 12, nil)
+		q.Push("data1", "p1", 1000, 0, 12)
+		q.Push("data2", "p2", 1000, 0, 12)
+		q.Push("data3", "p3", 10000, 0, 12)
 		VerifyServiceSize(q, 3)
 		q.checkTimeouts(Uts() + 1300)
 		VerifyServiceSize(q, 1)
@@ -129,8 +129,8 @@ func TestUnlockById(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
 	Convey("Locked message should become visible again after it gets unlocked", t, func() {
-		q.Push("data1", "p1", 1000, 0, 12, nil)
-		q.Push("data2", "p2", 1000, 0, 12, nil)
+		q.Push("data1", "p1", 1000, 0, 12)
+		q.Push("data2", "p2", 1000, 0, 12)
 		VerifyItems(q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
 		VerifyItems(q.Pop(10000, 0, 10, true), 0)
 		q.UnlockMessageById("data2")
@@ -142,7 +142,7 @@ func TestDeleteById(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
 	Convey("Delete not locked message", t, func() {
-		q.Push("data1", "p1", 1000, 0, 12, nil)
+		q.Push("data1", "p1", 1000, 0, 12)
 		VerifyServiceSize(q, 1)
 		q.DeleteById("data1")
 		VerifyServiceSize(q, 0)
@@ -153,8 +153,8 @@ func TestDeleteById(t *testing.T) {
 func TestDeleteLockedById(t *testing.T) {
 	q := CreateNewTestQueue()
 	Convey("Locked message should be removed", t, func() {
-		q.Push("data1", "p1", 10000, 0, 12, nil)
-		q.Push("data2", "p2", 10000, 0, 12, nil)
+		q.Push("data1", "p1", 10000, 0, 12)
+		q.Push("data2", "p2", 10000, 0, 12)
 		VerifyItems(q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
 		q.DeleteLockedById("data1")
 		q.DeleteLockedById("data2")
@@ -167,9 +167,9 @@ func TestPopWaitBatch(t *testing.T) {
 	defer q.Close()
 	go func() {
 		time.Sleep(time.Second / 10)
-		q.Push("d1", "1", 10000, 0, 12, nil)
-		q.Push("d2", "2", 10000, 0, 12, nil)
-		q.Push("d3", "3", 10000, 0, 12, nil)
+		q.Push("d1", "1", 10000, 0, 12)
+		q.Push("d2", "2", 10000, 0, 12)
+		q.Push("d3", "3", 10000, 0, 12)
 	}()
 	Convey("Messages should be delivered after 0.1 seconds", t, func() {
 		VerifyItems(q.Pop(10000, 1000, 10, true), 3, "d1", "1", "d2", "2", "d3", "3")
@@ -180,9 +180,9 @@ func TestPopWaitTimeout(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
 	Convey("Messages should be delivered after 0.1 seconds", t, func() {
-		q.Push("d1", "1", 10000, 10000, 12, nil)
-		q.Push("d2", "2", 10000, 10000, 12, nil)
-		q.Push("d3", "3", 10000, 10000, 12, nil)
+		q.Push("d1", "1", 10000, 10000, 12)
+		q.Push("d2", "2", 10000, 10000, 12)
+		q.Push("d3", "3", 10000, 10000, 12)
 		VerifyItems(q.Pop(0, 10, 10, true), 0)
 	})
 }
@@ -193,7 +193,7 @@ func TestDeliveryDelay(t *testing.T) {
 	defer q.Close()
 	q.StartUpdate()
 	Convey("Message delivery delay should be delayed at least for 0.1 seconds", t, func() {
-		q.Push("data1", "p1", 10000, 120, 12, nil)
+		q.Push("data1", "p1", 10000, 120, 12)
 		startTs := time.Now().UnixNano()
 		VerifyItems(q.Pop(10000, 1000, 10, true), 1, "data1", "p1")
 		finishTs := time.Now().UnixNano()
@@ -208,7 +208,7 @@ func TestPushLotsOfMessages(t *testing.T) {
 	totalMsg := 10000
 	Convey("10k messages should be pushed and received being removed", t, func() {
 		for i := 0; i < totalMsg; i++ {
-			q.Push("id"+strconv.Itoa(i), " ", 100000, 0, 10, nil)
+			q.Push("id"+strconv.Itoa(i), " ", 100000, 0, 10)
 		}
 		work := true
 		go func() {
@@ -235,16 +235,16 @@ func TestMessageLoad(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
 	Convey("Push some messages and load them", t, func() {
-		q.Push("d1", "p", 100000, 0, 10, nil)
-		q.Push("d2", "p", 100000, 0, 11, nil)
-		q.Push("d3", "p", 100000, 0, 9, nil)
-		q.Push("d4", "p", 100000, 0, 9, nil)
-		q.Push("d5", "p", 100000, 0, 9, nil)
-		q.Push("d6", "p", 100000, 0, 12, nil)
-		q.Push("d0", "p", 100000, 0, 0, nil)
+		q.Push("d1", "p", 100000, 0, 10)
+		q.Push("d2", "p", 100000, 0, 11)
+		q.Push("d3", "p", 100000, 0, 9)
+		q.Push("d4", "p", 100000, 0, 9)
+		q.Push("d5", "p", 100000, 0, 9)
+		q.Push("d6", "p", 100000, 0, 12)
+		q.Push("d0", "p", 100000, 0, 0)
 
 		// This messages should be removed as expired during reload.
-		VerifyOkResponse(q.Push("dd", "dd", 0, 0, 20, nil))
+		VerifyOkResponse(q.Push("dd", "dd", 0, 0, 20))
 		VerifyServiceSize(q, 8)
 		// Queue size should be the same since message is just locked.
 		VerifySingleItem(q.Pop(1000, 0, 1, true), "d0", "p")
@@ -293,9 +293,9 @@ func TestStatus(t *testing.T) {
 			So(q.GetTypeName(), ShouldEqual, STYPE_PRIORITY_QUEUE)
 		})
 		Convey("Status for several messages in flight", func() {
-			q.Push("d1", "p", 10000, 0, 9, nil)
-			q.Push("d2", "p", 10000, 0, 9, nil)
-			q.Push("d3", "p", 10000, 0, 9, nil)
+			q.Push("d1", "p", 10000, 0, 9)
+			q.Push("d2", "p", 10000, 0, 9)
+			q.Push("d3", "p", 10000, 0, 9)
 
 			VerifySingleItem(q.Pop(100000, 0, 1, true), "d1", "p")
 			VerifyServiceSize(q, 3)
@@ -340,8 +340,8 @@ func TestGetMessageInfo(t *testing.T) {
 	Convey("Pushed message should return parameters", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 1000, 9, nil)
-		q.Push("d2", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 1000, 9)
+		q.Push("d2", "p", 10000, 0, 11)
 
 		So(q.GetMessageInfo("d3"), ShouldResemble, ERR_MSG_NOT_FOUND)
 
@@ -372,7 +372,7 @@ func TestUnlockErrors(t *testing.T) {
 	Convey("Attempts to unlock not locked and not existing messages should result in error", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 0, 11)
 		So(q.UnlockMessageById("d1"), ShouldResemble, ERR_MSG_NOT_LOCKED)
 		So(q.UnlockMessageById("d2"), ShouldResemble, ERR_MSG_NOT_FOUND)
 	})
@@ -382,7 +382,7 @@ func TestDeleteMessageErrors(t *testing.T) {
 	Convey("Attempts to delete locked and not existing message should result in error", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 100, 11, nil)
+		q.Push("d1", "p", 10000, 100, 11)
 		So(q.DeleteById("d1"), ShouldResemble, ERR_MSG_IS_LOCKED)
 		So(q.DeleteById("d2"), ShouldResemble, ERR_MSG_NOT_FOUND)
 	})
@@ -391,9 +391,9 @@ func TestDeleteMessageErrors(t *testing.T) {
 func TestPushError(t *testing.T) {
 	q := CreateNewTestQueue()
 	defer q.Close()
-	q.Push("d1", "p", 10000, 100, 11, nil)
+	q.Push("d1", "p", 10000, 100, 11)
 	Convey("Push should result in errors", t, func() {
-		So(q.Push("d1", "p", 10000, 100, 1, nil), ShouldResemble, ERR_ITEM_ALREADY_EXISTS)
+		So(q.Push("d1", "p", 10000, 100, 1), ShouldResemble, ERR_ITEM_ALREADY_EXISTS)
 	})
 }
 
@@ -401,7 +401,7 @@ func TestExpiration(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 0, 11)
 		r, _ := q.TimeoutItems(Uts() + 100000).(*IntResponse)
 		So(r.Value, ShouldEqual, 1)
 		VerifyServiceSize(q, 0)
@@ -412,7 +412,7 @@ func TestReleaseInFlight(t *testing.T) {
 	Convey("One item should expire", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 100, 11, nil)
+		q.Push("d1", "p", 10000, 100, 11)
 		r, _ := q.ReleaseInFlight(Uts() + 1000).(*IntResponse)
 		So(r.Value, ShouldEqual, 1)
 		VerifySingleItem(q.Pop(0, 0, 1, false), "d1", "p")
@@ -423,7 +423,7 @@ func TestPopCountExpiration(t *testing.T) {
 	Convey("Item should disappear on fifth attempt to pop it", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 1, nil)
+		q.Push("d1", "p", 10000, 0, 1)
 		VerifySingleItem(q.Pop(0, 0, 1, true), "d1", "p")
 		VerifyOkResponse(q.UnlockMessageById("d1"))
 
@@ -447,11 +447,11 @@ func TestSize(t *testing.T) {
 	Convey("Size of different structures should be valid", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 11, nil)
-		q.Push("d2", "p", 10000, 0, 11, nil)
-		q.Push("d3", "p", 10000, 0, 11, nil)
-		q.Push("d4", "p", 10000, 0, 11, nil)
-		q.Push("d5", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 0, 11)
+		q.Push("d2", "p", 10000, 0, 11)
+		q.Push("d3", "p", 10000, 0, 11)
+		q.Push("d4", "p", 10000, 0, 11)
+		q.Push("d5", "p", 10000, 0, 11)
 		q.Pop(0, 0, 2, true)
 
 		VerifyServiceSize(q, 5)
@@ -465,7 +465,7 @@ func TestUnlockByReceipt(t *testing.T) {
 	Convey("Unlock by receipt should have correct behavior", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 0, 11)
 		resp := q.Pop(100000, 0, 2, true)
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(resp, 1)
@@ -485,7 +485,7 @@ func TestDeleteByReceipt(t *testing.T) {
 	Convey("Delete by receipt should have correct behavior", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 0, 11)
 		resp := q.Pop(100000, 0, 2, true)
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(resp, 1)
@@ -503,7 +503,7 @@ func TestUpdateLockByReceipt(t *testing.T) {
 	Convey("Delete by receipt should have correct behavior", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.Push("d1", "p", 10000, 0, 11, nil)
+		q.Push("d1", "p", 10000, 0, 11)
 		resp := q.Pop(100000, 0, 2, true)
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(resp, 1)
@@ -520,10 +520,10 @@ func TestSizeLimit(t *testing.T) {
 		q := CreateNewTestQueue()
 		defer q.Close()
 		q.SetParams(10000, 256000, 3, 10000, 0, 50000, "")
-		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11, nil))
-		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11, nil))
-		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11, nil))
-		So(q.Push("4", "p", 10000, 0, 11, nil), ShouldResemble, ERR_SIZE_EXCEEDED)
+		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11))
+		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11))
+		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11))
+		So(q.Push("4", "p", 10000, 0, 11), ShouldResemble, ERR_SIZE_EXCEEDED)
 		VerifyServiceSize(q, 3)
 	})
 }
@@ -547,8 +547,8 @@ func TestMessagesMovedToAnotherQueue(t *testing.T) {
 		defer failQueue.Close()
 
 		Convey("Two elements should be moved to another queue", func() {
-			VerifyOkResponse(q1.Push("d1", "p", 10000, 0, 11, nil))
-			VerifyOkResponse(q1.Push("d2", "p", 10000, 0, 11, nil))
+			VerifyOkResponse(q1.Push("d1", "p", 10000, 0, 11))
+			VerifyOkResponse(q1.Push("d2", "p", 10000, 0, 11))
 			VerifyServiceSize(q1, 2)
 
 			VerifyItemsRespSize(q1.Pop(100, 0, 10, true), 2)

@@ -31,6 +31,10 @@ func (p *MsgResponseItem) GetReceipt() string {
 	return EncodeTo36Base(p.msg.SerialNumber) + "-" + EncodeTo36Base(uint64(p.msg.PopCount))
 }
 
+func (p *MsgResponseItem) GetMeta() *PQMsgMetaData {
+	return p.msg
+}
+
 func (p *MsgResponseItem) Encode() string {
 	var buf bytes.Buffer
 	buf.WriteString(EncodeMapSize(6))

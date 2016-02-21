@@ -153,19 +153,21 @@ func (s *ServiceManager) DropService(svcName string) IResponse {
 	return OK_RESPONSE
 }
 
-// ListServiceNames returns a list of available
-func (s *ServiceManager) ListServiceNames(svcPrefix string) IResponse {
-
+func (s *ServiceManager) BuildServiceNameList(svcPrefix string) []string {
 	services := make([]string, 0)
 	s.rwLock.RLock()
 	for svcName, _ := range s.allSvcs {
-		if svcPrefix == "?" || strings.HasPrefix(svcName, svcPrefix) {
+		if strings.HasPrefix(svcName, svcPrefix) {
 			services = append(services, svcName)
 		}
 	}
 	s.rwLock.RUnlock()
+	return services
+}
 
-	return NewStrArrayResponse("+SVCLIST", services)
+// ListServiceNames returns a list of available
+func (s *ServiceManager) ListServiceNames(svcPrefix string) IResponse {
+	return NewStrArrayResponse("+SVCLIST", s.BuildServiceNameList(svcPrefix))
 }
 
 // GetService look up of a service with appropriate name.
