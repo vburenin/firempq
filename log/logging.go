@@ -31,13 +31,13 @@ func SetLevel(l int) {
 
 var Logger = logging.MustGetLogger("firempq")
 
-var Error func(string, ...interface{}) = Logger.Error
-var Critical func(string, ...interface{}) = Logger.Critical
-var Warning func(string, ...interface{}) = Logger.Warning
-var Notice func(string, ...interface{}) = Logger.Notice
-var Info func(string, ...interface{}) = Logger.Info
-var Debug func(string, ...interface{}) = Logger.Debug
-var Fatal func(string, ...interface{}) = log.Fatalf
+var Error = Logger.Errorf
+var Critical = Logger.Criticalf
+var Warning = Logger.Warningf
+var Notice = Logger.Noticef
+var Info = Logger.Infof
+var Debug = Logger.Debugf
+var Fatal = log.Fatalf
 
 func LogConnError(err error) {
 	errTxt := err.Error()
