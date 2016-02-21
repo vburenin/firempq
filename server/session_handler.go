@@ -155,6 +155,9 @@ func (s *SessionHandler) WriteResponse(resp IResponse) error {
 // Handler that creates a service.
 func (s *SessionHandler) createServiceHandler(tokens []string) IResponse {
 	if len(tokens) < 1 {
+		return InvalidRequest("Service name should be provided")
+	}
+	if len(tokens) > 1 {
 		return InvalidRequest("At least service name should be provided")
 	}
 
@@ -167,24 +170,12 @@ func (s *SessionHandler) createServiceHandler(tokens []string) IResponse {
 		return ERR_ID_IS_WRONG
 	}
 
-	svcType := STYPE_PRIORITY_QUEUE
-	// If number of tokens is 2, the second token may be a service type
-	// if it is not one of known service types, it might be a parameter.
-	if len(tokens) >= 2 {
-		// This is queue type.
-		if tokens[2] == STYPE_PRIORITY_QUEUE {
-			tokens = tokens[2:]
-		} else { // This is a parameter name.
-			tokens = tokens[1:]
-		}
-	}
-
 	_, exists := s.svcs.GetService(svcName)
 	if exists {
 		return ConflictRequest("Service exists already")
 	}
 
-	return s.svcs.CreateService(svcType, svcName, tokens)
+	return s.svcs.CreateService(STYPE_PRIORITY_QUEUE, svcName, tokens[1:])
 }
 
 // Drop service.
