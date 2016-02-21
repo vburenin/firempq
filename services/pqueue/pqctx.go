@@ -54,6 +54,7 @@ const (
 	PQ_CMD_STATUS              = "STATUS"
 	PQ_CMD_CHECK_TIMEOUTS      = "CHKTS"
 	PQ_CMD_SET_CFG             = "SETCFG"
+	PQ_CMD_PURGE               = "PURGE"
 )
 
 const (
@@ -171,6 +172,9 @@ func (ctx *PQContext) Call(cmd string, params []string) IResponse {
 		return ctx.SetParamValue(params)
 	case PQ_CMD_CHECK_TIMEOUTS:
 		return ctx.CheckTimeouts(params)
+	case PQ_CMD_PURGE:
+		ctx.pq.Clear()
+		return OK_RESPONSE
 	}
 	return InvalidRequest("Unknown command: " + cmd)
 }
