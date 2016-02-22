@@ -7,9 +7,9 @@ import (
 	"firempq/server/sqsproto/sqsencoding"
 	"firempq/server/sqsproto/sqserr"
 	"firempq/server/sqsproto/urlutils"
-	"firempq/server/sqsproto/validation"
 	"firempq/services/pqueue"
 	"net/http"
+	"firempq/server/sqsproto/validation"
 )
 
 type SendMessageBatchResponse struct {
@@ -45,16 +45,13 @@ func SendMessageBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_respon
 		"SendMessageBatchRequestEntry.", sqsQuery.ParamsList, nil, NewReqQueueAttr)
 
 	attrsLen := len(attrs)
-	if attrsLen == 0 {
-		return sqserr.EmptyBatchRequestError()
-	}
 
-	if attrsLen > 10 {
-		return sqserr.TooManyEntriesInBatchRequestError()
+	checker, err := validation.NewBatchIdValidation(attrsLen)
+	if err != nil {
+		return err
 	}
 
 	// map used to detect duplicated ids.
-	idsMap := make(map[string]struct{}, attrsLen)
 	attrList := make([]*MessageBatchParams, 0, attrsLen)
 
 	for i := 1; i <= attrsLen; i++ {
@@ -63,14 +60,13 @@ func SendMessageBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_respon
 			return sqserr.MissingParameterError("The request is missing sequence %d", i)
 		}
 		p, _ := a.(*MessageBatchParams)
-		attrList = append(attrList, p)
+		if err = checker.Validate(p.Id); err != nil {
+			return err
+		}
 		if err := validation.ValidateBatchRequestId(p.Id); err != nil {
 			return err
 		}
-		if _, ok := idsMap[p.Id]; ok {
-			return sqserr.NotDistinctIdsError(p.Id)
-		}
-		idsMap[p.Id] = struct{}{}
+		attrList = append(attrList, p)
 	}
 
 	batchResponse := &SendMessageBatchResponse{
