@@ -1,4 +1,4 @@
-package delete_message
+package delete_message_batch
 
 import (
 	"encoding/xml"
@@ -64,7 +64,7 @@ func DeleteMessageBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 			return sqserr.MissingParameterError("The request is missing sequence %d", i)
 		}
 		p, _ := a.(*DeleteBatchParams)
-		if err = checker(p.Id); err != nil {
+		if err = checker.Validate(p.Id); err != nil {
 			return err
 		}
 		attrList = append(attrList, p)
