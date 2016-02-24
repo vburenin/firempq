@@ -2,7 +2,6 @@ package delete_message_batch
 
 import (
 	"encoding/xml"
-	"firempq/errors"
 	"firempq/server/sqsproto/sqs_response"
 	"firempq/server/sqsproto/sqsencoding"
 	"firempq/server/sqsproto/sqserr"
@@ -10,6 +9,7 @@ import (
 	"firempq/server/sqsproto/validation"
 	"firempq/services/pqueue"
 	"net/http"
+	"firempq/errors"
 )
 
 type DeleteMessageBatchResponse struct {
@@ -19,9 +19,6 @@ type DeleteMessageBatchResponse struct {
 	RequestId   string        `xml:"ResponseMetadata>RequestId"`
 }
 
-type OkDelete struct {
-	Id string `xml:"Id"`
-}
 
 func (self *DeleteMessageBatchResponse) HttpCode() int { return http.StatusOK }
 func (self *DeleteMessageBatchResponse) XmlDocument() string {
@@ -32,6 +29,10 @@ func (self *DeleteMessageBatchResponse) BatchResult(docId string) interface{} { 
 type DeleteBatchParams struct {
 	Id            string
 	ReceiptHandle string
+}
+
+type OkDelete struct {
+	Id string `xml:"Id"`
 }
 
 func (self *DeleteBatchParams) Parse(paramName, value string) *sqserr.SQSError {

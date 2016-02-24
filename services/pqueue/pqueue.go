@@ -121,6 +121,24 @@ func (pq *PQueue) Config() *PQConfig {
 	return pq.config
 }
 
+// Description is queue description.
+func (pq *PQueue) Description() *ServiceDescription {
+	return pq.desc
+}
+
+// LockedCount is the number of messages which are locked at the moment.
+func (pq *PQueue) LockedCount() int {
+	return pq.lockedMsgCnt
+}
+
+// DelayedCount is the number of messages which are delayed for delivery.
+func (pq *PQueue) DelayedCount() int {
+	pq.lock.Lock()
+	delayed := len(pq.id2sn) - pq.availMsgs.Len() - pq.lockedMsgCnt
+	pq.lock.Unlock()
+	return delayed
+}
+
 func (pq *PQueue) GetStatus() map[string]interface{} {
 	res := make(map[string]interface{})
 	res[PQ_STATUS_MAX_QUEUE_SIZE] = pq.config.MaxMsgsInQueue
@@ -147,6 +165,7 @@ func (pq *PQueue) SetParams(msgTtl, maxMsgSize, maxMsgsInQueue, deliveryDelay, p
 		}
 	}
 	pq.lock.Lock()
+	pq.config.LastUpdateTs = Uts()
 	pq.config.MsgTtl = msgTtl
 	pq.config.MaxMsgSize = maxMsgSize
 	pq.config.MaxMsgsInQueue = maxMsgsInQueue
@@ -356,7 +375,6 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) IRe
 		pq.availMsgs.Push(msg)
 	} else {
 		msg.UnlockTs = nowTs + delay
-		pq.lockedMsgCnt++
 	}
 	pq.trackHeap.Push(msg)
 	// Payload is a race conditional case, since it is not always flushed on disk and may or may not exist in memory.
@@ -608,7 +626,9 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 // Attempts to return a message into the front of the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
 func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
-	pq.lockedMsgCnt--
+	if msg.PopCount > 0 {
+		pq.lockedMsgCnt--
+	}
 	popLimit := pq.config.PopCountLimit
 	if popLimit > 0 && msg.PopCount >= popLimit {
 		if pq.config.PopLimitQueueName == "" {
@@ -689,7 +709,9 @@ func (pq *PQueue) loadAllMessages() {
 			if msg.UnlockTs == 0 {
 				pq.availMsgs.Push(msg)
 			} else {
-				pq.lockedMsgCnt++
+				if msg.PopCount > 0 {
+					pq.lockedMsgCnt++
+				}
 			}
 		}
 	}

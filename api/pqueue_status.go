@@ -13,6 +13,7 @@ const (
 	PQ_STATUS_TOTAL_MSGS       = "TotalMessages"
 	PQ_STATUS_IN_FLIGHT_MSG    = "InFlightMessages"
 	PQ_STATUS_AVAILABLE_MSGS   = "AvailableMessages"
+	PQ_STATUS_DELAYED          = "DelayedMessages"
 	PQ_STATUS_FAIL_QUEUE       = "FailQueue"
 	PQ_STATUS_MAX_MSG_SIZE     = "MaxMsgSize"
 )

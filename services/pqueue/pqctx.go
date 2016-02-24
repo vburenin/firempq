@@ -102,6 +102,7 @@ func DefaultPQConfig() *PQConfig {
 		PopLimitQueueName: "",
 		MaxMsgSize:        CFG_PQ.MaxMessageSize,
 		PopWaitTimeout:    CFG_PQ.DefaultPopWaitTimeout,
+		LastUpdateTs:      Uts(),
 	}
 }
 

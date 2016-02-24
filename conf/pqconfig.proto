@@ -22,5 +22,7 @@ message PQConfig {
 	int64 pop_wait_timeout = 9;
 	// Messages exceeded number of pop attemts will be moved into this queue if configured
 	string pop_limit_queue_name = 10;
+	// Time stamp config was modified last time.
+	int64 last_update_ts = 11;
 }
 

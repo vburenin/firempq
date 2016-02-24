@@ -12,6 +12,7 @@ import (
 	"firempq/server/sqsproto/delete_message"
 	"firempq/server/sqsproto/delete_message_batch"
 	"firempq/server/sqsproto/delete_queue"
+	"firempq/server/sqsproto/get_queue_attributes"
 	"firempq/server/sqsproto/get_queue_url"
 	"firempq/server/sqsproto/list_queues"
 	"firempq/server/sqsproto/purge_queue"
@@ -52,30 +53,31 @@ func (self *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) 
 
 func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
-	case "DeleteQueue":
-		return delete_queue.DeleteQueue(self.ServiceManager, sqsQuery)
-	case "SetQueueAttributes":
-	case "GetQueueAttributes":
-	case "PurgeQueue":
-		return purge_queue.PurgeQueue(pq, sqsQuery)
-	case "ChangeMessageVisibility":
-		return change_message_visibility.ChangeMessageVisibility(pq, sqsQuery)
-	case "ChangeMessageVisibilityBatch":
-		return change_message_visibility_batch.ChangeMessageVisibilityBatch(pq, sqsQuery)
-	case "DeleteMessageBatch":
-		return delete_message_batch.DeleteMessageBatch(pq, sqsQuery)
-	case "DeleteMessage":
-		return delete_message.DeleteMessage(pq, sqsQuery)
-	case "ReceiveMessage":
-		return receive_message.ReceiveMessage(pq, sqsQuery)
 	case "SendMessage":
 		return send_message.SendMessage(pq, sqsQuery)
 	case "SendMessageBatch":
 		return send_message_batch.SendMessageBatch(pq, sqsQuery)
+	case "DeleteMessage":
+		return delete_message.DeleteMessage(pq, sqsQuery)
+	case "DeleteMessageBatch":
+		return delete_message_batch.DeleteMessageBatch(pq, sqsQuery)
+	case "ReceiveMessage":
+		return receive_message.ReceiveMessage(pq, sqsQuery)
+	case "ChangeMessageVisibility":
+		return change_message_visibility.ChangeMessageVisibility(pq, sqsQuery)
+	case "ChangeMessageVisibilityBatch":
+		return change_message_visibility_batch.ChangeMessageVisibilityBatch(pq, sqsQuery)
+	case "DeleteQueue":
+		return delete_queue.DeleteQueue(self.ServiceManager, sqsQuery)
+	case "PurgeQueue":
+		return purge_queue.PurgeQueue(pq, sqsQuery)
+	case "GetQueueAttributes":
+		return get_queue_attributes.GetQueueAttributes(pq, sqsQuery)
+	case "SetQueueAttributes":
 	case "AddPermission":
 	case "RemovePermission":
 	}
-	return nil
+	return sqserr.InvalidActionError(sqsQuery.Action)
 }
 
 func (self *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSResponse {
