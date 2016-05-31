@@ -158,12 +158,15 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-func (pq *PQueue) SetParams(msgTtl, maxMsgSize, maxMsgsInQueue, deliveryDelay, popLimit, lockTimeout int64, failQueue string) IResponse {
+func (pq *PQueue) SetParams(msgTtl, maxMsgSize, maxMsgsInQueue, deliveryDelay,
+	popLimit, lockTimeout int64, failQueue string) IResponse {
+
 	if failQueue != "" {
 		if fq := pq.getFailQueue(failQueue); fq == nil {
 			return InvalidRequest("PQueue doesn't exist: " + failQueue)
 		}
 	}
+
 	pq.lock.Lock()
 	pq.config.LastUpdateTs = Uts()
 	pq.config.MsgTtl = msgTtl
