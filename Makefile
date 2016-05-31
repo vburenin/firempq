@@ -7,7 +7,8 @@ install:
 	go install firempq
 
 protobuf:
-	find . -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
+	find ./server -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
+	find ./services -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 
 clean:
 	go clean ./...
