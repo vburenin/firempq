@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	SIMPLE_SERVER = "simple"
+	SimpleServerType = "simple"
 )
 
 type QueueOpFunc func(req []string) error
@@ -37,28 +37,31 @@ func NewSimpleServer(listener net.Listener) IServer {
 	}
 }
 
-func (self *ConnectionServer) Start() {
+func (cs *ConnectionServer) startHTTP() {
 	httpServer := http.Server{
 		Addr: ":8000",
 		Handler: &sqsproto.SQSRequestHandler{
-			ServiceManager: self.serviceManager,
+			ServiceManager: cs.serviceManager,
 		},
 	}
 	go httpServer.ListenAndServe()
+}
 
-	signal.Notify(self.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go self.waitForSignal()
+func (cs *ConnectionServer) Start() {
+	signal.Notify(cs.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go cs.waitForSignal()
+	cs.startHTTP()
 
-	defer self.listener.Close()
+	defer cs.listener.Close()
 	quitChan := common.GetQuitChan()
 	for {
-		conn, err := self.listener.Accept()
+		conn, err := cs.listener.Accept()
 		if err == nil {
-			go self.handleConnection(conn)
+			go cs.handleConnection(conn)
 		} else {
 			select {
 			case <-quitChan:
-				self.Shutdown()
+				cs.Shutdown()
 				return
 			default:
 				log.Error("Could not accept incoming request: %s", err.Error())
@@ -67,37 +70,36 @@ func (self *ConnectionServer) Start() {
 	}
 }
 
-func (self *ConnectionServer) Shutdown() {
-	self.waitGroup.Wait()
+func (cs *ConnectionServer) Shutdown() {
+	cs.waitGroup.Wait()
 	log.Info("Closing queues...")
-	self.serviceManager.Close()
+	cs.serviceManager.Close()
 	db.GetDatabase().Close()
 	log.Info("Server stopped.")
 }
 
-func (self *ConnectionServer) waitForSignal() {
+func (cs *ConnectionServer) waitForSignal() {
 	for {
 		select {
-		case <-self.signalChan:
+		case <-cs.signalChan:
 			signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-			self.Stop()
+			cs.Stop()
 			return
 		}
 	}
 }
 
-func (self *ConnectionServer) Stop() {
+func (cs *ConnectionServer) Stop() {
 	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
-	self.listener.Close()
+	cs.listener.Close()
 	common.CloseQuitChan()
 }
 
-func (self *ConnectionServer) handleConnection(conn net.Conn) {
-	defer conn.Close()
-	defer self.waitGroup.Done()
-
-	self.waitGroup.Add(1)
-	session_handler := NewSessionHandler(conn, self.serviceManager)
+func (cs *ConnectionServer) handleConnection(conn net.Conn) {
+	cs.waitGroup.Add(1)
+	session_handler := NewSessionHandler(conn, cs.serviceManager)
 	session_handler.DispatchConn()
+	cs.waitGroup.Done()
+	conn.Close()
 }

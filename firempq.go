@@ -20,7 +20,7 @@ func main() {
 	log.InitLogging()
 
 	iface := fmt.Sprintf("%s:%d", conf.CFG.Interface, conf.CFG.Port)
-	srv, err := server.GetServer(server.SIMPLE_SERVER, iface)
+	srv, err := server.Server(server.SimpleServerType, iface)
 	if err != nil {
 		log.Critical("Error: %s", err.Error())
 		return

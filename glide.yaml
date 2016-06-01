@@ -1,0 +1,19 @@
+package: firempq
+import:
+- package: github.com/gogo/protobuf
+  subpackages:
+  - proto
+  - sortkeys
+- package: github.com/jmhodges/levigo
+- package: github.com/op/go-logging
+- package: github.com/smartystreets/goconvey
+  subpackages:
+  - convey
+- package: github.com/syndtr/goleveldb
+  subpackages:
+  - leveldb
+  - leveldb/iterator
+  - leveldb/opt
+  - leveldb/util
+- package: github.com/aws/aws-sdk-go
+- package: github.com/valyala/fasthttp

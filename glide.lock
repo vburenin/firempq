@@ -1,0 +1,76 @@
+hash: d4e0c7a6382c7eea518d77bb5f2fa793e31b56e148ab66871f9825ff60d72393
+updated: 2016-05-31T09:43:55.013346273-07:00
+imports:
+- name: github.com/aws/aws-sdk-go
+  version: 665c623d7f3e0ee276596b006655ba4dbe0565b0
+  subpackages:
+  - aws
+  - aws/session
+  - service/sqs
+  - aws/awserr
+  - aws/credentials
+  - aws/client
+  - aws/corehandlers
+  - aws/defaults
+  - aws/request
+  - private/endpoints
+  - aws/awsutil
+  - aws/client/metadata
+  - private/protocol
+  - private/protocol/query
+  - private/signer/v4
+  - aws/credentials/ec2rolecreds
+  - aws/ec2metadata
+  - private/protocol/query/queryutil
+  - private/protocol/xml/xmlutil
+  - private/protocol/rest
+- name: github.com/go-ini/ini
+  version: 12f418cc7edc5a618a51407b7ac1f1f512139df3
+- name: github.com/gogo/protobuf
+  version: 7883e1468d48d969e1c3ce4bcde89b6a7dd4adc4
+  subpackages:
+  - proto
+  - sortkeys
+- name: github.com/golang/snappy
+  version: d9eb7a3d35ec988b8585d4a0068e462c27d28380
+- name: github.com/gopherjs/gopherjs
+  version: 78919e0ff9540aec8ec7ddf27fbf607ae41abc2f
+  subpackages:
+  - js
+- name: github.com/jmespath/go-jmespath
+  version: 0b12d6b521d83fc7f755e7cfc1b1fbdd35a01a74
+- name: github.com/jmhodges/levigo
+  version: 1ddad808d437abb2b8a55a950ec2616caa88969b
+- name: github.com/jtolds/gls
+  version: 8ddce2a84170772b95dd5d576c48d517b22cac63
+- name: github.com/op/go-logging
+  version: 970db520ece77730c7e4724c61121037378659d9
+- name: github.com/smartystreets/assertions
+  version: 40711f7748186bbf9c99977cd89f21ce1a229447
+  subpackages:
+  - internal/go-render/render
+  - internal/oglematchers
+- name: github.com/smartystreets/goconvey
+  version: c53abc99456fa3402dd33c15ee51c3e545e04a3f
+  subpackages:
+  - convey
+  - convey/reporting
+  - convey/gotest
+- name: github.com/syndtr/goleveldb
+  version: cfa635847112c5dc4782e128fa7e0d05fdbfb394
+  subpackages:
+  - leveldb
+  - leveldb/iterator
+  - leveldb/opt
+  - leveldb/util
+  - leveldb/cache
+  - leveldb/comparer
+  - leveldb/errors
+  - leveldb/filter
+  - leveldb/journal
+  - leveldb/memdb
+  - leveldb/storage
+  - leveldb/table
+- name: github.com/valyala/fasthttp
+  version: 03bef793b795628a457ad41e27f3105f224ae3b5
+devImports: []

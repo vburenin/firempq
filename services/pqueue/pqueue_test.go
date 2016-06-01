@@ -318,11 +318,25 @@ func TestStatus(t *testing.T) {
 	})
 }
 
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
 func TestSetParams(t *testing.T) {
 	Convey("Parameters should be set", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		VerifyOkResponse(q.SetParams(10000, 256000, 20000, 30000, 40000, 50000, ""))
+
+		p := &PQueueParams{
+			MsgTTL:         int64Ptr(10000),
+			MaxMsgSize:     int64Ptr(256000),
+			MaxMsgsInQueue: int64Ptr(20000),
+			DeliveryDelay:  int64Ptr(30000),
+			PopCountLimit:  int64Ptr(40000),
+			PopLockTimeout: int64Ptr(50000),
+			FailQueue:      "",
+		}
+		VerifyOkResponse(q.SetParams(p))
 
 		s, _ := q.GetCurrentStatus().(*DictResponse)
 		status := s.GetDict()
@@ -475,7 +489,8 @@ func TestUnlockByReceipt(t *testing.T) {
 		VerifyOkResponse(q.UnlockByReceipt(rcpt))
 		VerifyServiceSize(q, 1)
 
-		So(q.UnlockByReceipt(rcpt), ShouldEqual, ERR_RECEIPT_EXPIRED)
+		// Unlocking message using the same receipt should succeed.
+		So(q.UnlockByReceipt(rcpt), ShouldEqual, OK_RESPONSE)
 		q.Pop(100000, 0, 2, true)
 		So(q.UnlockByReceipt(rcpt), ShouldEqual, ERR_RECEIPT_EXPIRED)
 	})
@@ -519,7 +534,16 @@ func TestSizeLimit(t *testing.T) {
 	Convey("Fourth element should fail with size limit error", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		q.SetParams(10000, 256000, 3, 10000, 0, 50000, "")
+		p := &PQueueParams{
+			MsgTTL:         int64Ptr(10000),
+			MaxMsgSize:     int64Ptr(256000),
+			MaxMsgsInQueue: int64Ptr(3),
+			DeliveryDelay:  int64Ptr(10000),
+			PopCountLimit:  int64Ptr(0),
+			PopLockTimeout: int64Ptr(50000),
+			FailQueue:      "",
+		}
+		q.SetParams(p)
 		VerifyOkResponse(q.Push("1", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("2", "p", 10000, 0, 11))
 		VerifyOkResponse(q.Push("3", "p", 10000, 0, 11))
@@ -538,7 +562,16 @@ func TestMessagesMovedToAnotherQueue(t *testing.T) {
 		fsl := NewFakeSvcLoader()
 		q1 := CreateTestQueueWithName(fsl, "q1")
 		failQueue := CreateTestQueueWithName(fsl, "fq")
-		q1.SetParams(100000, 256000, 10000, 0, 2, 1000, "fq")
+		p := &PQueueParams{
+			MsgTTL:         int64Ptr(10000),
+			MaxMsgSize:     int64Ptr(256000),
+			MaxMsgsInQueue: int64Ptr(100000),
+			DeliveryDelay:  int64Ptr(0),
+			PopCountLimit:  int64Ptr(2),
+			PopLockTimeout: int64Ptr(1000),
+			FailQueue:      "fq",
+		}
+		q1.SetParams(p)
 
 		q1.StartUpdate()
 		failQueue.StartUpdate()

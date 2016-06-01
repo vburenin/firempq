@@ -19,6 +19,7 @@ import (
 	"firempq/server/sqsproto/receive_message"
 	"firempq/server/sqsproto/send_message"
 	"firempq/server/sqsproto/send_message_batch"
+	"firempq/server/sqsproto/set_queue_attributes"
 	"firempq/server/sqsproto/sqs_response"
 	"firempq/server/sqsproto/sqserr"
 	"firempq/server/sqsproto/urlutils"
@@ -74,6 +75,7 @@ func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *u
 	case "GetQueueAttributes":
 		return get_queue_attributes.GetQueueAttributes(pq, sqsQuery)
 	case "SetQueueAttributes":
+		return set_queue_attributes.SetQueueAttributes(pq, sqsQuery)
 	case "AddPermission":
 	case "RemovePermission":
 	}

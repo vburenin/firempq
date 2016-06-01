@@ -64,11 +64,11 @@ func EmptyValueError(msg string) *SQSError {
 	}
 }
 
-func InvalidAttributeNameError(msg string) *SQSError {
+func InvalidAttributeNameError(msg string, params ...interface{}) *SQSError {
 	return &SQSError{
 		Code:         "InvalidAttributeName",
 		HttpRespCode: 400,
-		Message:      msg,
+		Message:      fmt.Sprintf(msg, params...),
 		Type:         "Sender",
 		RequestId:    "reqid",
 	}
@@ -144,6 +144,16 @@ func InvalidParameterValueError(msg string, params ...interface{}) *SQSError {
 	}
 }
 
+func InvalidAttributeValueError(msg string, params ...interface{}) *SQSError {
+	return &SQSError{
+		Code:         "InvalidAttributeValue",
+		HttpRespCode: 400,
+		Message:      fmt.Sprintf(msg, params...),
+		Type:         "Sender",
+		RequestId:    "reqid",
+	}
+}
+
 func MissingParameterError(msg string, params ...interface{}) *SQSError {
 	return &SQSError{
 		Code:         "MissingParameter",
@@ -163,7 +173,6 @@ func InvalidReceiptHandleError(msg string) *SQSError {
 		RequestId:    "reqid",
 	}
 }
-
 
 func Error400(code, msg string, params ...interface{}) *SQSError {
 	return &SQSError{

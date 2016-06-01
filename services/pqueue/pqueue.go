@@ -158,25 +158,49 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-func (pq *PQueue) SetParams(msgTtl, maxMsgSize, maxMsgsInQueue, deliveryDelay,
-	popLimit, lockTimeout int64, failQueue string) IResponse {
+type PQueueParams struct {
+	MsgTTL         *int64
+	MaxMsgSize     *int64
+	MaxMsgsInQueue *int64
+	DeliveryDelay  *int64
+	PopCountLimit  *int64
+	PopLockTimeout *int64
+	PopWaitTimeout *int64
+	FailQueue      string
+}
 
-	if failQueue != "" {
-		if fq := pq.getFailQueue(failQueue); fq == nil {
-			return InvalidRequest("PQueue doesn't exist: " + failQueue)
+func (pq *PQueue) SetParams(params *PQueueParams) IResponse {
+
+	if params.FailQueue != "" {
+		if fq := pq.getFailQueue(params.FailQueue); fq == nil {
+			return InvalidRequest("PQueue doesn't exist: " + params.FailQueue)
 		}
+		pq.config.PopLimitQueueName = params.FailQueue
 	}
 
 	pq.lock.Lock()
 	pq.config.LastUpdateTs = Uts()
-	pq.config.MsgTtl = msgTtl
-	pq.config.MaxMsgSize = maxMsgSize
-	pq.config.MaxMsgsInQueue = maxMsgsInQueue
-	pq.config.DeliveryDelay = deliveryDelay
-	pq.config.PopCountLimit = popLimit
-	pq.config.PopLockTimeout = lockTimeout
-	if failQueue != "" {
-		pq.config.PopLimitQueueName = failQueue
+
+	if params.MsgTTL != nil {
+		pq.config.MsgTtl = *params.MsgTTL
+	}
+	if params.MaxMsgSize != nil {
+		pq.config.MaxMsgSize = *params.MaxMsgSize
+	}
+	if params.MaxMsgsInQueue != nil {
+		pq.config.MaxMsgsInQueue = *params.MaxMsgsInQueue
+	}
+	if params.DeliveryDelay != nil {
+		pq.config.DeliveryDelay = *params.DeliveryDelay
+	}
+	if params.PopCountLimit != nil {
+		pq.config.PopCountLimit = *params.PopCountLimit
+	}
+	if params.PopLockTimeout != nil {
+		pq.config.PopLockTimeout = *params.PopLockTimeout
+	}
+	if params.PopWaitTimeout != nil {
+		pq.config.PopWaitTimeout = *params.PopWaitTimeout
 	}
 	pq.lock.Unlock()
 	SaveServiceConfig(pq.GetServiceId(), pq.config)
@@ -493,6 +517,7 @@ func (pq *PQueue) acquireLockAndGetReceiptMessage(rcpt string) (*PQMsgMetaData, 
 	// To improve performance the lock is acquired here. The caller must unlock it.
 	pq.lock.Lock()
 	msg := pq.trackHeap.GetMsg(sn)
+
 	if msg != nil && msg.PopCount == popCount {
 		return msg, nil
 	}
