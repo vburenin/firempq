@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"firempq/errors"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/server/sqsproto/validation"
-	"firempq/services/pqueue"
+	"github.com/vburenin/firempq/mpqerr"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/server/sqsproto/validation"
 )
 
 type ChangeMessageVisibilityBatchResponse struct {
@@ -86,7 +86,7 @@ func ChangeMessageVisibilityBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery
 
 	for _, batchItem := range attrList {
 		resp := pq.UpdateLockByRcpt(batchItem.ReceiptHandle, batchItem.VisibilityTimeout)
-		if resp == errors.ERR_INVALID_RECEIPT {
+		if resp == mpqerr.ERR_INVALID_RECEIPT {
 			e := sqserr.InvalidReceiptHandleError("The input receipt handle is not a valid receipt handle.")
 			output.ErrorEntry = append(output.ErrorEntry, e.BatchResult(batchItem.Id))
 		} else {

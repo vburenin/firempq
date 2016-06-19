@@ -6,29 +6,29 @@ import (
 	"net/url"
 	"strings"
 
-	"firempq/server/sqsproto/change_message_visibility"
-	"firempq/server/sqsproto/change_message_visibility_batch"
-	"firempq/server/sqsproto/create_queue"
-	"firempq/server/sqsproto/delete_message"
-	"firempq/server/sqsproto/delete_message_batch"
-	"firempq/server/sqsproto/delete_queue"
-	"firempq/server/sqsproto/get_queue_attributes"
-	"firempq/server/sqsproto/get_queue_url"
-	"firempq/server/sqsproto/list_queues"
-	"firempq/server/sqsproto/purge_queue"
-	"firempq/server/sqsproto/receive_message"
-	"firempq/server/sqsproto/send_message"
-	"firempq/server/sqsproto/send_message_batch"
-	"firempq/server/sqsproto/set_queue_attributes"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services"
-	"firempq/services/pqueue"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto/change_message_visibility"
+	"github.com/vburenin/firempq/server/sqsproto/change_message_visibility_batch"
+	"github.com/vburenin/firempq/server/sqsproto/create_queue"
+	"github.com/vburenin/firempq/server/sqsproto/delete_message"
+	"github.com/vburenin/firempq/server/sqsproto/delete_message_batch"
+	"github.com/vburenin/firempq/server/sqsproto/delete_queue"
+	"github.com/vburenin/firempq/server/sqsproto/get_queue_attributes"
+	"github.com/vburenin/firempq/server/sqsproto/get_queue_url"
+	"github.com/vburenin/firempq/server/sqsproto/list_queues"
+	"github.com/vburenin/firempq/server/sqsproto/purge_queue"
+	"github.com/vburenin/firempq/server/sqsproto/receive_message"
+	"github.com/vburenin/firempq/server/sqsproto/send_message"
+	"github.com/vburenin/firempq/server/sqsproto/send_message_batch"
+	"github.com/vburenin/firempq/server/sqsproto/set_queue_attributes"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type SQSRequestHandler struct {
-	ServiceManager *services.ServiceManager
+	ServiceManager *qmgr.ServiceManager
 }
 
 func ParseQueueName(urlPath string) (string, error) {

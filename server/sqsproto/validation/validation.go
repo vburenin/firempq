@@ -1,9 +1,10 @@
 package validation
 
 import (
-	"firempq/server/sqsproto/sqserr"
 	"fmt"
 	"strings"
+
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 )
 
 // ValidateMessageAttrName makes sure attribute name is ok.

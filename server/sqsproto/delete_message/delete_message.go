@@ -2,13 +2,14 @@ package delete_message
 
 import (
 	"encoding/xml"
-	"firempq/errors"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services/pqueue"
 	"net/http"
+
+	"github.com/vburenin/firempq/mpqerr"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type DeleteMessageResponse struct {
@@ -35,7 +36,7 @@ func DeleteMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.
 	}
 
 	resp := pq.DeleteByReceipt(receipt)
-	if resp == errors.ERR_INVALID_RECEIPT {
+	if resp == mpqerr.ERR_INVALID_RECEIPT {
 		return sqserr.InvalidReceiptHandleError("The input receipt handle is not a valid receipt handle.")
 	}
 

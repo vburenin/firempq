@@ -2,12 +2,13 @@ package list_queues
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services"
 	"net/http"
 	"sort"
+
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type ListQueuesResponse struct {
@@ -20,7 +21,7 @@ func (self *ListQueuesResponse) HttpCode() int                        { return h
 func (self *ListQueuesResponse) XmlDocument() string                  { return sqsencoding.EncodeXmlDocument(self) }
 func (self *ListQueuesResponse) BatchResult(docId string) interface{} { return nil }
 
-func ListQueues(svcMgr *services.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func ListQueues(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	nameList := svcMgr.BuildServiceNameList(sqsQuery.QueueNamePrefix)
 	sort.Strings(nameList)
 

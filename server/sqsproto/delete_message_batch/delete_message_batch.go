@@ -2,14 +2,15 @@ package delete_message_batch
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/server/sqsproto/validation"
-	"firempq/services/pqueue"
 	"net/http"
-	"firempq/errors"
+
+	"github.com/vburenin/firempq/mpqerr"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/server/sqsproto/validation"
 )
 
 type DeleteMessageBatchResponse struct {
@@ -18,7 +19,6 @@ type DeleteMessageBatchResponse struct {
 	ResultEntry []interface{} `xml:"DeleteMessageBatchResult>DeleteMessageBatchResultEntry,omitempty"`
 	RequestId   string        `xml:"ResponseMetadata>RequestId"`
 }
-
 
 func (self *DeleteMessageBatchResponse) HttpCode() int { return http.StatusOK }
 func (self *DeleteMessageBatchResponse) XmlDocument() string {
@@ -77,7 +77,7 @@ func DeleteMessageBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 
 	for _, batchItem := range attrList {
 		resp := pq.DeleteByReceipt(batchItem.ReceiptHandle)
-		if resp == errors.ERR_INVALID_RECEIPT {
+		if resp == mpqerr.ERR_INVALID_RECEIPT {
 			e := sqserr.InvalidReceiptHandleError("The input receipt handle is not a valid receipt handle.")
 			output.ErrorEntry = append(output.ErrorEntry, e.BatchResult(batchItem.Id))
 		} else {

@@ -1,13 +1,13 @@
 package log
 
 import (
-	"firempq/conf"
 	"io"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/op/go-logging"
+	"github.com/vburenin/firempq/conf"
 )
 
 func InitLogging() {

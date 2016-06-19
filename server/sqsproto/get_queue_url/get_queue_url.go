@@ -2,14 +2,14 @@ package get_queue_url
 
 import (
 	"encoding/xml"
-
-	"firempq/common"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services"
 	"net/http"
+
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type GetQueueUrlResult struct {
@@ -22,12 +22,12 @@ func (self *GetQueueUrlResult) XmlDocument() string                  { return sq
 func (self *GetQueueUrlResult) HttpCode() int                        { return http.StatusOK }
 func (self *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
 
-func GetQueueUrl(svcMgr *services.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func GetQueueUrl(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	svc, ok := svcMgr.GetService(sqsQuery.QueueName)
 	if !ok {
 		return sqserr.QueueDoesNotExist()
 	}
-	if svc.GetTypeName() != common.STYPE_PRIORITY_QUEUE {
+	if svc.GetTypeName() != apis.STYPE_PRIORITY_QUEUE {
 		return sqserr.QueueDoesNotExist()
 	}
 

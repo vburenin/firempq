@@ -1,8 +1,6 @@
 package replica
 
 import (
-	"firempq/conf"
-	"firempq/log"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,6 +8,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/log"
 )
 
 const (

@@ -2,8 +2,9 @@ package sqserr
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/sqsencoding"
 	"fmt"
+
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 )
 
 type SQSError struct {

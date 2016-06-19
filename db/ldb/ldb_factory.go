@@ -4,7 +4,8 @@ import (
 	"os"
 	"sync"
 
-	"firempq/log"
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/log"
 )
 
 var database *LevelDBStorage
@@ -20,7 +21,7 @@ func GetDatabase() *LevelDBStorage {
 func getDatabase() *LevelDBStorage {
 	var err error
 	if database == nil {
-		database, err = NewLevelDBStorage("databasedir")
+		database, err = NewLevelDBStorage("databasedir", conf.CFG)
 		if err != nil {
 			log.Error("Cannot initialize FireMPQ database: %s", err)
 			os.Exit(255)

@@ -2,13 +2,13 @@ package server
 
 import (
 	"errors"
-	"firempq/log"
 	"net"
 
-	. "firempq/api"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/log"
 )
 
-func Server(serverType string, serverAddress string) (IServer, error) {
+func Server(serverType string, serverAddress string) (apis.IServer, error) {
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
 		return nil, err

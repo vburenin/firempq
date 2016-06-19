@@ -10,16 +10,17 @@ import (
 	"strconv"
 	"strings"
 
-	"firempq/common"
-	"firempq/conf"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/sqsmsg"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/server/sqsproto/validation"
-	"firempq/services/pqueue"
-	"firempq/utils"
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/sqsmsg"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/server/sqsproto/validation"
+	"github.com/vburenin/firempq/utils"
+	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/idgen"
 )
 
 type SendMessageResponse struct {
@@ -77,11 +78,11 @@ func (self *ReqMsgAttr) Parse(paramName string, value string) *sqserr.SQSError {
 func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	nLen := len(name)
 	b = append(b, byte(nLen>>24), byte(nLen>>16), byte(nLen>>8), byte(nLen))
-	b = append(b, utils.UnsafeStringToBytes(name)...)
+	b = append(b, enc.UnsafeStringToBytes(name)...)
 
 	tLen := len(data.Type)
 	b = append(b, byte(tLen>>24), byte(tLen>>16), byte(tLen>>8), byte(tLen))
-	b = append(b, utils.UnsafeStringToBytes(data.Type)...)
+	b = append(b, enc.UnsafeStringToBytes(data.Type)...)
 
 	if strings.HasPrefix(data.Type, "String") || strings.HasPrefix(data.Type, "Number") {
 		b = append(b, 1)
@@ -90,7 +91,7 @@ func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	}
 	valLen := len(data.Value)
 	b = append(b, byte(valLen>>24), byte(valLen>>16), byte(valLen>>8), byte(valLen))
-	b = append(b, utils.UnsafeStringToBytes(data.Value)...)
+	b = append(b, enc.UnsafeStringToBytes(data.Value)...)
 	return b
 }
 
@@ -140,7 +141,7 @@ func (self *MessageParams) Parse(paramName, value string) *sqserr.SQSError {
 	return nil
 }
 
-var IdGen = common.NewIdGen()
+var IdGen = idgen.NewGen()
 
 func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_response.SQSResponse {
 	out := &MessageParams{
@@ -201,14 +202,14 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 		}
 	}
 
-	msgId := IdGen.GenRandId()
+	msgId := IdGen.RandId()
 	if out.DelaySeconds < 0 {
 		out.DelaySeconds = pq.Config().DeliveryDelay
 	} else if out.DelaySeconds > conf.CFG_PQ.MaxDeliveryDelay {
 		return sqserr.InvalidParameterValueError(
 			"Delay secods must be between 0 and %d", conf.CFG_PQ.MaxDeliveryDelay/1000)
 	}
-	bodyMd5str := fmt.Sprintf("%x", md5.Sum(utils.UnsafeStringToBytes(out.MessageBody)))
+	bodyMd5str := fmt.Sprintf("%x", md5.Sum(enc.UnsafeStringToBytes(out.MessageBody)))
 	attrMd5 := CalcAttrMd5(outAttrs)
 
 	msgPayload := sqsmsg.SQSMessagePayload{
@@ -221,7 +222,7 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 	}
 
 	d, _ := msgPayload.Marshal()
-	payload := utils.UnsafeBytesToString(d)
+	payload := enc.UnsafeBytesToString(d)
 
 	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds, 1)
 	if resp.IsError() {

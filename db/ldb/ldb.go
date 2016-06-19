@@ -3,23 +3,23 @@ package ldb
 // Level DB cached wrapper to improve write performance using batching.
 
 import (
-	"firempq/conf"
-	"firempq/log"
-	"firempq/utils"
 	"sync"
 	"time"
-
-	. "firempq/api"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/log"
 )
 
 // LevelDBStorage A high level cached structure on top of LevelDB.
 // It caches item storing them into database
 // as multiple large batches later.
 type LevelDBStorage struct {
+	cfg            *conf.Config
 	db             *leveldb.DB       // Pointer the the instance of level db.
 	dbName         string            // LevelDB database name.
 	itemCache      map[string]string // Active cache for item metadata.
@@ -33,8 +33,9 @@ type LevelDBStorage struct {
 }
 
 // NewLevelDBStorage is a constructor of DataStorage.
-func NewLevelDBStorage(dbName string) (*LevelDBStorage, error) {
+func NewLevelDBStorage(dbName string, cfg *conf.Config) (*LevelDBStorage, error) {
 	ds := LevelDBStorage{
+		cfg:            cfg,
 		dbName:         dbName,
 		itemCache:      make(map[string]string),
 		tmpItemCache:   nil,
@@ -153,11 +154,11 @@ func (ds *LevelDBStorage) FlushCache() {
 			wb.Reset()
 			count = 0
 		}
-		key := utils.UnsafeStringToBytes(k)
+		key := enc.UnsafeStringToBytes(k)
 		if v == "" {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, utils.UnsafeStringToBytes(v))
+			wb.Put(key, enc.UnsafeStringToBytes(v))
 		}
 		count++
 
@@ -167,9 +168,9 @@ func (ds *LevelDBStorage) FlushCache() {
 }
 
 // IterData returns an iterator over all data with prefix.
-func (ds *LevelDBStorage) IterData(prefix string) ItemIterator {
+func (ds *LevelDBStorage) IterData(prefix string) apis.ItemIterator {
 	iter := ds.db.NewIterator(new(util.Range), nil)
-	return makeItemIterator(iter, utils.UnsafeStringToBytes(prefix))
+	return makeItemIterator(iter, enc.UnsafeStringToBytes(prefix))
 }
 
 // StoreData data directly into the database stores service metadata into database.
@@ -179,8 +180,8 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 	}
 	wb := new(leveldb.Batch)
 	for i := 0; i < len(data); i += 2 {
-		wb.Put(utils.UnsafeStringToBytes(data[i]),
-			utils.UnsafeStringToBytes(data[i+1]))
+		wb.Put(enc.UnsafeStringToBytes(data[i]),
+			enc.UnsafeStringToBytes(data[i+1]))
 	}
 	return ds.db.Write(wb, nil)
 }
@@ -188,7 +189,7 @@ func (ds *LevelDBStorage) StoreData(data ...string) error {
 func (ds *LevelDBStorage) DeleteData(id ...string) {
 	wb := new(leveldb.Batch)
 	for _, i := range id {
-		wb.Delete(utils.UnsafeStringToBytes(i))
+		wb.Delete(enc.UnsafeStringToBytes(i))
 	}
 	ds.db.Write(wb, nil)
 }
@@ -207,8 +208,8 @@ func (ds *LevelDBStorage) GetData(id string) string {
 		return data
 	}
 	ds.cacheLock.Unlock()
-	value, _ := ds.db.Get(utils.UnsafeStringToBytes(id), nil)
-	return utils.UnsafeBytesToString(value)
+	value, _ := ds.db.Get(enc.UnsafeStringToBytes(id), nil)
+	return enc.UnsafeBytesToString(value)
 }
 
 // CachedDeleteData deletes item metadata and payload, affects cache only until flushed.

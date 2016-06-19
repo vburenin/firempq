@@ -6,13 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"firempq/log"
-	"firempq/utils"
-
-	. "firempq/api"
-	. "firempq/conf"
-
 	"github.com/jmhodges/levigo"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/log"
 )
 
 // Default LevelDB read options.
@@ -25,6 +23,7 @@ var defaultWriteOptions = levigo.NewWriteOptions()
 // It caches item storing them into database
 // as multiple large batches later.
 type CLevelDBStorage struct {
+	cfg            *conf.Config
 	db             *levigo.DB        // Pointer the the instance of level db.
 	dbName         string            // LevelDB database name.
 	itemCache      map[string]string // Active cache for item metadata.
@@ -38,8 +37,9 @@ type CLevelDBStorage struct {
 }
 
 // NewLevelDBStorage is a constructor of DataStorage.
-func NewLevelDBStorage(dbName string) (*CLevelDBStorage, error) {
+func NewLevelDBStorage(dbName string, cfg *conf.Config) (*CLevelDBStorage, error) {
 	ds := CLevelDBStorage{
+		cfg:            cfg,
 		dbName:         dbName,
 		itemCache:      make(map[string]string),
 		tmpItemCache:   nil,
@@ -78,7 +78,7 @@ func (ds *CLevelDBStorage) periodicCacheFlush() {
 		select {
 		case <-ds.forceFlushChan:
 			break
-		case <-time.After(CFG.DbFlushInterval * time.Millisecond):
+		case <-time.After(ds.cfg.DbFlushInterval * time.Millisecond):
 			break
 		}
 		ds.flushLock.Lock()
@@ -166,11 +166,11 @@ func (ds *CLevelDBStorage) FlushCache() {
 			wb.Clear()
 			counter = 0
 		}
-		key := utils.UnsafeStringToBytes(k)
+		key := enc.UnsafeStringToBytes(k)
 		if v == "" {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, utils.UnsafeStringToBytes(v))
+			wb.Put(key, enc.UnsafeStringToBytes(v))
 		}
 		counter++
 	}
@@ -181,7 +181,7 @@ func (ds *CLevelDBStorage) FlushCache() {
 }
 
 // IterData returns an iterator over all data with prefix.
-func (ds *CLevelDBStorage) IterData(prefix string) ItemIterator {
+func (ds *CLevelDBStorage) IterData(prefix string) apis.ItemIterator {
 	iter := ds.db.NewIterator(defaultReadOptions)
 	return makeItemIterator(iter, []byte(prefix))
 }
@@ -193,8 +193,8 @@ func (ds *CLevelDBStorage) StoreData(data ...string) error {
 	}
 	wb := levigo.NewWriteBatch()
 	for i := 0; i < len(data); i += 2 {
-		wb.Put(utils.UnsafeStringToBytes(data[i]),
-			utils.UnsafeStringToBytes(data[i+1]))
+		wb.Put(enc.UnsafeStringToBytes(data[i]),
+			enc.UnsafeStringToBytes(data[i+1]))
 	}
 	res := ds.db.Write(defaultWriteOptions, wb)
 	wb.Close()
@@ -204,7 +204,7 @@ func (ds *CLevelDBStorage) StoreData(data ...string) error {
 func (ds *CLevelDBStorage) DeleteData(id ...string) {
 	wb := levigo.NewWriteBatch()
 	for _, i := range id {
-		wb.Delete(utils.UnsafeStringToBytes(i))
+		wb.Delete(enc.UnsafeStringToBytes(i))
 	}
 	ds.db.Write(defaultWriteOptions, wb)
 	wb.Close()
@@ -224,8 +224,8 @@ func (ds *CLevelDBStorage) GetData(id string) string {
 		return data
 	}
 	ds.cacheLock.Unlock()
-	value, _ := ds.db.Get(defaultReadOptions, utils.UnsafeStringToBytes(id))
-	return utils.UnsafeBytesToString(value)
+	value, _ := ds.db.Get(defaultReadOptions, enc.UnsafeStringToBytes(id))
+	return enc.UnsafeBytesToString(value)
 }
 
 // CachedDeleteData deletes item metadata and payload, affects cache only until flushed.

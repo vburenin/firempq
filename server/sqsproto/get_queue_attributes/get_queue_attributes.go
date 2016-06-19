@@ -2,13 +2,14 @@ package get_queue_attributes
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services/pqueue"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type QAttr struct {

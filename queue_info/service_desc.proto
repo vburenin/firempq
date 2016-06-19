@@ -1,0 +1,12 @@
+syntax = "proto2";
+package queue_info;
+
+message ServiceDescription {
+	required uint64 export_id = 1;
+	required string s_type = 2;
+	required string name = 3;
+	required int64 create_ts = 4;
+	required bool disabled = 5;
+	required bool to_delete = 6;
+	required string service_id = 7;
+}

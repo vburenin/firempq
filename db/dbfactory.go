@@ -1,37 +1,34 @@
 package db
 
 import (
-	"firempq/db/cldb"
-	"firempq/db/ldb"
-	"firempq/log"
 	"os"
-	"sync"
 
-	. "firempq/api"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/db/cldb"
+	"github.com/vburenin/firempq/db/ldb"
+	"github.com/vburenin/firempq/log"
 )
 
-var database DataStorage = nil
-var lock sync.Mutex
+var database apis.DataStorage = nil
 var useGoLevelDB = false
 
 // GetDatabase returns DataStorage singleton.
-func GetDatabase() DataStorage {
-	lock.Lock()
-	defer lock.Unlock()
+func GetDatabase() apis.DataStorage {
 	return getDatabase()
 }
 
-func SetDatabase(ds DataStorage) {
+func SetDatabase(ds apis.DataStorage) {
 	database = ds
 }
 
-func getDatabase() DataStorage {
+func getDatabase() apis.DataStorage {
 	if database == nil {
 		var err error
 		if useGoLevelDB {
-			database, err = ldb.NewLevelDBStorage("databasedir")
+			database, err = ldb.NewLevelDBStorage("databasedir", conf.CFG)
 		} else {
-			database, err = cldb.NewLevelDBStorage("databasedir")
+			database, err = cldb.NewLevelDBStorage("databasedir", conf.CFG)
 		}
 		if err != nil {
 			log.Error("Cannot initialize FireMPQ database: %s", err)

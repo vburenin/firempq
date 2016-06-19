@@ -4,12 +4,12 @@ import (
 	"encoding/xml"
 	"net/http"
 
-	"firempq/errors"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services"
+	"github.com/vburenin/firempq/mpqerr"
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type DeleteQueueResponse struct {
@@ -23,9 +23,9 @@ func (self *DeleteQueueResponse) XmlDocument() string {
 }
 func (self *DeleteQueueResponse) BatchResult(docId string) interface{} { return nil }
 
-func DeleteQueue(svcMgr *services.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func DeleteQueue(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	resp := svcMgr.DropService(sqsQuery.QueueName)
-	if resp == errors.ERR_NO_SVC {
+	if resp == mpqerr.ERR_NO_SVC {
 		return sqserr.QueueDoesNotExist()
 	}
 	return &DeleteQueueResponse{

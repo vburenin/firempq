@@ -2,14 +2,15 @@ package send_message_batch
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/send_message"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services/pqueue"
 	"net/http"
-	"firempq/server/sqsproto/validation"
+
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/send_message"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/server/sqsproto/validation"
 )
 
 type SendMessageBatchResponse struct {

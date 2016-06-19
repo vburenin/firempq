@@ -1,10 +1,11 @@
 package main
 
 import (
-	"firempq/conf"
-	"firempq/log"
-	"firempq/server"
 	"fmt"
+
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/server"
 )
 
 func main() {

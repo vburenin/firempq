@@ -1,11 +1,9 @@
 package db
 
-import (
-	. "firempq/api"
-)
+import "github.com/vburenin/firempq/apis"
 
 type DBService struct {
-	database      DataStorage
+	database      apis.DataStorage
 	itemPrefix    string
 	payloadPrefix string
 }
@@ -49,7 +47,7 @@ func (d *DBService) DeleteFullItemFromDB(itemId string) {
 }
 
 // GetItemIterator returns an iterator over items which are matching provided prefix.
-func (d *DBService) GetItemIterator() ItemIterator {
+func (d *DBService) GetItemIterator() apis.ItemIterator {
 	return d.database.IterData(d.itemPrefix)
 }
 

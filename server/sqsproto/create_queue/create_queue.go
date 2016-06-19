@@ -2,18 +2,18 @@ package create_queue
 
 import (
 	"encoding/xml"
+	"net/http"
 	"strconv"
 
-	"firempq/common"
-	"firempq/conf"
-	"firempq/log"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services"
-	"firempq/services/pqueue"
-	"net/http"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type QueueAttributes struct {
@@ -164,13 +164,13 @@ const (
 )
 
 func CheckAvailableQueues(
-	svcMgr *services.ServiceManager,
+	svcMgr *qmgr.ServiceManager,
 	attr *QueueAttributes,
 	sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 
 	svc, ok := svcMgr.GetService(sqsQuery.QueueName)
 	if ok {
-		if svc.GetTypeName() != common.STYPE_PRIORITY_QUEUE {
+		if svc.GetTypeName() != apis.STYPE_PRIORITY_QUEUE {
 			return sqserr.QueueAlreadyExistsError("Queue already exists for a different type of service")
 		}
 		pq, _ := svc.(*pqueue.PQueue)
@@ -202,7 +202,7 @@ func CheckAvailableQueues(
 	return nil
 }
 
-func CreateQueue(svcMgr *services.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func CreateQueue(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	queueAttributes, parseErr := ParseCreateQueueAttributes(sqsQuery)
 	if parseErr != nil {
 		return parseErr

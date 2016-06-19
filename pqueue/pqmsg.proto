@@ -1,0 +1,10 @@
+syntax = "proto3";
+package pqueue;
+
+message PQueueMsgData {
+	int64 priority = 1;
+	int64 expire_ts = 2;
+	int64 pop_count = 3;
+	int64 unlock_ts = 4;
+	string str_id = 5;
+}

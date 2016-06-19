@@ -1,9 +1,10 @@
 package urlutils
 
 import (
-	"firempq/server/sqsproto/sqserr"
 	"strconv"
 	"strings"
+
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 )
 
 type ParamFunc func(param string, value string) *sqserr.SQSError
@@ -15,7 +16,7 @@ type ISubContainer interface {
 }
 
 func ParseNNotationAttr(prefix string, paramList []string, mainHandler ParamFunc, sc NewSubContainer) (map[int]ISubContainer, *sqserr.SQSError) {
-	res := make(map[int]ISubContainer)
+	res := make(map[int]ISubContainer, len(paramList))
 	pos := 0
 	paramLen := len(paramList) - 1
 	for ; pos < paramLen; pos += 2 {

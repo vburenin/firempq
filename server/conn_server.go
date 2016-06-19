@@ -1,8 +1,6 @@
 package server
 
 import (
-	"firempq/log"
-	"firempq/services"
 	"net"
 	"net/http"
 	"os"
@@ -10,10 +8,12 @@ import (
 	"sync"
 	"syscall"
 
-	. "firempq/api"
-	"firempq/common"
-	"firempq/db"
-	"firempq/server/sqsproto"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto"
+	"github.com/vburenin/firempq/signals"
 )
 
 const (
@@ -23,15 +23,15 @@ const (
 type QueueOpFunc func(req []string) error
 
 type ConnectionServer struct {
-	serviceManager *services.ServiceManager
+	serviceManager *qmgr.ServiceManager
 	listener       net.Listener
 	signalChan     chan os.Signal
 	waitGroup      sync.WaitGroup
 }
 
-func NewSimpleServer(listener net.Listener) IServer {
+func NewSimpleServer(listener net.Listener) apis.IServer {
 	return &ConnectionServer{
-		serviceManager: services.CreateServiceManager(),
+		serviceManager: qmgr.CreateServiceManager(),
 		listener:       listener,
 		signalChan:     make(chan os.Signal, 1),
 	}
@@ -53,14 +53,13 @@ func (cs *ConnectionServer) Start() {
 	cs.startHTTP()
 
 	defer cs.listener.Close()
-	quitChan := common.GetQuitChan()
 	for {
 		conn, err := cs.listener.Accept()
 		if err == nil {
 			go cs.handleConnection(conn)
 		} else {
 			select {
-			case <-quitChan:
+			case <-signals.QuitChan:
 				cs.Shutdown()
 				return
 			default:
@@ -93,7 +92,7 @@ func (cs *ConnectionServer) Stop() {
 	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
 	cs.listener.Close()
-	common.CloseQuitChan()
+	signals.CloseQuitChan()
 }
 
 func (cs *ConnectionServer) handleConnection(conn net.Conn) {

@@ -5,16 +5,15 @@ import (
 	"strconv"
 	"sync"
 
-	"firempq/db"
-	"firempq/log"
-
-	. "firempq/api"
-	. "firempq/common"
-	. "firempq/errors"
-	. "firempq/parsers"
-	. "firempq/response"
-	. "firempq/services"
-	. "firempq/utils"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/mpqerr"
+	"github.com/vburenin/firempq/mpqproto"
+	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/resp"
+	"github.com/vburenin/firempq/signals"
+	"github.com/vburenin/firempq/utils"
 )
 
 var EOM = []byte{'\n'}
@@ -32,22 +31,22 @@ const (
 	CMD_DBSTATS    = "DBSTATS"
 )
 
-type FuncHandler func([]string) IResponse
+type FuncHandler func([]string) apis.IResponse
 
 type SessionHandler struct {
 	connLock  sync.Mutex
 	conn      net.Conn
 	active    bool
-	ctx       ServiceContext
+	ctx       apis.ServiceContext
 	stopChan  chan struct{}
-	tokenizer *Tokenizer
-	svcs      *ServiceManager
+	tokenizer *mpqproto.Tokenizer
+	svcs      *qmgr.ServiceManager
 }
 
-func NewSessionHandler(conn net.Conn, services *ServiceManager) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *qmgr.ServiceManager) *SessionHandler {
 	sh := &SessionHandler{
 		conn:      conn,
-		tokenizer: NewTokenizer(),
+		tokenizer: mpqproto.NewTokenizer(),
 		ctx:       nil,
 		active:    true,
 		svcs:      services,
@@ -58,12 +57,11 @@ func NewSessionHandler(conn net.Conn, services *ServiceManager) *SessionHandler 
 }
 
 func (s *SessionHandler) QuitListener() {
-	quitChan := GetQuitChan()
 	go func() {
 		select {
-		case <-quitChan:
+		case <-signals.QuitChan:
 			s.Stop()
-			s.WriteResponse(ERR_CONN_CLOSING)
+			s.WriteResponse(mpqerr.ERR_CONN_CLOSING)
 			if s.ctx != nil {
 				s.ctx.Finish()
 			}
@@ -78,7 +76,7 @@ func (s *SessionHandler) QuitListener() {
 func (s *SessionHandler) DispatchConn() {
 	addr := s.conn.RemoteAddr().String()
 	log.Debug("Client connected: %s", addr)
-	s.WriteResponse(NewStrResponse("HELLO FIREMPQ-0.1"))
+	s.WriteResponse(resp.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
 		if err == nil {
@@ -101,9 +99,9 @@ func (s *SessionHandler) DispatchConn() {
 // Basic token processing that looks for global commands,
 // if there is no token match it will look into current context
 // to see if there is a processor for the rest of the tokens.
-func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
+func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 	if len(cmdTokens) == 0 {
-		return OK_RESPONSE
+		return resp.OK_RESPONSE
 	}
 
 	cmd := cmdTokens[0]
@@ -132,15 +130,15 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) IResponse {
 		return dbstatHandler(tokens)
 	default:
 		if s.ctx == nil {
-			return InvalidRequest("Unknown command: " + cmd)
+			return mpqerr.InvalidRequest("Unknown command: " + cmd)
 		} else {
 			return s.ctx.Call(cmd, tokens)
 		}
 	}
 }
 
-// WriteResponse writes IResponse into connection writer.
-func (s *SessionHandler) WriteResponse(resp IResponse) error {
+// WriteResponse writes apis.IResponse into connection writer.
+func (s *SessionHandler) WriteResponse(resp apis.IResponse) error {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 	if err := resp.WriteResponse(s.conn); err != nil {
@@ -153,38 +151,38 @@ func (s *SessionHandler) WriteResponse(resp IResponse) error {
 }
 
 // Handler that creates a service.
-func (s *SessionHandler) createServiceHandler(tokens []string) IResponse {
+func (s *SessionHandler) createServiceHandler(tokens []string) apis.IResponse {
 	if len(tokens) < 1 {
-		return InvalidRequest("Service name should be provided")
+		return mpqerr.InvalidRequest("Service name should be provided")
 	}
 	if len(tokens) > 1 {
-		return InvalidRequest("At least service name should be provided")
+		return mpqerr.InvalidRequest("At least service name should be provided")
 	}
 
 	svcName := tokens[0]
 	if len(svcName) > 256 {
-		return InvalidRequest("Service name can not be longer than 256 characters")
+		return mpqerr.InvalidRequest("Service name can not be longer than 256 characters")
 	}
 
-	if !ValidateItemId(svcName) {
-		return ERR_ID_IS_WRONG
+	if !mpqproto.ValidateItemId(svcName) {
+		return mpqerr.ERR_ID_IS_WRONG
 	}
 
 	_, exists := s.svcs.GetService(svcName)
 	if exists {
-		return ConflictRequest("Service exists already")
+		return mpqerr.ConflictRequest("Service exists already")
 	}
 
-	return s.svcs.CreateService(STYPE_PRIORITY_QUEUE, svcName, tokens[1:])
+	return s.svcs.CreateService(apis.STYPE_PRIORITY_QUEUE, svcName, tokens[1:])
 }
 
 // Drop service.
-func (s *SessionHandler) dropServiceHandler(tokens []string) IResponse {
+func (s *SessionHandler) dropServiceHandler(tokens []string) apis.IResponse {
 	if len(tokens) == 0 {
-		return InvalidRequest("Service name must be provided")
+		return mpqerr.InvalidRequest("Service name must be provided")
 	}
 	if len(tokens) > 1 {
-		return InvalidRequest("DROP accept service name only")
+		return mpqerr.InvalidRequest("DROP accept service name only")
 	}
 	svcName := tokens[0]
 	res := s.svcs.DropService(svcName)
@@ -192,22 +190,22 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) IResponse {
 }
 
 // Context changer.
-func (s *SessionHandler) ctxHandler(tokens []string) IResponse {
+func (s *SessionHandler) ctxHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 1 {
-		return InvalidRequest("CTX accept service name only")
+		return mpqerr.InvalidRequest("CTX accept service name only")
 	}
 
 	if len(tokens) == 0 {
-		return InvalidRequest("Service name must be provided")
+		return mpqerr.InvalidRequest("Service name must be provided")
 	}
 
 	svcName := tokens[0]
 	svc, exists := s.svcs.GetService(svcName)
 	if !exists {
-		return ERR_NO_SVC
+		return mpqerr.ERR_NO_SVC
 	}
 	s.ctx = svc.NewContext(s)
-	return OK_RESPONSE
+	return resp.OK_RESPONSE
 }
 
 // Stop the processing loop.
@@ -216,19 +214,19 @@ func (s *SessionHandler) Stop() {
 }
 
 // Stops the main loop on QUIT.
-func (s *SessionHandler) quitHandler(tokens []string) IResponse {
+func (s *SessionHandler) quitHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
 	s.Stop()
-	return OK_RESPONSE
+	return resp.OK_RESPONSE
 }
 
 // List all active services.
-func (s *SessionHandler) listServicesHandler(tokens []string) IResponse {
+func (s *SessionHandler) listServicesHandler(tokens []string) apis.IResponse {
 	svcPrefix := ""
 	if len(tokens) > 1 {
-		return InvalidRequest("LIST accept service name prefix only")
+		return mpqerr.InvalidRequest("LIST accept service name prefix only")
 	}
 	if len(tokens) == 1 {
 		svcPrefix = tokens[0]
@@ -238,48 +236,48 @@ func (s *SessionHandler) listServicesHandler(tokens []string) IResponse {
 }
 
 // Ping responder.
-func pingHandler(tokens []string) IResponse {
+func pingHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
-	return RESP_PONG
+	return resp.RESP_PONG
 }
 
 // Returns current server unix time stamp in milliseconds.
-func tsHandler(tokens []string) IResponse {
+func tsHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
-	return NewIntResponse(Uts())
+	return resp.NewIntResponse(utils.Uts())
 }
 
-func logLevelHandler(tokens []string) IResponse {
+func logLevelHandler(tokens []string) apis.IResponse {
 	if len(tokens) != 1 {
-		return InvalidRequest("Log level accept one integer parameter in range [0-5]")
+		return mpqerr.InvalidRequest("Log level accept one integer parameter in range [0-5]")
 	}
 	l, e := strconv.Atoi(tokens[0])
 	if e != nil || l < 0 || l > 5 {
-		return InvalidRequest("Log level is an integer in range [0-5]")
+		return mpqerr.InvalidRequest("Log level is an integer in range [0-5]")
 	}
 	log.Warning("Log level changed to: %d", l)
 	log.SetLevel(l)
-	return OK_RESPONSE
+	return resp.OK_RESPONSE
 }
 
-func panicHandler(tokens []string) IResponse {
+func panicHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
 
 	log.Critical("Panic requested!")
 	panic("Panic requested")
-	return OK_RESPONSE
+	return resp.OK_RESPONSE
 }
 
-func dbstatHandler(tokens []string) IResponse {
+func dbstatHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
 	db := db.GetDatabase()
-	return NewDictResponse("+DBSTATS", db.GetStats())
+	return resp.NewDictResponse("+DBSTATS", db.GetStats())
 }

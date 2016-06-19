@@ -2,11 +2,12 @@ package purge_queue
 
 import (
 	"encoding/xml"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services/pqueue"
 	"net/http"
+
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type PurgeQueueResponse struct {

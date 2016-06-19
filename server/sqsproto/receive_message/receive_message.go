@@ -1,25 +1,25 @@
 package receive_message
 
 import (
-	"encoding/xml"
-	"net/http"
-
 	"crypto/md5"
 	"encoding/base64"
-	"firempq/api"
-	"firempq/log"
-	"firempq/response"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/sqsmsg"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services/pqueue"
-	"firempq/services/pqueue/pqmsg"
-	"firempq/utils"
+	"encoding/xml"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/resp"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/sqsmsg"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/utils"
 )
 
 const (
@@ -117,11 +117,11 @@ func (self *ReceiveMessageOptions) Parse(paramName, value string) *sqserr.SQSErr
 func MakeMessageAttr(name string, sqsAttr *sqsmsg.UserAttribute) *MessageAttribute {
 	if strings.HasPrefix(sqsAttr.Type, "Binary") {
 		encodedBin := make([]byte, base64.RawStdEncoding.EncodedLen(len(sqsAttr.Value)))
-		base64.RawStdEncoding.Encode(encodedBin, utils.UnsafeStringToBytes(sqsAttr.Value))
+		base64.RawStdEncoding.Encode(encodedBin, enc.UnsafeStringToBytes(sqsAttr.Value))
 		return &MessageAttribute{
 			Name:        name,
 			Type:        sqsAttr.Type,
-			BinaryValue: utils.UnsafeBytesToString(encodedBin),
+			BinaryValue: enc.UnsafeBytesToString(encodedBin),
 		}
 	} else {
 		return &MessageAttribute{
@@ -132,9 +132,9 @@ func MakeMessageAttr(name string, sqsAttr *sqsmsg.UserAttribute) *MessageAttribu
 	}
 }
 
-func MakeMessageResponse(iMsg api.IResponseItem, opts *ReceiveMessageOptions,
+func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 	sqsQuery *urlutils.SQSQuery) *MessageResponse {
-	msg, ok := iMsg.(*pqmsg.MsgResponseItem)
+	msg, ok := iMsg.(*pqueue.MsgResponseItem)
 	if !ok {
 		return nil
 	}
@@ -146,7 +146,7 @@ func MakeMessageResponse(iMsg api.IResponseItem, opts *ReceiveMessageOptions,
 		sqsMsg.SenderId = "unknown"
 		sqsMsg.SentTimestamp = strconv.FormatInt(utils.Uts(), 10)
 		sqsMsg.MD5OfMessageAttributes = fmt.Sprintf("%x", md5.Sum(nil))
-		sqsMsg.MD5OfMessageBody = fmt.Sprintf("%x", md5.Sum(utils.UnsafeStringToBytes(sqsMsg.Payload)))
+		sqsMsg.MD5OfMessageBody = fmt.Sprintf("%x", md5.Sum(enc.UnsafeStringToBytes(sqsMsg.Payload)))
 	}
 
 	msgMeta := msg.GetMeta()
@@ -240,7 +240,7 @@ func ReceiveMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response
 		return sqserr.InvalidParameterValueError(e.Error())
 	}
 
-	m, _ := res.(*encoding.ItemsResponse)
+	m, _ := res.(*resp.ItemsResponse)
 	items := m.GetItems()
 
 	output := &ReceiveMessageResponse{}

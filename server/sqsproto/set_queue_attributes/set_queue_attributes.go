@@ -2,14 +2,15 @@ package set_queue_attributes
 
 import (
 	"encoding/xml"
-	"firempq/conf"
-	"firempq/server/sqsproto/sqs_response"
-	"firempq/server/sqsproto/sqsencoding"
-	"firempq/server/sqsproto/sqserr"
-	"firempq/server/sqsproto/urlutils"
-	"firempq/services/pqueue"
 	"net/http"
 	"strconv"
+
+	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
+	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqserr"
+	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type SetQueueAttributesResponse struct {

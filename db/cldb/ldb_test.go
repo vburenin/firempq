@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/vburenin/firempq/conf"
 )
 
 const DBDir = "dbdir"
@@ -13,13 +14,13 @@ func TestPutGetData(t *testing.T) {
 	Convey("Should save items on disk and read them", t, func() {
 		Convey("Save and read two items", func() {
 			os.RemoveAll(DBDir)
-			d, err := NewLevelDBStorage(DBDir)
+			d, err := NewLevelDBStorage(DBDir, conf.CFG)
 			So(err, ShouldBeNil)
 
 			d.CachedStore("id1", "data1", "id2", "data2")
 			d.Close()
 
-			d, err = NewLevelDBStorage(DBDir)
+			d, err = NewLevelDBStorage(DBDir, conf.CFG)
 			So(err, ShouldBeNil)
 			data1 := d.GetData("id1")
 			data2 := d.GetData("id2")
@@ -37,13 +38,13 @@ func TestPutGetData(t *testing.T) {
 
 		Convey("Save and read two slow", func() {
 			os.RemoveAll(DBDir)
-			d, err := NewLevelDBStorage(DBDir)
+			d, err := NewLevelDBStorage(DBDir, conf.CFG)
 
 			So(err, ShouldBeNil)
 			d.StoreData("key1", "keydata")
 			d.Close()
 
-			d, err = NewLevelDBStorage(DBDir)
+			d, err = NewLevelDBStorage(DBDir, conf.CFG)
 			So(err, ShouldBeNil)
 			data := d.GetData("key1")
 			So(data, ShouldEqual, "keydata")
@@ -54,7 +55,7 @@ func TestPutGetData(t *testing.T) {
 
 			d.Close()
 
-			d, err = NewLevelDBStorage(DBDir)
+			d, err = NewLevelDBStorage(DBDir, conf.CFG)
 			So(err, ShouldBeNil)
 
 			data = d.GetData("key1")
@@ -66,7 +67,7 @@ func TestPutGetData(t *testing.T) {
 
 		Convey("Iterator should return trimmed and full keys", func() {
 			os.RemoveAll(DBDir)
-			d, err := NewLevelDBStorage(DBDir)
+			d, err := NewLevelDBStorage(DBDir, conf.CFG)
 			if err != nil {
 
 			}
