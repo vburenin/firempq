@@ -15,7 +15,7 @@ func Server(serverType string, serverAddress string) (apis.IServer, error) {
 	}
 	if serverType == SimpleServerType {
 		log.Info("Listening at %s", serverAddress)
-		return NewSimpleServer(listener), nil
+		return NewServer(listener), nil
 	}
 	return nil, errors.New("Invalid server type!")
 }

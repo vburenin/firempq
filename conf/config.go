@@ -32,8 +32,9 @@ type PQueueConfigData struct {
 // Config is a generic service config type.
 type Config struct {
 	LogLevel            logging.Level
-	Port                int
-	Interface           string
+	FMPQServerInterface string
+	SQSServerInterface  string
+	SNSServerInterface  string
 	DbFlushInterval     time.Duration
 	DbBufferSize        int64
 	DatabasePath        string
@@ -55,8 +56,9 @@ func init() {
 func NewDefaultConfig() *Config {
 	cfg := Config{
 		LogLevel:            logging.INFO,
-		Port:                9033,
-		Interface:           "",
+		FMPQServerInterface: ":8222",
+		SQSServerInterface:  "",
+		SNSServerInterface:  "",
 		DatabasePath:        "./",
 		DbFlushInterval:     100,
 		DbBufferSize:        10000,

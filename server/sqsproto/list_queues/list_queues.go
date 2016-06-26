@@ -7,18 +7,17 @@ import (
 
 	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
 
 type ListQueuesResponse struct {
 	XMLName   xml.Name `xml:"http://queue.amazonaws.com/doc/2012-11-05/ ListQueuesResponse"`
-	QueueUrl  []string `xml:"ListQueuesResponse>QueueUrl"`
-	RequestId string   `xml:"ListQueuesResponse>ResponseMetadata>RequestId"`
+	QueueUrl  []string `xml:"ListQueuesResult>QueueUrl"`
+	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
 func (self *ListQueuesResponse) HttpCode() int                        { return http.StatusOK }
-func (self *ListQueuesResponse) XmlDocument() string                  { return sqsencoding.EncodeXmlDocument(self) }
+func (self *ListQueuesResponse) XmlDocument() string                  { return sqs_response.EncodeXml(self) }
 func (self *ListQueuesResponse) BatchResult(docId string) interface{} { return nil }
 
 func ListQueues(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
@@ -31,6 +30,6 @@ func ListQueues(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_re
 	}
 	return &ListQueuesResponse{
 		QueueUrl:  urlList,
-		RequestId: "13123",
+		RequestId: "reqId",
 	}
 }

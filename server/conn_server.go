@@ -8,12 +8,17 @@ import (
 	"sync"
 	"syscall"
 
+	"time"
+
 	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/snsproto"
 	"github.com/vburenin/firempq/server/sqsproto"
 	"github.com/vburenin/firempq/signals"
+	"gopkg.in/tylerb/graceful.v1"
 )
 
 const (
@@ -22,6 +27,9 @@ const (
 
 type QueueOpFunc func(req []string) error
 
+type ServiceHandler interface {
+}
+
 type ConnectionServer struct {
 	serviceManager *qmgr.ServiceManager
 	listener       net.Listener
@@ -29,7 +37,7 @@ type ConnectionServer struct {
 	waitGroup      sync.WaitGroup
 }
 
-func NewSimpleServer(listener net.Listener) apis.IServer {
+func NewServer(listener net.Listener) apis.IServer {
 	return &ConnectionServer{
 		serviceManager: qmgr.CreateServiceManager(),
 		listener:       listener,
@@ -38,13 +46,37 @@ func NewSimpleServer(listener net.Listener) apis.IServer {
 }
 
 func (cs *ConnectionServer) startHTTP() {
-	httpServer := http.Server{
-		Addr: ":8000",
-		Handler: &sqsproto.SQSRequestHandler{
+	go func() {
+		if conf.CFG.SQSServerInterface == "" {
+			log.Info("No SQS Interface configured")
+		}
+
+		log.Info("Starting SQS Server on: %s", conf.CFG.SQSServerInterface)
+		cs.waitGroup.Add(1)
+		defer cs.waitGroup.Done()
+
+		mux := http.NewServeMux()
+		mux.Handle("/", &sqsproto.SQSRequestHandler{
 			ServiceManager: cs.serviceManager,
-		},
-	}
-	go httpServer.ListenAndServe()
+		})
+		graceful.Run(conf.CFG.SQSServerInterface, time.Second*10, mux)
+	}()
+
+	go func() {
+		if conf.CFG.SNSServerInterface == "" {
+			log.Info("No SNS Interface configured")
+		}
+		log.Info("Starting SNS Server on: %s", conf.CFG.SNSServerInterface)
+
+		cs.waitGroup.Add(1)
+		defer cs.waitGroup.Done()
+		mux := http.NewServeMux()
+
+		mux.Handle("/", &snsproto.SNSRequestHandler{
+			ServiceManager: cs.serviceManager,
+		})
+		graceful.Run(conf.CFG.SNSServerInterface, time.Second*10, mux)
+	}()
 }
 
 func (cs *ConnectionServer) Start() {

@@ -7,7 +7,6 @@ import (
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/send_message"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 	"github.com/vburenin/firempq/server/sqsproto/validation"
@@ -20,8 +19,10 @@ type SendMessageBatchResponse struct {
 	RequestId   string        `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *SendMessageBatchResponse) HttpCode() int                        { return http.StatusOK }
-func (self *SendMessageBatchResponse) XmlDocument() string                  { return sqsencoding.EncodeXmlDocument(self) }
+func (self *SendMessageBatchResponse) HttpCode() int { return http.StatusOK }
+func (self *SendMessageBatchResponse) XmlDocument() string {
+	return sqs_response.EncodeXml(self)
+}
 func (self *SendMessageBatchResponse) BatchResult(docId string) interface{} { return nil }
 
 type MessageBatchParams struct {

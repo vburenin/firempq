@@ -4,7 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
+	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 )
 
 type SQSError struct {
@@ -29,7 +29,7 @@ func (self *SQSError) Error() string {
 }
 
 func (self *SQSError) XmlDocument() string {
-	return sqsencoding.EncodeXmlDocument(self)
+	return sqs_response.EncodeXml(self)
 }
 
 func (self *SQSError) BatchResult(docId string) interface{} {

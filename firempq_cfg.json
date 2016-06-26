@@ -1,7 +1,9 @@
 {
   "LogLevel": 5,
   "Port": 9033,
-  "Interface": "",
+  "FMPQInterface": ":8222",
+  "SQSServerInterface": ":8333",
+  "SNSServerInterface": ":8444",
   "DbFlushInterval": 100,
   "DbBufferSize": 10000,
   "UpdateInterval": 100,

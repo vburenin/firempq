@@ -15,7 +15,6 @@ import (
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/resp"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/sqsmsg"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
@@ -59,7 +58,7 @@ type ReceiveMessageResponse struct {
 }
 
 func (self *ReceiveMessageResponse) HttpCode() int                        { return http.StatusOK }
-func (self *ReceiveMessageResponse) XmlDocument() string                  { return sqsencoding.EncodeXmlDocument(self) }
+func (self *ReceiveMessageResponse) XmlDocument() string                  { return sqs_response.EncodeXml(self) }
 func (self *ReceiveMessageResponse) BatchResult(docId string) interface{} { return nil }
 
 type ReceiveMessageOptions struct {

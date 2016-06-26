@@ -8,7 +8,6 @@ import (
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
@@ -20,7 +19,7 @@ type ChangeMessageVisibilityResponse struct {
 
 func (self *ChangeMessageVisibilityResponse) HttpCode() int { return http.StatusOK }
 func (self *ChangeMessageVisibilityResponse) XmlDocument() string {
-	return sqsencoding.EncodeXmlDocument(self)
+	return sqs_response.EncodeXml(self)
 }
 func (self *ChangeMessageVisibilityResponse) BatchResult(docId string) interface{} { return nil }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
@@ -20,7 +19,7 @@ type SetQueueAttributesResponse struct {
 
 func (self *SetQueueAttributesResponse) HttpCode() int { return http.StatusOK }
 func (self *SetQueueAttributesResponse) XmlDocument() string {
-	return sqsencoding.EncodeXmlDocument(self)
+	return sqs_response.EncodeXml(self)
 }
 func (self *SetQueueAttributesResponse) BatchResult(docId string) interface{} { return nil }
 

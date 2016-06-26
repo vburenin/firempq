@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/server"
@@ -20,8 +18,7 @@ func main() {
 	// Reinitialize log level according to the config data.
 	log.InitLogging()
 
-	iface := fmt.Sprintf("%s:%d", conf.CFG.Interface, conf.CFG.Port)
-	srv, err := server.Server(server.SimpleServerType, iface)
+	srv, err := server.Server(server.SimpleServerType, conf.CFG.FMPQServerInterface)
 	if err != nil {
 		log.Critical("Error: %s", err.Error())
 		return

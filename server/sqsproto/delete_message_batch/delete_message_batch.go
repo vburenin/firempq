@@ -7,7 +7,6 @@ import (
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 	"github.com/vburenin/firempq/server/sqsproto/validation"
@@ -22,7 +21,7 @@ type DeleteMessageBatchResponse struct {
 
 func (self *DeleteMessageBatchResponse) HttpCode() int { return http.StatusOK }
 func (self *DeleteMessageBatchResponse) XmlDocument() string {
-	return sqsencoding.EncodeXmlDocument(self)
+	return sqs_response.EncodeXml(self)
 }
 func (self *DeleteMessageBatchResponse) BatchResult(docId string) interface{} { return nil }
 

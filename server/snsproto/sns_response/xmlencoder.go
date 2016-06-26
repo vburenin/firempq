@@ -1,4 +1,4 @@
-package sqsencoding
+package sns_response
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"log"
 )
 
-func EncodeXmlDocument(doc interface{}) string {
+func EncodeXml(doc interface{}) string {
 	var b bytes.Buffer
 	enc := xml.NewEncoder(&b)
 	enc.Indent("", "")
@@ -15,4 +15,10 @@ func EncodeXmlDocument(doc interface{}) string {
 		log.Fatal("Could not serialized xml data: " + err.Error())
 	}
 	return b.String()
+}
+
+type SNSResponse interface {
+	XmlDocument() string
+	HttpCode() int
+	BatchResult(docId string) interface{}
 }

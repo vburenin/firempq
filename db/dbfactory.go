@@ -11,7 +11,7 @@ import (
 )
 
 var database apis.DataStorage = nil
-var useGoLevelDB = false
+var useGoLevelDB = true
 
 // GetDatabase returns DataStorage singleton.
 func GetDatabase() apis.DataStorage {

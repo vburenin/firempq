@@ -1,8 +1,8 @@
-hash: d4e0c7a6382c7eea518d77bb5f2fa793e31b56e148ab66871f9825ff60d72393
-updated: 2016-05-31T09:43:55.013346273-07:00
+hash: 8630472ce48bd792a1545d6268596f3c76c4da98bb4d4a25be079672ba51ab1e
+updated: 2016-06-19T18:59:08.779545111-07:00
 imports:
 - name: github.com/aws/aws-sdk-go
-  version: 665c623d7f3e0ee276596b006655ba4dbe0565b0
+  version: d3b6d25135b4e09ecd39ea3c2a5cad35279b0515
   subpackages:
   - aws
   - aws/session
@@ -25,16 +25,16 @@ imports:
   - private/protocol/xml/xmlutil
   - private/protocol/rest
 - name: github.com/go-ini/ini
-  version: 12f418cc7edc5a618a51407b7ac1f1f512139df3
+  version: 72ba3e6b9e6b87e0c74c9a7a4dc86e8dd8ba4355
 - name: github.com/gogo/protobuf
-  version: 7883e1468d48d969e1c3ce4bcde89b6a7dd4adc4
+  version: 2752d97bbd91927dd1c43296dbf8700e50e2708c
   subpackages:
   - proto
   - sortkeys
 - name: github.com/golang/snappy
   version: d9eb7a3d35ec988b8585d4a0068e462c27d28380
 - name: github.com/gopherjs/gopherjs
-  version: 78919e0ff9540aec8ec7ddf27fbf607ae41abc2f
+  version: a727a4a1dd2f292e948cebe6ec9aef1a7863f145
   subpackages:
   - js
 - name: github.com/jmespath/go-jmespath
@@ -57,7 +57,7 @@ imports:
   - convey/reporting
   - convey/gotest
 - name: github.com/syndtr/goleveldb
-  version: cfa635847112c5dc4782e128fa7e0d05fdbfb394
+  version: fa5b5c78794bc5c18f330361059f871ae8c2b9d6
   subpackages:
   - leveldb
   - leveldb/iterator
@@ -71,6 +71,4 @@ imports:
   - leveldb/memdb
   - leveldb/storage
   - leveldb/table
-- name: github.com/valyala/fasthttp
-  version: 03bef793b795628a457ad41e27f3105f224ae3b5
 devImports: []

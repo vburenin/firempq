@@ -11,16 +11,15 @@ import (
 	"strings"
 
 	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/idgen"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqsencoding"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/sqsmsg"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 	"github.com/vburenin/firempq/server/sqsproto/validation"
 	"github.com/vburenin/firempq/utils"
-	"github.com/vburenin/firempq/enc"
-	"github.com/vburenin/firempq/idgen"
 )
 
 type SendMessageResponse struct {
@@ -39,7 +38,7 @@ type SendMessageBatchResult struct {
 }
 
 func (self *SendMessageResponse) HttpCode() int       { return http.StatusOK }
-func (self *SendMessageResponse) XmlDocument() string { return sqsencoding.EncodeXmlDocument(self) }
+func (self *SendMessageResponse) XmlDocument() string { return sqs_response.EncodeXml(self) }
 func (self *SendMessageResponse) BatchResult(docId string) interface{} {
 	return &SendMessageBatchResult{
 		Id:                     docId,

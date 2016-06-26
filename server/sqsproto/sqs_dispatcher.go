@@ -25,6 +25,8 @@ import (
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/server/sqsproto/add_permission"
+	"github.com/vburenin/firempq/server/sqsproto/remove_permission"
 )
 
 type SQSRequestHandler struct {
@@ -77,7 +79,9 @@ func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *u
 	case "SetQueueAttributes":
 		return set_queue_attributes.SetQueueAttributes(pq, sqsQuery)
 	case "AddPermission":
+		return add_permission.AddPermission(pq, sqsQuery)
 	case "RemovePermission":
+		return remove_permission.RemovePermission(pq, sqsQuery)
 	}
 	return sqserr.InvalidActionError(sqsQuery.Action)
 }
@@ -119,7 +123,6 @@ func (self *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	//log.Info(resp.XmlDocument())
 	w.WriteHeader(resp.HttpCode())
 	io.WriteString(w, resp.XmlDocument())
 	io.WriteString(w, "\n")

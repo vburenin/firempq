@@ -5,19 +5,17 @@ import (
 	"sync"
 	"time"
 
-	"firempq/db"
-	"firempq/log"
-
-	. "firempq/api"
-	. "firempq/common"
-	. "firempq/services"
-	. "firempq/services/pqueue"
-	. "firempq/testutils"
-	. "firempq/utils"
+	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/mpqtesting"
+	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/qmgr"
 )
 
 func BenchMassPush() {
-	f := NewServiceManager()
+	f := qmgr.NewServiceManager()
 	resp := f.DropService("BenchTest")
 	if !resp.IsError() {
 		log.Info("BenchTest Queue exists alredy! Dropping...")
@@ -32,17 +30,17 @@ func BenchMassPush() {
 	if !ok {
 		log.Fatal("Could not get created service: BenchTest")
 	}
-	respWriter := NewTestResponseWriter()
+	respWriter := mpqtesting.NewTestResponseWriter()
 	ctx := svc.NewContext(respWriter)
 
-	ctx.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "10000000"})
+	ctx.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
-	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
+	data := []string{pqueue.PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
 
 	testFunc := func() {
 		for i := 0; i < 1000000; i++ {
-			ctx.Call(PQ_CMD_PUSH, data)
+			ctx.Call(pqueue.PQ_CMD_PUSH, data)
 		}
 		grp.Done()
 	}
@@ -69,28 +67,28 @@ func BenchMassPush() {
 }
 
 func BenchMassPushMultiQueue() {
-	f := NewServiceManager()
+	f := qmgr.NewServiceManager()
 	resp1 := f.DropService("BenchTest1")
 	resp2 := f.DropService("BenchTest2")
 	resp3 := f.DropService("BenchTest3")
 	resp4 := f.DropService("BenchTest4")
 
-	resp1 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest1", []string{})
+	resp1 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest1", []string{})
 	if resp1.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp2 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest2", []string{})
+	resp2 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest2", []string{})
 	if resp2.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp3 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest3", []string{})
+	resp3 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest3", []string{})
 	if resp3.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp4 = f.CreateService(STYPE_PRIORITY_QUEUE, "BenchTest4", []string{})
+	resp4 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest4", []string{})
 	if resp4.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
@@ -113,27 +111,27 @@ func BenchMassPushMultiQueue() {
 		log.Fatal("Could not get created service: BenchTest4")
 	}
 
-	respWriter1 := NewTestResponseWriter()
-	respWriter2 := NewTestResponseWriter()
-	respWriter3 := NewTestResponseWriter()
-	respWriter4 := NewTestResponseWriter()
+	respWriter1 := mpqtesting.NewTestResponseWriter()
+	respWriter2 := mpqtesting.NewTestResponseWriter()
+	respWriter3 := mpqtesting.NewTestResponseWriter()
+	respWriter4 := mpqtesting.NewTestResponseWriter()
 	ctx1 := svc1.NewContext(respWriter1)
 	ctx2 := svc2.NewContext(respWriter2)
 	ctx3 := svc3.NewContext(respWriter3)
 	ctx4 := svc4.NewContext(respWriter4)
 
-	ctx1.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx2.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx3.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
-	ctx4.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "10000000", CPRM_MSG_TTL, "100000", CPRM_DELIVERY_DELAY, "0"})
+	ctx1.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx2.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx3.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx4.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
 
 	startTs := time.Now().UnixNano()
-	data := []string{PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
+	data := []string{pqueue.PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
 
 	var grp sync.WaitGroup
-	testFunc := func(ctx ServiceContext) {
+	testFunc := func(ctx apis.ServiceContext) {
 		for i := 0; i < 1000000; i++ {
-			ctx.Call(PQ_CMD_PUSH, data)
+			ctx.Call(pqueue.PQ_CMD_PUSH, data)
 		}
 		grp.Done()
 	}
@@ -191,7 +189,7 @@ func sn2db(v uint64) string {
 	b[5] = uint8(v >> 16)
 	b[6] = uint8(v >> 8)
 	b[7] = uint8(v)
-	return UnsafeBytesToString(b)
+	return enc.UnsafeBytesToString(b)
 }
 
 func MarshalTest() {
@@ -208,7 +206,7 @@ func MarshalTest() {
 		b[5] = uint8(i >> 16)
 		b[6] = uint8(i >> 8)
 		b[7] = uint8(i)
-		UnsafeBytesToString(b)
+		enc.UnsafeBytesToString(b)
 	}
 	ft := time.Now().UnixNano() - st
 	fmt.Println("Data prepared in", float64(ft)/1000000, "ms")

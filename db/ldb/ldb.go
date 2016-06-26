@@ -146,10 +146,10 @@ func (ds *LevelDBStorage) FlushCache() {
 	ds.itemCache = make(map[string]string)
 	ds.cacheLock.Unlock()
 
-	wb := new(leveldb.Batch)
+	wb := &leveldb.Batch{}
 	count := 0
 	for k, v := range ds.tmpItemCache {
-		if count >= 10000 {
+		if count >= 100 {
 			ds.db.Write(wb, nil)
 			wb.Reset()
 			count = 0
