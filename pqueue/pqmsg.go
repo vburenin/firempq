@@ -36,7 +36,7 @@ func UnmarshalPQMsgMetaData(sn uint64, buf []byte) *PQMsgMetaData {
 	return &p
 }
 
-func (self *PQMsgMetaData) StringMarshal() string {
+func (self *PQMsgMetaData) ByteMarshal() []byte {
 	data, _ := self.Marshal()
-	return enc.UnsafeBytesToString(data)
+	return data
 }

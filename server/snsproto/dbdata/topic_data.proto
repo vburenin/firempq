@@ -1,0 +1,27 @@
+syntax="proto3";
+package dbdata;
+
+message Subscription {
+	string arn = 1;
+	string owner = 2;
+	string endpoint = 3;
+	string protocol = 4;
+	bool raw_delivery = 5;
+	bool pending = 6;
+}
+
+message Topic {
+	string arn = 1;
+	string name = 2;
+	string display_name = 3;
+	string policy = 4;
+	string delivery_policy = 5;
+	string effective_delivery_policy = 6;
+	int64 deleted_subscriptions = 7;
+	map<string, Subscription> sqs_subscriptions = 8;
+	map<string, Subscription> other_subscriptions = 9;
+}
+
+message TopicNames {
+	repeated string topics = 1;
+}

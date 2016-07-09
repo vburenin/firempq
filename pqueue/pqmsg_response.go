@@ -8,10 +8,10 @@ import (
 
 type MsgResponseItem struct {
 	msg     *PQMsgMetaData
-	payload string
+	payload []byte
 }
 
-func NewMsgResponseItem(msg *PQMsgMetaData, payload string) *MsgResponseItem {
+func NewMsgResponseItem(msg *PQMsgMetaData, payload []byte) *MsgResponseItem {
 	return &MsgResponseItem{
 		msg:     msg,
 		payload: payload,
@@ -22,7 +22,7 @@ func (p *MsgResponseItem) GetId() string {
 	return p.msg.StrId
 }
 
-func (p *MsgResponseItem) GetPayload() string {
+func (p *MsgResponseItem) GetPayload() []byte {
 	return p.payload
 }
 
@@ -34,30 +34,34 @@ func (p *MsgResponseItem) GetMeta() *PQMsgMetaData {
 	return p.msg
 }
 
-func (p *MsgResponseItem) Encode() string {
-	var buf bytes.Buffer
-	buf.WriteString(enc.EncodeMapSize(6))
+func (p *MsgResponseItem) WriteResponse(buf *bytes.Buffer) error {
 
-	buf.WriteString(" ID")
-	buf.WriteString(enc.EncodeString(p.msg.StrId))
+	v := 5
+	if p.msg.UnlockTs > 0 {
+		v = 6
+	}
 
-	buf.WriteString(" PL")
-	buf.WriteString(enc.EncodeString(p.payload))
+	err := enc.WriteDictSize(buf, v)
+	_, err = buf.WriteString(" ID ")
+	err = enc.WriteString(buf, p.msg.StrId)
 
-	buf.WriteString(" ETS")
-	buf.WriteString(enc.EncodeInt64(p.msg.ExpireTs))
+	_, err = buf.WriteString(" PL ")
+	err = enc.WriteBytes(buf, p.payload)
 
-	buf.WriteString(" POPCNT")
-	buf.WriteString(enc.EncodeInt64(p.msg.PopCount))
+	_, err = buf.WriteString(" ETS ")
+	err = enc.WriteInt64(buf, p.msg.ExpireTs)
 
-	buf.WriteString(" UTS")
-	buf.WriteString(enc.EncodeInt64(p.msg.UnlockTs))
+	_, err = buf.WriteString(" POPCNT ")
+	err = enc.WriteInt64(buf, p.msg.PopCount)
+
+	_, err = buf.WriteString(" UTS ")
+	err = enc.WriteInt64(buf, p.msg.UnlockTs)
 
 	if p.msg.UnlockTs > 0 {
-		buf.WriteString(" RCPT ")
-		buf.WriteString(enc.EncodeTo36Base(p.msg.SerialNumber))
-		buf.WriteString("-")
-		buf.WriteString(enc.EncodeTo36Base(uint64(p.msg.PopCount)))
+		_, err = buf.WriteString(" RCPT ")
+		_, err = buf.WriteString(enc.EncodeTo36Base(p.msg.SerialNumber))
+		err = buf.WriteByte('-')
+		_, err = buf.WriteString(enc.EncodeTo36Base(uint64(p.msg.PopCount)))
 	}
-	return enc.UnsafeBytesToString(buf.Bytes())
+	return err
 }

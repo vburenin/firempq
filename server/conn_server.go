@@ -105,7 +105,7 @@ func (cs *ConnectionServer) Shutdown() {
 	cs.waitGroup.Wait()
 	log.Info("Closing queues...")
 	cs.serviceManager.Close()
-	db.GetDatabase().Close()
+	db.DatabaseInstance().Close()
 	log.Info("Server stopped.")
 }
 

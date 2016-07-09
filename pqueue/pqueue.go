@@ -375,7 +375,7 @@ func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
 	return resp.OK_RESPONSE
 }
 
-func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) apis.IResponse {
+func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int64) apis.IResponse {
 
 	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2sn)) >= pq.config.MaxMsgsInQueue {
 		return mpqerr.ERR_SIZE_EXCEEDED
@@ -405,7 +405,7 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay, priority int64) api
 	pq.trackHeap.Push(msg)
 	// Payload is a race conditional case, since it is not always flushed on disk and may or may not exist in memory.
 	pq.payloadLock.Lock()
-	pq.StoreFullItemInDB(enc.Sn2Bin(sn), msg.StringMarshal(), payload)
+	pq.CacheAllItemData(enc.Sn2Bin(sn), msg.ByteMarshal(), enc.UnsafeStringToBytes(payload))
 	pq.payloadLock.Unlock()
 	pq.lock.Unlock()
 
@@ -437,18 +437,18 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.
 			// Changing priority to -1 guarantees that message will stay at the top of the queue.
 			msg.Priority = -1
 			pq.trackHeap.Push(msg)
-			pq.StoreItemBodyInDB(snDb, msg.StringMarshal())
+			pq.CacheItemData(snDb, msg.ByteMarshal())
 		} else {
 			delete(pq.id2sn, msg.StrId)
 		}
 
 		pq.payloadLock.Lock()
 		pq.lock.Unlock()
-		payload := pq.GetPayloadFromDB(snDb)
+		payload := pq.Payload(snDb)
 		msgs = append(msgs, NewMsgResponseItem(msg, payload))
 
 		if !lock {
-			pq.DeleteFullItemFromDB(snDb)
+			pq.DeleteAllItemData(snDb)
 		}
 
 		pq.payloadLock.Unlock()
@@ -468,7 +468,7 @@ func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) apis.IResponse
 		if msg.UnlockTs > 0 {
 			msg.UnlockTs = utils.Uts() + lockTimeout
 			pq.trackHeap.Push(msg)
-			pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
+			pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
 			return resp.OK_RESPONSE
 		} else {
 			return mpqerr.ERR_MSG_NOT_LOCKED
@@ -540,7 +540,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 	msg.UnlockTs = utils.Uts() + lockTimeout
 
 	pq.trackHeap.Push(msg)
-	pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
+	pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
 	pq.lock.Unlock()
 
 	return resp.OK_RESPONSE
@@ -578,7 +578,7 @@ func (pq *PQueue) deleteMessage(sn uint64) bool {
 		}
 		delete(pq.id2sn, msg.StrId)
 		pq.payloadLock.Lock()
-		pq.DeleteFullItemFromDB(msg.Sn2Bin())
+		pq.DeleteAllItemData(msg.Sn2Bin())
 		pq.payloadLock.Unlock()
 		return true
 	}
@@ -628,13 +628,17 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 		// Make sure service is not closed while we are pushing messages into it.
 		popLimitPq.closed.Lock()
 		for msg != nil {
+
 			binSn := msg.Sn2Bin()
+
 			popLimitPq.Push(msg.StrId,
-				pq.GetPayloadFromDB(binSn),
+				string(pq.Payload(binSn)),
 				popLimitPq.config.MsgTtl,
 				popLimitPq.config.DeliveryDelay,
 				msg.Priority)
-			pq.DeleteFullItemFromDB(binSn)
+
+			pq.DeleteAllItemData(binSn)
+
 			select {
 			case msg = <-pq.popLimitMoveChan:
 				// Same thing. Service is closing.
@@ -669,7 +673,7 @@ func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
 		msg.UnlockTs = 0
 		pq.availMsgs.Push(msg)
 		pq.trackHeap.Push(msg)
-		pq.StoreItemBodyInDB(msg.Sn2Bin(), msg.StringMarshal())
+		pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
 	}
 }
 
@@ -711,7 +715,7 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 func (pq *PQueue) loadAllMessages() {
 	nowTs := utils.Uts()
 	log.Debug("Initializing queue: %s", pq.desc.Name)
-	msgIter := pq.GetItemIterator()
+	msgIter := pq.ItemIterator()
 	delSn := []uint64{}
 
 	for ; msgIter.Valid(); msgIter.Next() {
@@ -748,7 +752,7 @@ func (pq *PQueue) loadAllMessages() {
 	if len(delSn) > 0 {
 		log.Debug("Deleting %d expired messages", len(delSn))
 		for _, dsn := range delSn {
-			pq.DeleteFullItemFromDB(enc.Sn2Bin(dsn))
+			pq.DeleteAllItemData(enc.Sn2Bin(dsn))
 		}
 	}
 

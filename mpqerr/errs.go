@@ -2,7 +2,8 @@ package mpqerr
 
 import (
 	"fmt"
-	"io"
+
+	"bytes"
 
 	"github.com/vburenin/firempq/enc"
 )
@@ -25,13 +26,14 @@ func (e *ErrorResponse) Error() string {
 	return e.ErrorText
 }
 
-func (e *ErrorResponse) GetResponse() string {
-	return enc.EncodeError(e.ErrorCode, e.ErrorText)
+func (e *ErrorResponse) GetStringResponse() string {
+	var buf bytes.Buffer
+	e.WriteResponse(&buf)
+	return buf.String()
 }
 
-func (e *ErrorResponse) WriteResponse(buff io.Writer) error {
-	_, err := buff.Write(enc.UnsafeStringToBytes(e.GetResponse()))
-	return err
+func (e *ErrorResponse) WriteResponse(buf *bytes.Buffer) error {
+	return enc.WriteError(buf, e.ErrorCode, e.ErrorText)
 }
 
 func (e *ErrorResponse) IsError() bool {

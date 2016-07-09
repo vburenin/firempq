@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"net"
 	"strconv"
 	"sync"
@@ -15,8 +16,6 @@ import (
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
 )
-
-var EOM = []byte{'\n'}
 
 const (
 	CMD_PING       = "PING"
@@ -41,6 +40,7 @@ type SessionHandler struct {
 	stopChan  chan struct{}
 	tokenizer *mpqproto.Tokenizer
 	svcs      *qmgr.ServiceManager
+	buffPool  sync.Pool
 }
 
 func NewSessionHandler(conn net.Conn, services *qmgr.ServiceManager) *SessionHandler {
@@ -51,6 +51,11 @@ func NewSessionHandler(conn net.Conn, services *qmgr.ServiceManager) *SessionHan
 		active:    true,
 		svcs:      services,
 		stopChan:  make(chan struct{}),
+		buffPool: sync.Pool{
+			New: func() interface{} {
+				return &bytes.Buffer{}
+			},
+		},
 	}
 	sh.QuitListener()
 	return sh
@@ -141,13 +146,18 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 func (s *SessionHandler) WriteResponse(resp apis.IResponse) error {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
-	if err := resp.WriteResponse(s.conn); err != nil {
+
+	b := s.buffPool.Get().(*bytes.Buffer)
+	b.Reset()
+	defer s.buffPool.Put(b)
+
+	err := resp.WriteResponse(b)
+	err = b.WriteByte('\n')
+	if err != nil {
 		return err
 	}
-	if _, err := s.conn.Write(EOM); err != nil {
-		return err
-	}
-	return nil
+	_, err = s.conn.Write(b.Bytes())
+	return err
 }
 
 // Handler that creates a service.
@@ -278,6 +288,6 @@ func dbstatHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
 		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	return resp.NewDictResponse("+DBSTATS", db.GetStats())
 }

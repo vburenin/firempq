@@ -58,12 +58,12 @@ func BenchMassPush() {
 	ctx.Finish()
 
 	log.Info("Test finished in: %d - %d", (finishTs - startTs), (finishTs-startTs)/1000000)
-	db.GetDatabase().FlushCache()
+	db.DatabaseInstance().FlushCache()
 	//println("waiting...")
 	//time.Sleep(time.Second * 1200)
 	//f.DropService("BenchTest")
 	f.Close()
-	db.GetDatabase().Close()
+	db.DatabaseInstance().Close()
 }
 
 func BenchMassPushMultiQueue() {
@@ -161,7 +161,7 @@ func BenchMassPushMultiQueue() {
 	finishTs := time.Now().UnixNano()
 	log.Info("Test finished in: %d - %d", (finishTs - startTs), (finishTs-startTs)/1000000)
 
-	db.GetDatabase().FlushCache()
+	db.DatabaseInstance().FlushCache()
 
 	log.Info("Deleting BenchTest1")
 	f.DropService("BenchTest1")
@@ -175,7 +175,7 @@ func BenchMassPushMultiQueue() {
 	f.Close()
 	log.Info("Waiting flush...")
 	log.Info("Closing DB")
-	db.GetDatabase().Close()
+	db.DatabaseInstance().Close()
 }
 
 func sn2db(v uint64) string {

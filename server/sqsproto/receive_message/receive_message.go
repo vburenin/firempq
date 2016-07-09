@@ -141,7 +141,7 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 	payload := msg.GetPayload()
 	if err := sqsMsg.Unmarshal([]byte(payload)); err != nil {
 		// Recovering from error. Non SQS messages will be filled with bulk info.
-		sqsMsg.Payload = msg.GetPayload()
+		sqsMsg.Payload = string(msg.GetPayload())
 		sqsMsg.SenderId = "unknown"
 		sqsMsg.SentTimestamp = strconv.FormatInt(utils.Uts(), 10)
 		sqsMsg.MD5OfMessageAttributes = fmt.Sprintf("%x", md5.Sum(nil))
@@ -239,7 +239,7 @@ func ReceiveMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response
 		return sqserr.InvalidParameterValueError(e.Error())
 	}
 
-	m, _ := res.(*resp.ItemsResponse)
+	m, _ := res.(*resp.MessagesResponse)
 	items := m.GetItems()
 
 	output := &ReceiveMessageResponse{}

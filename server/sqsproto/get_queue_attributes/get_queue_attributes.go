@@ -58,7 +58,9 @@ func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 	pqCfg := pq.Config()
 	pqDesc := pq.Description()
 
-	resp := &GetQueueAttributesResponse{}
+	resp := &GetQueueAttributesResponse{
+		RequestId: "reqId",
+	}
 	for i := 0; i < paramsLen; i += 2 {
 		if strings.HasPrefix(sqsQuery.ParamsList[i], "AttributeName.") {
 			attrName := sqsQuery.ParamsList[i+1]

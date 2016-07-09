@@ -6,13 +6,13 @@ import (
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/idgen"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
+	"github.com/vburenin/firempq/queue_info"
 	"github.com/vburenin/firempq/resp"
 	"github.com/vburenin/firempq/utils"
-	"github.com/vburenin/firempq/queue_info"
-	"github.com/vburenin/firempq/idgen"
 )
 
 type PQContext struct {

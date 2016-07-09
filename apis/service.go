@@ -1,19 +1,19 @@
 package apis
 
-import "io"
+import "bytes"
 
 type IResponseItem interface {
-	Encode() string
+	WriteResponse(b *bytes.Buffer) error
 	GetId() string
-	GetPayload() string
+	GetPayload() []byte
 }
 
 // IResponse is a standard interface to return as a response.
 type IResponse interface {
 	// GetResponse returns serialized string of data that can be returned to the client.
-	GetResponse() string
+	GetStringResponse() string
 	// WriteResponse writes the response data directly into writer.
-	WriteResponse(io.Writer) error
+	WriteResponse(buf *bytes.Buffer) error
 	// IsError tells if this response is actually an error.
 	IsError() bool
 }

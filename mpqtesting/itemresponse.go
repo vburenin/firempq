@@ -7,7 +7,7 @@ import (
 )
 
 func VerifyItemsRespSize(r apis.IResponse, size int) ([]apis.IResponseItem, bool) {
-	ir, ok := r.(*resp.ItemsResponse)
+	ir, ok := r.(*resp.MessagesResponse)
 	So(ok, ShouldBeTrue)
 	if ok {
 		items := ir.GetItems()
@@ -21,8 +21,8 @@ func VerifySingleItem(r apis.IResponse, itemId, payload string) bool {
 
 	if items, ok := VerifyItemsRespSize(r, 1); ok {
 		So(items[0].GetId(), ShouldEqual, itemId)
-		So(items[0].GetPayload(), ShouldEqual, payload)
-		return items[0].GetId() == itemId && items[0].GetPayload() == payload
+		So(string(items[0].GetPayload()), ShouldEqual, payload)
+		return items[0].GetId() == itemId && string(items[0].GetPayload()) == payload
 	}
 	return false
 }
@@ -36,7 +36,7 @@ func VerifyItems(r apis.IResponse, size int, itemSpecs ...string) bool {
 			itemId := itemSpecs[i]
 			itemPayload := itemSpecs[i+1]
 			So(items[itemPos].GetId(), ShouldEqual, itemId)
-			So(items[itemPos].GetPayload(), ShouldEqual, itemPayload)
+			So(string(items[itemPos].GetPayload()), ShouldEqual, itemPayload)
 		}
 		return true
 	}

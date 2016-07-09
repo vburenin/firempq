@@ -15,17 +15,19 @@ import (
 	"github.com/vburenin/firempq/log"
 )
 
+type ItemCache map[string][]byte
+
 // LevelDBStorage A high level cached structure on top of LevelDB.
 // It caches item storing them into database
 // as multiple large batches later.
 type LevelDBStorage struct {
 	cfg            *conf.Config
-	db             *leveldb.DB       // Pointer the the instance of level db.
-	dbName         string            // LevelDB database name.
-	itemCache      map[string]string // Active cache for item metadata.
-	tmpItemCache   map[string]string // Active cache during flush operation.
-	cacheLock      sync.Mutex        // Used for caches access.
-	flushLock      sync.Mutex        // Used to prevent double flush.
+	db             *leveldb.DB // Pointer the the instance of level db.
+	dbName         string      // LevelDB database name.
+	itemCache      ItemCache   // Active cache for item metadata.
+	tmpItemCache   ItemCache   // Active cache during flush operation.
+	cacheLock      sync.Mutex  // Used for caches access.
+	flushLock      sync.Mutex  // Used to prevent double flush.
 	saveLock       sync.Mutex
 	closed         bool
 	flushSync      *sync.WaitGroup // Use to wait until flush happens.
@@ -37,8 +39,8 @@ func NewLevelDBStorage(dbName string, cfg *conf.Config) (*LevelDBStorage, error)
 	ds := LevelDBStorage{
 		cfg:            cfg,
 		dbName:         dbName,
-		itemCache:      make(map[string]string),
-		tmpItemCache:   nil,
+		itemCache:      make(ItemCache),
+		tmpItemCache:   make(ItemCache),
 		closed:         false,
 		forceFlushChan: make(chan bool, 1),
 		flushSync:      &sync.WaitGroup{},
@@ -99,14 +101,17 @@ func (ds *LevelDBStorage) WaitFlush() {
 }
 
 // CachedStoreItem stores data into the cache.
-func (ds *LevelDBStorage) CachedStore(data ...string) {
-	if len(data)%2 != 0 {
-		panic("Number of arguments must be even!")
-	}
+func (ds *LevelDBStorage) CachedStore(key string, data []byte) {
 	ds.cacheLock.Lock()
-	for i := 0; i < len(data); i += 2 {
-		ds.itemCache[data[i]] = data[i+1]
-	}
+	ds.itemCache[key] = data
+	ds.cacheLock.Unlock()
+}
+
+// CachedStoreItem2 stores two items into the item cache.
+func (ds *LevelDBStorage) CachedStore2(key1 string, data1 []byte, key2 string, data2 []byte) {
+	ds.cacheLock.Lock()
+	ds.itemCache[key1] = data1
+	ds.itemCache[key2] = data2
 	ds.cacheLock.Unlock()
 }
 
@@ -143,7 +148,7 @@ func (ds *LevelDBStorage) FlushCache() {
 	ds.saveLock.Lock()
 	ds.cacheLock.Lock()
 	ds.tmpItemCache = ds.itemCache
-	ds.itemCache = make(map[string]string)
+	ds.itemCache = make(ItemCache)
 	ds.cacheLock.Unlock()
 
 	wb := &leveldb.Batch{}
@@ -155,10 +160,10 @@ func (ds *LevelDBStorage) FlushCache() {
 			count = 0
 		}
 		key := enc.UnsafeStringToBytes(k)
-		if v == "" {
+		if v == nil {
 			wb.Delete(key)
 		} else {
-			wb.Put(key, enc.UnsafeStringToBytes(v))
+			wb.Put(key, v)
 		}
 		count++
 
@@ -174,28 +179,20 @@ func (ds *LevelDBStorage) IterData(prefix string) apis.ItemIterator {
 }
 
 // StoreData data directly into the database stores service metadata into database.
-func (ds *LevelDBStorage) StoreData(data ...string) error {
-	if len(data)%2 != 0 {
-		panic("Number of arguments must be even!")
-	}
-	wb := new(leveldb.Batch)
-	for i := 0; i < len(data); i += 2 {
-		wb.Put(enc.UnsafeStringToBytes(data[i]),
-			enc.UnsafeStringToBytes(data[i+1]))
-	}
-	return ds.db.Write(wb, nil)
+func (ds *LevelDBStorage) StoreData(key string, data []byte) error {
+	return ds.db.Put(enc.UnsafeStringToBytes(key), data, nil)
 }
 
-func (ds *LevelDBStorage) DeleteData(id ...string) {
+func (ds *LevelDBStorage) DeleteData(id ...string) error {
 	wb := new(leveldb.Batch)
 	for _, i := range id {
 		wb.Delete(enc.UnsafeStringToBytes(i))
 	}
-	ds.db.Write(wb, nil)
+	return ds.db.Write(wb, nil)
 }
 
 // GetData looks data looks for and item going through each layer of cache finally looking into database.
-func (ds *LevelDBStorage) GetData(id string) string {
+func (ds *LevelDBStorage) GetData(id string) []byte {
 	ds.cacheLock.Lock()
 	data, ok := ds.itemCache[id]
 	if ok {
@@ -208,15 +205,18 @@ func (ds *LevelDBStorage) GetData(id string) string {
 		return data
 	}
 	ds.cacheLock.Unlock()
-	value, _ := ds.db.Get(enc.UnsafeStringToBytes(id), nil)
-	return enc.UnsafeBytesToString(value)
+	value, e := ds.db.Get(enc.UnsafeStringToBytes(id), nil)
+	if e != nil {
+		return nil
+	}
+	return value
 }
 
 // CachedDeleteData deletes item metadata and payload, affects cache only until flushed.
-func (ds *LevelDBStorage) CachedDeleteData(id ...string) {
+func (ds *LevelDBStorage) DeleteCacheData(id ...string) {
 	ds.cacheLock.Lock()
 	for _, i := range id {
-		ds.itemCache[i] = ""
+		ds.itemCache[i] = nil
 	}
 	ds.cacheLock.Unlock()
 }

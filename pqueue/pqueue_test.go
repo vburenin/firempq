@@ -213,7 +213,7 @@ func TestPushLotsOfMessages(t *testing.T) {
 		counter := 0
 		loops := 0
 		for counter < totalMsg && loops < totalMsg && work {
-			resp, ok := q.Pop(0, 10, 10, false).(*resp.ItemsResponse)
+			resp, ok := q.Pop(0, 10, 10, false).(*resp.MessagesResponse)
 			if !ok {
 				break
 			}
@@ -479,7 +479,7 @@ func TestUnlockByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(r, 1)
 
-		rcpt := r.(*resp.ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
 		VerifyOkResponse(q.UnlockByReceipt(rcpt))
 		VerifyServiceSize(q, 1)
@@ -500,7 +500,7 @@ func TestDeleteByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(r, 1)
 
-		rcpt := r.(*resp.ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
 		VerifyOkResponse(q.DeleteByReceipt(rcpt))
 		VerifyServiceSize(q, 0)
@@ -518,7 +518,7 @@ func TestUpdateLockByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(r, 1)
 
-		rcpt := r.(*resp.ItemsResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
 		VerifyOkResponse(q.UpdateLockByRcpt(rcpt, 10000))
 		VerifyServiceSize(q, 1)

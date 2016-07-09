@@ -3,67 +3,38 @@ package snsproto
 import (
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
 
-	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/qmgr"
-	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
-	"github.com/vburenin/firempq/server/sqsproto/sqserr"
-	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"github.com/vburenin/firempq/server/snsproto/create_topic"
+	"github.com/vburenin/firempq/server/snsproto/list_topics"
+	"github.com/vburenin/firempq/server/snsproto/sns_query"
+	"github.com/vburenin/firempq/server/snsproto/sns_response"
+	"github.com/vburenin/firempq/server/snsproto/snserr"
+	"github.com/vburenin/firempq/server/snsproto/tmgr"
 )
 
 type SNSRequestHandler struct {
 	ServiceManager *qmgr.ServiceManager
 }
 
-func (self *SNSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-	switch sqsQuery.Action {
-
-	}
-	return sqserr.InvalidActionError(sqsQuery.Action)
-}
-
-func (self *SNSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-	switch sqsQuery.Action {
-
-	}
-	return sqserr.InvalidActionError(sqsQuery.Action)
-}
-
-func (self *SNSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSResponse {
-	var queuePath string
-
-	sqsQuery, err := urlutils.ParseSQSQuery(r)
+func (self *SNSRequestHandler) dispatchSNSQuery(r *http.Request) sns_response.SNSResponse {
+	q, err := sns_query.ParseSNSQuery(r)
 	if err != nil {
-		return sqserr.ServiceDeniedError()
+		return snserr.MalformedRequestError()
 	}
-	if sqsQuery.QueueUrl != "" {
-		queueUrl, err := url.ParseRequestURI(sqsQuery.QueueUrl)
-		if err != nil {
-			return sqserr.ServiceDeniedError()
-		}
-		queuePath = queueUrl.Path
-	} else {
-		queuePath = r.URL.Path
+	tm := tmgr.TM()
+	switch q.Action {
+	case "CreateTopic":
+		return create_topic.CreateTopic(tm, q)
+	case "ListTopics":
+		return list_topics.ListTopics(tm, q)
 	}
-	if strings.HasPrefix(queuePath, "/queue/") {
-		sqsQuery.QueueName = strings.SplitN(queuePath, "/queue/", 2)[1]
-		svc, ok := self.ServiceManager.GetService(sqsQuery.QueueName)
-		if !ok {
-			return sqserr.QueueDoesNotExist()
-		}
-		pq, _ := svc.(*pqueue.PQueue)
-		return self.handleQueueActions(pq, sqsQuery)
-
-	} else if r.URL.Path == "/" {
-		return self.handleManageActions(sqsQuery)
-	}
-	return sqserr.ServiceDeniedError()
+	return nil
 }
 
 func (self *SNSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resp := self.dispatchSQSQuery(r)
+
+	resp := self.dispatchSNSQuery(r)
 	if resp == nil {
 		return
 	}

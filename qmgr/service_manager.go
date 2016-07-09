@@ -155,7 +155,7 @@ func (s *ServiceManager) DropService(svcName string) apis.IResponse {
 func (s *ServiceManager) BuildServiceNameList(svcPrefix string) []string {
 	services := make([]string, 0)
 	s.rwLock.RLock()
-	for svcName, _ := range s.allSvcs {
+	for svcName := range s.allSvcs {
 		if strings.HasPrefix(svcName, svcPrefix) {
 			services = append(services, svcName)
 		}

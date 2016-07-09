@@ -21,13 +21,13 @@ func descKey(serviceId string) string {
 }
 
 func LoadServiceConfig(serviceId string, cfg apis.Marshalable) error {
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	data := db.GetData(cfgKey(serviceId))
-	if data == "" {
+	if len(data) == 0 {
 		return mpqerr.NotFoundRequest("No service settings found: " + serviceId)
 	}
 
-	if err := cfg.Unmarshal([]byte(data)); err != nil {
+	if err := cfg.Unmarshal(data); err != nil {
 		log.Error("Error in '%s' service settings: %s", serviceId, err.Error())
 		return mpqerr.ServerError("Service settings error: " + serviceId)
 	}
@@ -36,9 +36,9 @@ func LoadServiceConfig(serviceId string, cfg apis.Marshalable) error {
 
 // SaveServiceConfig saves service config into database.
 func SaveServiceConfig(serviceId string, conf apis.MarshalToBin) error {
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	data, _ := conf.Marshal()
-	err := db.StoreData(cfgKey(serviceId), string(data))
+	err := db.StoreData(cfgKey(serviceId), data)
 	if err != nil {
 		log.Error("Failed to save config: %s", err.Error())
 		return mpqerr.ServerError("Can not save service data: " + serviceId)
@@ -49,7 +49,7 @@ func SaveServiceConfig(serviceId string, conf apis.MarshalToBin) error {
 // GetServiceDescriptions Loads all service descriptions prefixed with ServiceDescPrefix
 func GetServiceDescriptions() ServiceDescriptionList {
 	sdList := make(ServiceDescriptionList, 0, 16)
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	descIter := db.IterData(ServiceDescPrefix)
 	defer descIter.Close()
 
@@ -66,7 +66,7 @@ func GetServiceDescriptions() ServiceDescriptionList {
 
 // GetServiceDescriptions Loads all service descriptions prefixed with ServiceDescPrefix
 func GetServiceDescription(serviceId string) *ServiceDescription {
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	data := db.GetData(descKey(serviceId))
 	desc, _ := UnmarshalServiceDesc([]byte(data))
 	return desc
@@ -74,9 +74,9 @@ func GetServiceDescription(serviceId string) *ServiceDescription {
 
 // SaveServiceDescription saves service config into database.
 func SaveServiceDescription(desc *ServiceDescription) error {
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	data, _ := desc.Marshal()
-	return db.StoreData(descKey(desc.ServiceId), string(data))
+	return db.StoreData(descKey(desc.ServiceId), data)
 }
 
 func DeleteServiceData(serviceId string) {
@@ -88,7 +88,7 @@ func DeleteServiceData(serviceId string) {
 	desc.ToDelete = true
 	SaveServiceDescription(desc)
 
-	db := db.GetDatabase()
+	db := db.DatabaseInstance()
 	db.DeleteDataWithPrefix(serviceId)
 	db.DeleteData(cfgKey(serviceId))
 	db.DeleteData(descKey(serviceId))

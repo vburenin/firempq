@@ -20,5 +20,4 @@ func EncodeXml(doc interface{}) string {
 type SNSResponse interface {
 	XmlDocument() string
 	HttpCode() int
-	BatchResult(docId string) interface{}
 }
