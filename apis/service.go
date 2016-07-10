@@ -1,9 +1,9 @@
 package apis
 
-import "bytes"
+import "bufio"
 
 type IResponseItem interface {
-	WriteResponse(b *bytes.Buffer) error
+	WriteResponse(b *bufio.Writer) error
 	GetId() string
 	GetPayload() []byte
 }
@@ -13,7 +13,7 @@ type IResponse interface {
 	// GetResponse returns serialized string of data that can be returned to the client.
 	GetStringResponse() string
 	// WriteResponse writes the response data directly into writer.
-	WriteResponse(buf *bytes.Buffer) error
+	WriteResponse(buf *bufio.Writer) error
 	// IsError tells if this response is actually an error.
 	IsError() bool
 }

@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"bufio"
 	"bytes"
 	"strconv"
 
@@ -26,11 +27,13 @@ func (r *StrArrayResponse) IsError() bool {
 
 func (r *StrArrayResponse) GetStringResponse() string {
 	var buf bytes.Buffer
-	r.WriteResponse(&buf)
+	wb := bufio.NewWriter(&buf)
+	r.WriteResponse(wb)
+	wb.Flush()
 	return buf.String()
 }
 
-func (r *StrArrayResponse) WriteResponse(buf *bytes.Buffer) error {
+func (r *StrArrayResponse) WriteResponse(buf *bufio.Writer) error {
 	_, err := buf.WriteString(r.header)
 	_, err = buf.WriteString(" *")
 	_, err = buf.WriteString(strconv.Itoa(len(r.val)))
@@ -40,4 +43,3 @@ func (r *StrArrayResponse) WriteResponse(buf *bytes.Buffer) error {
 	}
 	return err
 }
-

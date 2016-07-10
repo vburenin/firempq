@@ -2,6 +2,7 @@ package resp
 
 import (
 	"bytes"
+	"bufio"
 
 	"github.com/vburenin/firempq/enc"
 )
@@ -24,11 +25,13 @@ func (r *DictResponse) GetDict() map[string]interface{} {
 
 func (r *DictResponse) GetStringResponse() string {
 	var buf bytes.Buffer
-	r.WriteResponse(&buf)
+	wb := bufio.NewWriter(&buf)
+	r.WriteResponse(wb)
+	wb.Flush()
 	return buf.String()
 }
 
-func (r *DictResponse) WriteResponse(buf *bytes.Buffer) error {
+func (r *DictResponse) WriteResponse(buf *bufio.Writer) error {
 	var err error
 	if len(r.header) > 0 {
 		_, err = buf.WriteString(r.header)

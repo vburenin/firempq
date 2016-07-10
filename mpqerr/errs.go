@@ -2,8 +2,8 @@ package mpqerr
 
 import (
 	"fmt"
-
 	"bytes"
+	"bufio"
 
 	"github.com/vburenin/firempq/enc"
 )
@@ -13,7 +13,6 @@ var CODE_NOT_FOUND int64 = 404
 var CODE_CONFLICT_REQ int64 = 409
 var CODE_SERVER_ERR int64 = 500
 var CODE_SERVER_UNAVAILABLE int64 = 501
-var CODE_GONE int64 = 410
 var CODE_TEMPORARY_ERROR int64 = 412
 
 // ErrorResponse is an error response.
@@ -28,11 +27,13 @@ func (e *ErrorResponse) Error() string {
 
 func (e *ErrorResponse) GetStringResponse() string {
 	var buf bytes.Buffer
-	e.WriteResponse(&buf)
+	wb := bufio.NewWriter(&buf)
+	e.WriteResponse(wb)
+	wb.Flush()
 	return buf.String()
 }
 
-func (e *ErrorResponse) WriteResponse(buf *bytes.Buffer) error {
+func (e *ErrorResponse) WriteResponse(buf *bufio.Writer) error {
 	return enc.WriteError(buf, e.ErrorCode, e.ErrorText)
 }
 

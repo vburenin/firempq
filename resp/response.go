@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"bufio"
 	"bytes"
 
 	"github.com/vburenin/firempq/apis"
@@ -20,7 +21,9 @@ func NewAsyncResponse(asyncID string, resp apis.IResponse) apis.IResponse {
 
 func (r *AsyncResponse) GetStringResponse() string {
 	var buf bytes.Buffer
-	r.WriteResponse(&buf)
+	wb := bufio.NewWriter(&buf)
+	r.WriteResponse(wb)
+	wb.Flush()
 	return buf.String()
 }
 
@@ -28,7 +31,7 @@ func (r *AsyncResponse) IsError() bool {
 	return r.resp.IsError()
 }
 
-func (r *AsyncResponse) WriteResponse(buf *bytes.Buffer) error {
+func (r *AsyncResponse) WriteResponse(buf *bufio.Writer) error {
 	_, err := buf.WriteString("+ASYNC ")
 	_, err = buf.WriteString(r.asyncID)
 	err = buf.WriteByte(' ')

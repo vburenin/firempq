@@ -1,7 +1,7 @@
 package pqueue
 
 import (
-	"bytes"
+	"bufio"
 
 	"github.com/vburenin/firempq/enc"
 )
@@ -34,7 +34,7 @@ func (p *MsgResponseItem) GetMeta() *PQMsgMetaData {
 	return p.msg
 }
 
-func (p *MsgResponseItem) WriteResponse(buf *bytes.Buffer) error {
+func (p *MsgResponseItem) WriteResponse(buf *bufio.Writer) error {
 
 	v := 5
 	if p.msg.UnlockTs > 0 {

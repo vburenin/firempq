@@ -1,10 +1,11 @@
 package server
 
 import (
-	"bytes"
 	"net"
 	"strconv"
 	"sync"
+
+	"bufio"
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/db"
@@ -33,29 +34,25 @@ const (
 type FuncHandler func([]string) apis.IResponse
 
 type SessionHandler struct {
-	connLock  sync.Mutex
-	conn      net.Conn
-	active    bool
-	ctx       apis.ServiceContext
-	stopChan  chan struct{}
-	tokenizer *mpqproto.Tokenizer
-	svcs      *qmgr.ServiceManager
-	buffPool  sync.Pool
+	connLock   sync.Mutex
+	conn       net.Conn
+	active     bool
+	ctx        apis.ServiceContext
+	stopChan   chan struct{}
+	tokenizer  *mpqproto.Tokenizer
+	svcs       *qmgr.ServiceManager
+	connWriter *bufio.Writer
 }
 
 func NewSessionHandler(conn net.Conn, services *qmgr.ServiceManager) *SessionHandler {
 	sh := &SessionHandler{
-		conn:      conn,
-		tokenizer: mpqproto.NewTokenizer(),
-		ctx:       nil,
-		active:    true,
-		svcs:      services,
-		stopChan:  make(chan struct{}),
-		buffPool: sync.Pool{
-			New: func() interface{} {
-				return &bytes.Buffer{}
-			},
-		},
+		conn:       conn,
+		tokenizer:  mpqproto.NewTokenizer(),
+		ctx:        nil,
+		active:     true,
+		svcs:       services,
+		stopChan:   make(chan struct{}),
+		connWriter: bufio.NewWriter(conn),
 	}
 	sh.QuitListener()
 	return sh
@@ -147,16 +144,9 @@ func (s *SessionHandler) WriteResponse(resp apis.IResponse) error {
 	s.connLock.Lock()
 	defer s.connLock.Unlock()
 
-	b := s.buffPool.Get().(*bytes.Buffer)
-	b.Reset()
-	defer s.buffPool.Put(b)
-
-	err := resp.WriteResponse(b)
-	err = b.WriteByte('\n')
-	if err != nil {
-		return err
-	}
-	_, err = s.conn.Write(b.Bytes())
+	err := resp.WriteResponse(s.connWriter)
+	err = s.connWriter.WriteByte('\n')
+	err = s.connWriter.Flush()
 	return err
 }
 

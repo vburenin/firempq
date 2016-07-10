@@ -1,7 +1,7 @@
 package enc
 
 import (
-	"bytes"
+	"bufio"
 	"fmt"
 	"strconv"
 	"strings"
@@ -61,7 +61,7 @@ func EncodeBool(v bool) string {
 	}
 }
 
-func WriteBool(b *bytes.Buffer, v bool) (err error) {
+func WriteBool(b *bufio.Writer, v bool) (err error) {
 	if v {
 		_, err = b.WriteString("?t")
 	} else {
@@ -74,13 +74,13 @@ func EncodeString(v string) string {
 	return " $" + strconv.Itoa(len(v)) + " " + v
 }
 
-func WriteInt64(b *bytes.Buffer, v int64) error {
+func WriteInt64(b *bufio.Writer, v int64) error {
 	err := b.WriteByte(':')
 	_, err = b.WriteString(strconv.FormatInt(v, 10))
 	return err
 }
 
-func WriteString(b *bytes.Buffer, v string) error {
+func WriteString(b *bufio.Writer, v string) error {
 	err := b.WriteByte('$')
 	_, err = b.WriteString(strconv.Itoa(len(v)))
 	err = b.WriteByte(' ')
@@ -88,7 +88,7 @@ func WriteString(b *bytes.Buffer, v string) error {
 	return err
 }
 
-func WriteBytes(b *bytes.Buffer, v []byte) error {
+func WriteBytes(b *bufio.Writer, v []byte) error {
 	err := b.WriteByte('$')
 	_, err = b.WriteString(strconv.Itoa(len(v)))
 	err = b.WriteByte(' ')
@@ -96,7 +96,7 @@ func WriteBytes(b *bytes.Buffer, v []byte) error {
 	return err
 }
 
-func WriteDict(b *bytes.Buffer, dict map[string]interface{}) error {
+func WriteDict(b *bufio.Writer, dict map[string]interface{}) error {
 	err := WriteDictSize(b, len(dict))
 
 	if len(dict) == 0 {
@@ -126,19 +126,19 @@ func WriteDict(b *bytes.Buffer, dict map[string]interface{}) error {
 	return err
 }
 
-func WriteDictSize(b *bytes.Buffer, l int) error {
+func WriteDictSize(b *bufio.Writer, l int) error {
 	err := b.WriteByte('%')
 	_, err = b.WriteString(strconv.Itoa(l))
 	return err
 }
 
-func WriteArraySize(b *bytes.Buffer, l int) error {
+func WriteArraySize(b *bufio.Writer, l int) error {
 	err := b.WriteByte('*')
 	_, err = b.WriteString(strconv.Itoa(l))
 	return err
 }
 
-func WriteError(b *bytes.Buffer, code int64, text string) error {
+func WriteError(b *bufio.Writer, code int64, text string) error {
 	_, err := b.WriteString("-ERR ")
 	err = WriteInt64(b, code)
 	err = b.WriteByte(' ')

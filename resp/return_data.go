@@ -3,6 +3,8 @@ package resp
 import (
 	"bytes"
 
+	"bufio"
+
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/enc"
 )
@@ -23,11 +25,13 @@ func (r *MessagesResponse) GetItems() []apis.IResponseItem {
 
 func (r *MessagesResponse) GetStringResponse() string {
 	var buf bytes.Buffer
-	r.WriteResponse(&buf)
+	wb := bufio.NewWriter(&buf)
+	r.WriteResponse(wb)
+	wb.Flush()
 	return buf.String()
 }
 
-func (r *MessagesResponse) WriteResponse(buf *bytes.Buffer) error {
+func (r *MessagesResponse) WriteResponse(buf *bufio.Writer) error {
 	_, err := buf.WriteString("+MSGS ")
 	err = enc.WriteArraySize(buf, len(r.items))
 	for _, item := range r.items {
