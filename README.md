@@ -24,9 +24,7 @@ Other use cases:
 5. AMPQ support - very long term plan if there is nothing to do. Volunteers are very welcome. May help during transition from services like RabbitMQ to FireMPQ.
 
 
-# First release features
-
-Here is a list of features I am looking forward to implement the first release:
+# First release features - Implemented
 
 0. Simple text protocol.
 1. Priorities for messages (per message).
@@ -35,17 +33,15 @@ Here is a list of features I am looking forward to implement the first release:
 4. De-duplication by provided user defined message id.
 5. Asynchronous requests.
 6. Confirmation that message is stored on disk.
+7. Support of AWS SQS protocol.
+8. AWS SNS is in progress.
 
 # Further plans
 0. Performance optimizations if possible.
 1. Management Web-UI. A rich Web-UI that will help administrators manage existing queues, etc.
-2. Support of AWS SQS protocol.
+
 3. Ability to override message payload, priority and other parameters.
 
 # When will it be done?
 
 It is actually already working. Extensive testing is in process.
-
-# Web Site
-
-I have registered a domain name http://firempq.com. This will be a project home page. It is under construction at the moment.
