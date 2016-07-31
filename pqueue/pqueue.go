@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db"
@@ -382,8 +384,9 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int
 	}
 
 	nowTs := utils.Uts()
-	pq.config.LastPushTs = nowTs
 	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl+delay, 0)
+
+	atomic.StoreInt64(&pq.config.LastPushTs, nowTs)
 
 	pq.lock.Lock()
 
@@ -416,8 +419,9 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int
 
 func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.IResponseItem {
 	nowTs := utils.Uts()
-	pq.config.LastPopTs = nowTs
 	var msgs []apis.IResponseItem
+
+	atomic.StoreInt64(&pq.config.LastPopTs, nowTs)
 
 	for int64(len(msgs)) < limit {
 
@@ -552,6 +556,7 @@ func (pq *PQueue) DeleteByReceipt(rcpt string) apis.IResponse {
 	if err != nil {
 		return err
 	}
+	pq.lockedMsgCnt--
 	pq.deleteMessage(msg.SerialNumber)
 	pq.lock.Unlock()
 	return resp.OK_RESPONSE

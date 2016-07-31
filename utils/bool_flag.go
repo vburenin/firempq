@@ -7,22 +7,25 @@ type BoolFlag struct {
 	flag bool
 }
 
-func (this *BoolFlag) SetFalse() {
-	this.Lock()
-	this.flag = false
-	this.Unlock()
+func (bf *BoolFlag) SetFalse() {
+	bf.Lock()
+	bf.flag = false
+	bf.Unlock()
 }
 
-func (this *BoolFlag) SetTrue() {
-	this.Lock()
-	this.flag = true
-	this.Unlock()
+func (bf *BoolFlag) SetTrue() {
+	bf.Lock()
+	bf.flag = true
+	bf.Unlock()
 }
 
-func (this *BoolFlag) IsTrue() bool {
-	return this.flag
+func (bf *BoolFlag) IsTrue() bool {
+	bf.Lock()
+	r := bf.flag
+	bf.Unlock()
+	return r
 }
 
-func (this *BoolFlag) IsFalse() bool {
-	return !this.flag
+func (bf *BoolFlag) IsFalse() bool {
+	return !bf.IsTrue()
 }
