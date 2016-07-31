@@ -47,12 +47,6 @@ func VerifyOkResponse(r apis.IResponse) {
 	So(r, ShouldEqual, resp.OK_RESPONSE)
 }
 
-func VerifyErrResponse(r apis.IResponse) bool {
-	err := r.IsError()
-	So(err, ShouldBeTrue)
-	return err
-}
-
 func VerifyServiceSize(s apis.ISvc, size int) bool {
 	So(s.GetSize(), ShouldEqual, size)
 	return s.GetSize() == size

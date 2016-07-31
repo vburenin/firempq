@@ -17,15 +17,6 @@ import (
 type ServiceConstructor func(apis.IServices, *queue_info.ServiceDescription, []string) (apis.ISvc, apis.IResponse)
 type ServiceLoader func(apis.IServices, *queue_info.ServiceDescription) (apis.ISvc, error)
 
-func GetServiceConstructor(serviceType string) (ServiceConstructor, bool) {
-	switch serviceType {
-	case apis.STYPE_PRIORITY_QUEUE:
-		return pqueue.CreatePQueue, true
-	default:
-		return nil, false
-	}
-}
-
 func GetServiceLoader(serviceType string) (ServiceLoader, bool) {
 	switch serviceType {
 	case apis.STYPE_PRIORITY_QUEUE:
