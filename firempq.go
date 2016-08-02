@@ -14,6 +14,7 @@ func main() {
 	// Initialize logging to a default INFO level to be able to log config error.
 
 	cfg := flag.String("config", "firempq_cfg.json", "Configuration file used to run server")
+	flag.Parse()
 
 	go http.ListenAndServe(":5000", nil)
 	log.InitLogging()
