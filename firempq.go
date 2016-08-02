@@ -1,20 +1,24 @@
 package main
 
 import (
+	"flag"
+	"net/http"
+	_ "net/http/pprof"
+
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/server"
-
-	"net/http"
-	_ "net/http/pprof"
 )
 
 func main() {
 	// Initialize logging to a default INFO level to be able to log config error.
+
+	cfg := flag.String("config", "firempq_cfg.json", "Configuration file used to run server")
+
 	go http.ListenAndServe(":5000", nil)
 	log.InitLogging()
 
-	err := conf.ReadConfig()
+	err := conf.ReadConfig(*cfg)
 	if err != nil {
 		log.Error(err.Error())
 		return
@@ -28,5 +32,4 @@ func main() {
 		return
 	}
 	srv.Start()
-
 }

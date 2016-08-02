@@ -127,8 +127,8 @@ func formatTypeError(lineNum, lineOffset int64, lineText string, err *json.Unmar
 }
 
 // ReadConfig reads and decodes firempq_cfg.json file.
-func ReadConfig() error {
-	confData, err := ioutil.ReadFile("firempq_cfg.json")
+func ReadConfig(fileName string) error {
+	confData, err := ioutil.ReadFile(fileName)
 
 	if err != nil {
 		return err
