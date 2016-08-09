@@ -1,6 +1,5 @@
 {
   "LogLevel": 5,
-  "Port": 9033,
   "FMPQInterface": ":8222",
   "SQSServerInterface": ":8333",
   "SNSServerInterface": ":8444",
