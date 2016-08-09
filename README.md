@@ -1,4 +1,18 @@
-# Fire MPQ
+# FireMPQ
+
+## So Far
+
+It happened that I added support of SQS protocol, thus it is useful for local development if you do not want to touch native AWS SQS service. AWS SQS API is fully implemented, but several calls related to permissions are ignored. Feel free to use it for testing and experementation purposes, however I would not recommend to use it in production.
+
+## Install
+  
+  ```go get -u github.com/vburenin/firempq```
+
+## Config
+
+  Update firempq_cfg.json according to your preferences address/port to listen to.
+
+## Description
 
 FireMPQ is a message queue service that provides set of features that are not available in any other queue service implementation all together.
 
@@ -15,7 +29,7 @@ This is a list of my typical use cases:
 9. Message may need to be delivered without confirmation that it is processed - may be useful some times when some minor percentage of losses is acceptable by design.
 10. High performance. We all want to have a high performance service, so FireMPQ goal is to provide a service that can handle hundreds of thousands operations per second.
 
-Other use cases:
+## Other use cases:
 
 1. AWS SQS protocol support. Development on AWS may be costly if it involves generation of hundreds of millions of SQS messages, being able to use FireMPQ instead can reduce a cost.
 2. Message content visibility. For debugging/informational purposes it may be interesting to see message content that is pending in the queue.
@@ -24,7 +38,7 @@ Other use cases:
 5. AMPQ support - very long term plan if there is nothing to do. Volunteers are very welcome. May help during transition from services like RabbitMQ to FireMPQ.
 
 
-# First release features - Implemented
+## First release features - Implemented
 
 0. Simple text protocol.
 1. Priorities for messages (per message).
@@ -36,12 +50,20 @@ Other use cases:
 7. Support of AWS SQS protocol.
 8. AWS SNS is in progress.
 
-# Further plans
+## Further plans
 0. Performance optimizations if possible.
 1. Management Web-UI. A rich Web-UI that will help administrators manage existing queues, etc.
 
 3. Ability to override message payload, priority and other parameters.
 
-# When will it be done?
+## When will it be done?
 
 It is actually already working. Extensive testing is in process.
+
+## Bugs
+
+BUGS - YOU ARE WELCOME!
+
+## Contributions
+
+YOU ARE MORE THAN WELCOME!
