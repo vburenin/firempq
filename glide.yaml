@@ -1,8 +1,0 @@
-package: github.com/vburenin/firempq
-import:
-- package: github.com/gogo/protobuf
-- package: github.com/jmhodges/levigo
-- package: github.com/op/go-logging
-- package: github.com/smartystreets/goconvey
-- package: github.com/syndtr/goleveldb
-- package: github.com/aws/aws-sdk-go
