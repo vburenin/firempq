@@ -2,15 +2,55 @@
 
 ## So Far
 
-It happened that I added support of SQS protocol, thus it is useful for local development if you do not want to touch native AWS SQS service. AWS SQS API is fully implemented, but several calls related to permissions are ignored. Feel free to use it for testing and experementation purposes, however I would not recommend to use it in production.
+FireMPQ is ready to use in non critical enviroment such as development and QA.
+It can talk via FireMPQ (redis like protocol) and SQS. SNS protocol is in progress.
 
 ## Install
   
   ```go get -u github.com/vburenin/firempq```
 
+## Run
+
+```
+bash$ firempq --sqs-address :8333
+2016-08-14 15:34:53.77069: INFO conn_server.go:80 Starting FireMPQ Protocol Server at :8222
+2016-08-14 15:34:53.77081: INFO conn_server.go:47 Starting SQS Protocol Server on: :8333
+```
+
 ## Config
 
-  Update firempq_cfg.json according to your preferences address/port to listen to.
+```
+bash$ ./firempq --help
+Usage:
+  firempq [OPTIONS]
+
+Application Options:
+      --fmpq-address=                  FireMPQ native protocol. (default: :8222)
+      --sqs-address=                   SQS protocol interface for FireMPQ
+      --sns-address=                   NOT IMPLEMENTED: SNS protocol interface for FireMPQ
+      --flush-interval=                Disk synchronization interval in milliseconds (default: 100)
+      --data-dir=                      FireMPQ database location (default: fmpq-data)
+      --update-interval=               Timeout and expiration check period in milliseconds (default: 100)
+      --default-msg-ttl=               Default message TTL for a new queue in milliseconds (default: 3600000)
+      --default-delivery-delay=        Default message delivery delay for a new queue in milliseconds (default: 0)
+      --default-lock-timeout=          Default message lock/visibility timeout for a new queue in milliseconds (default: 60000)
+      --default-pop-count-limit=       Default receive attempts limit per message for a new queue (default: 99)
+      --default-max-queue-size=        Default max number of messages per queue (default: 100000000)
+      --default-wait-timeout=          Default wait timeout to receive a message for a new queue in milliseconds. (default: 0)
+      --max-wait-timeout=              Limit receive wait timeout. Milliseconds. (default: 20000)
+      --max-receive-batch=             Limit the number of received messages at once. (default: 10)
+      --max-lock-timeout=              Max lock/visibility timeout in milliseconds (default: 43200000)
+      --max-delivery-delay=            Maximum delivery delay in milliseconds. (default: 900000)
+      --max-message-ttl=               Maximum message TTL for the queue. In milliseconds (default: 345600000)
+      --max-message-size=              Maximum message size in bytes. (default: 262144)
+      --tune-process-batch=            Batch size to process expired messages and message locks. Large number may lead to not desired service timeouts (default: 1000)
+      --log-level=[debug|info|warning] Log level (default: info)
+      --print-cfg                      Print current config values
+      --profiler-address=              Enables Go profiler on the defined interface:port
+
+Help Options:
+  -h, --help                           Show this help message
+```
 
 ## Description
 
