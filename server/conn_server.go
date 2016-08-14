@@ -131,11 +131,11 @@ func (cs *ConnectionServer) Shutdown() {
 
 func (cs *ConnectionServer) waitForSignal(l net.Listener) {
 	<-cs.signalChan
+	signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	cs.Stop()
 	if l != nil {
 		l.Close()
 	}
-	signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	cs.Stop()
 }
 
 func (cs *ConnectionServer) Stop() {
