@@ -77,7 +77,7 @@ func (s *ServiceManager) loadService(desc *queue_info.ServiceDescription) (apis.
 		queue_info.DeleteServiceData(desc.Name)
 		return nil, false
 	}
-	log.Info("Loading service data for: %s", desc.Name)
+	log.Debug("Loading service data for: %s", desc.Name)
 
 	serviceLoader, ok := GetServiceLoader(desc.SType)
 	if !ok {

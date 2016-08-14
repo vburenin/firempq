@@ -23,7 +23,7 @@ func SetDatabase(ds apis.DataStorage) {
 func getDatabase() apis.DataStorage {
 	if database == nil {
 		var err error
-		database, err = ldb.NewLevelDBStorage("databasedir", conf.CFG)
+		database, err = ldb.NewLevelDBStorage(conf.CFG)
 		if err != nil {
 			log.Error("Cannot initialize FireMPQ database: %s", err)
 			os.Exit(255)

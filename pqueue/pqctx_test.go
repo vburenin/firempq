@@ -80,7 +80,7 @@ func TestCtxParsePQConfig(t *testing.T) {
 		})
 		Convey("Message ttl parse error", func() {
 			_, err := ParsePQConfig([]string{CPRM_MSG_TTL, "-1"})
-			So(err.GetStringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTtl))
+			So(err.GetStringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTTL))
 		})
 		Convey("Max size parse error", func() {
 			_, err := ParsePQConfig([]string{CPRM_MAX_MSGS_IN_QUEUE, "-1"})
@@ -271,7 +271,7 @@ func TestCtxPush(t *testing.T) {
 
 		Convey("Message ttl should error", func() {
 			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_MSG_TTL, "-1"})
-			So(resp.GetStringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTtl))
+			So(resp.GetStringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTTL))
 		})
 
 		Convey("Delivery delay must be out of range", func() {
@@ -399,7 +399,7 @@ func TestCtxSetParamValue(t *testing.T) {
 		})
 		Convey("Message TTL error", func() {
 			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_MSG_TTL, "0"})
-			So(resp.GetStringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTtl))
+			So(resp.GetStringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTTL))
 		})
 		Convey("Queue Max Size", func() {
 			resp := q.Call(PQ_CMD_SET_CFG, []string{CPRM_MAX_MSGS_IN_QUEUE, "-1"})

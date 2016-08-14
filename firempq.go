@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"net/http"
 	_ "net/http/pprof"
 
@@ -13,17 +12,15 @@ import (
 func main() {
 	// Initialize logging to a default INFO level to be able to log config error.
 
-	cfg := flag.String("config", "firempq_cfg.json", "Configuration file used to run server")
-	flag.Parse()
-
-	go http.ListenAndServe(":5000", nil)
-	log.InitLogging()
-
-	err := conf.ReadConfig(*cfg)
-	if err != nil {
-		log.Error(err.Error())
-		return
+	conf.ParseConfigParameters()
+	if len(conf.CFG.Profiler) > 0 {
+		go func() {
+			if err := http.ListenAndServe(conf.CFG.Profiler, nil); err != nil {
+				log.Error("Could not initialize profiler: %v", err)
+			}
+		}()
 	}
+
 	// Reinitialize log level according to the config data.
 	log.InitLogging()
 

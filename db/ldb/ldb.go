@@ -35,10 +35,10 @@ type LevelDBStorage struct {
 }
 
 // NewLevelDBStorage is a constructor of DataStorage.
-func NewLevelDBStorage(dbName string, cfg *conf.Config) (*LevelDBStorage, error) {
+func NewLevelDBStorage(cfg *conf.Config) (*LevelDBStorage, error) {
 	ds := LevelDBStorage{
 		cfg:            cfg,
-		dbName:         dbName,
+		dbName:         cfg.DatabasePath,
 		itemCache:      make(ItemCache),
 		tmpItemCache:   make(ItemCache),
 		closed:         false,
@@ -52,7 +52,7 @@ func NewLevelDBStorage(dbName string, cfg *conf.Config) (*LevelDBStorage, error)
 	opts.BlockCacheCapacity = 8 * 1024 * 1024
 	opts.WriteBuffer = 8 * 1024 * 1024
 
-	db, err := leveldb.OpenFile(dbName, opts)
+	db, err := leveldb.OpenFile(cfg.DatabasePath, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (ds *LevelDBStorage) periodicCacheFlush() {
 		select {
 		case <-ds.forceFlushChan:
 			break
-		case <-time.After(conf.CFG.DbFlushInterval * time.Millisecond):
+		case <-time.After(time.Duration(conf.CFG.DbFlushInterval) * time.Millisecond):
 			break
 		}
 		ds.flushLock.Lock()

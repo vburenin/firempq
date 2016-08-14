@@ -412,6 +412,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/jessevdk/go-flags",
+			"repository": "https://github.com/jessevdk/go-flags",
+			"vcs": "git",
+			"revision": "f2785f5820ec967043de79c8be97edfc464ca745",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/onsi/ginkgo",
 			"repository": "https://github.com/onsi/ginkgo",
 			"vcs": "git",

@@ -110,7 +110,7 @@ func (pq *PQueue) StartUpdate() {
 			if cnt >= conf.CFG_PQ.TimeoutCheckBatchSize {
 				time.Sleep(time.Millisecond)
 			} else {
-				time.Sleep(conf.CFG.UpdateInterval * time.Millisecond)
+				time.Sleep(time.Duration(conf.CFG.UpdateInterval) * time.Millisecond)
 			}
 		}
 	}()

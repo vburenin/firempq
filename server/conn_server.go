@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-
 	"time"
 
 	"github.com/vburenin/firempq/apis"
@@ -27,78 +26,100 @@ const (
 
 type QueueOpFunc func(req []string) error
 
-type ServiceHandler interface {
-}
-
 type ConnectionServer struct {
 	serviceManager *qmgr.ServiceManager
-	listener       net.Listener
 	signalChan     chan os.Signal
 	waitGroup      sync.WaitGroup
 }
 
-func NewServer(listener net.Listener) apis.IServer {
+func NewServer() apis.IServer {
 	return &ConnectionServer{
 		serviceManager: qmgr.CreateServiceManager(),
-		listener:       listener,
 		signalChan:     make(chan os.Signal, 1),
 	}
 }
 
-func (cs *ConnectionServer) startHTTP() {
-	go func() {
-		if conf.CFG.SQSServerInterface == "" {
-			log.Info("No SQS Interface configured")
-		}
-
-		log.Info("Starting SQS Server on: %s", conf.CFG.SQSServerInterface)
+func (cs *ConnectionServer) startAWSProtoListeners() {
+	if conf.CFG.SQSServerInterface != "" {
 		cs.waitGroup.Add(1)
-		defer cs.waitGroup.Done()
+		go func() {
+			defer cs.waitGroup.Done()
+			log.Info("Starting SQS Server on: %s", conf.CFG.SQSServerInterface)
 
-		mux := http.NewServeMux()
-		mux.Handle("/", &sqsproto.SQSRequestHandler{
-			ServiceManager: cs.serviceManager,
-		})
-		graceful.Run(conf.CFG.SQSServerInterface, time.Second*10, mux)
-	}()
+			mux := http.NewServeMux()
+			mux.Handle("/", &sqsproto.SQSRequestHandler{
+				ServiceManager: cs.serviceManager,
+			})
+			graceful.Run(conf.CFG.SQSServerInterface, time.Second*10, mux)
 
-	go func() {
-		if conf.CFG.SNSServerInterface == "" {
-			log.Info("No SNS Interface configured")
-		}
-		log.Info("Starting SNS Server on: %s", conf.CFG.SNSServerInterface)
+		}()
+	} else {
+		log.Debug("No SQS Interface configured")
+	}
 
+	if conf.CFG.SNSServerInterface != "" {
 		cs.waitGroup.Add(1)
-		defer cs.waitGroup.Done()
-		mux := http.NewServeMux()
+		go func() {
+			defer cs.waitGroup.Done()
+			log.Info("Starting SNS Server on: %s", conf.CFG.SNSServerInterface)
 
-		mux.Handle("/", &snsproto.SNSRequestHandler{
-			ServiceManager: cs.serviceManager,
-		})
-		graceful.Run(conf.CFG.SNSServerInterface, time.Second*10, mux)
-	}()
+			mux := http.NewServeMux()
+
+			mux.Handle("/", &snsproto.SNSRequestHandler{
+				ServiceManager: cs.serviceManager,
+			})
+			graceful.Run(conf.CFG.SNSServerInterface, time.Second*10, mux)
+		}()
+	} else {
+		log.Debug("No SNS interface configured")
+	}
+}
+
+func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
+	if conf.CFG.FMPQServerInterface != "" {
+		log.Info("Listening FireMPQ protocol at %s", conf.CFG.FMPQServerInterface)
+		listener, err := net.Listen("tcp", conf.CFG.FMPQServerInterface)
+		if err != nil {
+			log.Error("Could not start FireMPQ protocol listener: %v", err)
+			return listener, err
+		}
+		cs.waitGroup.Add(1)
+		go func() {
+			defer cs.waitGroup.Done()
+			defer listener.Close()
+			for {
+				conn, err := listener.Accept()
+				if err == nil {
+					go cs.handleConnection(conn)
+				} else {
+					select {
+					case <-signals.QuitChan:
+						return
+					default:
+						log.Error("Could not accept incoming request: %v", err)
+					}
+				}
+			}
+			log.Info("Stopped accepting connections for FireMPQ.")
+		}()
+		return listener, nil
+	} else {
+		log.Debug("No FireMPQ Interface configured")
+	}
+	return nil, nil
 }
 
 func (cs *ConnectionServer) Start() {
 	signal.Notify(cs.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go cs.waitForSignal()
-	cs.startHTTP()
-
-	defer cs.listener.Close()
-	for {
-		conn, err := cs.listener.Accept()
-		if err == nil {
-			go cs.handleConnection(conn)
-		} else {
-			select {
-			case <-signals.QuitChan:
-				cs.Shutdown()
-				return
-			default:
-				log.Error("Could not accept incoming request: %s", err.Error())
-			}
-		}
+	l, err := cs.startMPQListener()
+	if err != nil {
+		cs.Shutdown()
+		return
 	}
+	go cs.waitForSignal(l)
+	cs.startAWSProtoListeners()
+	log.Info("Ready to serve!")
+	cs.waitGroup.Wait()
 }
 
 func (cs *ConnectionServer) Shutdown() {
@@ -109,21 +130,18 @@ func (cs *ConnectionServer) Shutdown() {
 	log.Info("Server stopped.")
 }
 
-func (cs *ConnectionServer) waitForSignal() {
-	for {
-		select {
-		case <-cs.signalChan:
-			signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-			cs.Stop()
-			return
-		}
+func (cs *ConnectionServer) waitForSignal(l net.Listener) {
+	<-cs.signalChan
+	if l != nil {
+		l.Close()
 	}
+	signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	cs.Stop()
 }
 
 func (cs *ConnectionServer) Stop() {
 	log.Notice("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
-	cs.listener.Close()
 	signals.CloseQuitChan()
 }
 

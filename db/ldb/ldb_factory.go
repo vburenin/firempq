@@ -21,7 +21,7 @@ func GetDatabase() *LevelDBStorage {
 func getDatabase() *LevelDBStorage {
 	var err error
 	if database == nil {
-		database, err = NewLevelDBStorage("databasedir", conf.CFG)
+		database, err = NewLevelDBStorage(conf.CFG)
 		if err != nil {
 			log.Error("Cannot initialize FireMPQ database: %s", err)
 			os.Exit(255)

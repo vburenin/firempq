@@ -4,6 +4,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/jessevdk/go-flags"
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/idgen"
@@ -91,9 +92,15 @@ func CreatePQueue(svcs apis.IServices, desc *queue_info.ServiceDescription, para
 }
 
 func DefaultPQConfig() *conf.PQConfig {
+	cfg := &conf.Config{}
+	flags.ParseArgs(cfg, []string{"firempq"})
+
+	conf.CFG = cfg
+	conf.CFG_PQ = &cfg.PQueueConfig
+
 	return &conf.PQConfig{
 		MaxMsgsInQueue:    conf.CFG_PQ.DefaultMaxQueueSize,
-		MsgTtl:            conf.CFG_PQ.DefaultMessageTtl,
+		MsgTtl:            conf.CFG_PQ.DefaultMessageTTL,
 		DeliveryDelay:     conf.CFG_PQ.DefaultDeliveryDelay,
 		PopLockTimeout:    conf.CFG_PQ.DefaultLockTimeout,
 		LastPushTs:        utils.Uts(),
@@ -112,7 +119,7 @@ func ParsePQConfig(params []string) (*conf.PQConfig, apis.IResponse) {
 	for len(params) > 0 {
 		switch params[0] {
 		case CPRM_MSG_TTL:
-			params, cfg.MsgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTtl)
+			params, cfg.MsgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
 		case CPRM_MAX_MSG_SIZE:
 			params, cfg.MaxMsgSize, err = mpqproto.ParseInt64Param(params, 1024, conf.CFG_PQ.MaxMessageSize)
 		case CPRM_MAX_MSGS_IN_QUEUE:
@@ -354,7 +361,7 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 		case PRM_DELAY:
 			params, delay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
 		case PRM_MSG_TTL:
-			params, msgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTtl)
+			params, msgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
 		case PRM_SYNC_WAIT:
 			params = params[1:]
 			syncWait = true
@@ -513,7 +520,7 @@ func (ctx *PQContext) SetParamValue(params []string) apis.IResponse {
 	for len(params) > 0 {
 		switch params[0] {
 		case CPRM_MSG_TTL:
-			params, msgTtl, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxMessageTtl)
+			params, msgTtl, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxMessageTTL)
 			pqParams.MsgTTL = &msgTtl
 		case CPRM_MAX_MSG_SIZE:
 			params, maxMsgSize, err = mpqproto.ParseInt64Param(params, 1024, conf.CFG_PQ.MaxMessageSize)

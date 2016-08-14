@@ -1,151 +1,92 @@
 package conf
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io/ioutil"
-	"strings"
-	"time"
+	"log"
+	"os"
 
+	"github.com/jessevdk/go-flags"
 	"github.com/op/go-logging"
 )
 
-type PQueueConfigData struct {
-	DefaultMessageTtl     int64
-	DefaultDeliveryDelay  int64
-	DefaultLockTimeout    int64
-	DefaultPopCountLimit  int64
-	DefaultMaxQueueSize   int64
-	DefaultPopWaitTimeout int64
-	TimeoutCheckBatchSize int64
+type CLIParams struct {
+	DefaultMessageTTL    int64
+	DefaultDeliveryDelay int64
+}
 
-	MaxPopWaitTimeout int64
-	MaxPopBatchSize   int64
-	MaxLockTimeout    int64
-	MaxDeliveryDelay  int64
-	MaxMessageTtl     int64
-	MaxMessageSize    int64
+type PQueueConfigData struct {
+	DefaultMessageTTL     int64 `long:"default-msg-ttl" description:"Default message TTL for a new queue in milliseconds" default:"3600000" env:"FMPQ_MSG_TTL"`
+	DefaultDeliveryDelay  int64 `long:"default-delivery-delay" description:"Default message delivery delay for a new queue in milliseconds" default:"0" env:"FMPQ_DELIVERY_DELAY"`
+	DefaultLockTimeout    int64 `long:"default-lock-timeout" description:"Default message lock/visibility timeout for a new queue in milliseconds" default:"60000"`
+	DefaultPopCountLimit  int64 `long:"default-pop-count-limit" description:"Default limit for a message receive attempts for a new queue" default:"99"`
+	DefaultMaxQueueSize   int64 `long:"default-max-queue-size" description:"Default max number of messages per queue" default:"100000000"`
+	DefaultPopWaitTimeout int64 `long:"default-wait-timeout" description:"Default wait timeout to receive a message from the queue for a new queue in milliseconds." default:"0"`
+
+	MaxPopWaitTimeout int64 `long:"max-wait-timeout" description:"Limit receive wait timeout. Milliseconds." default:"20000"`
+	MaxPopBatchSize   int64 `long:"max-receive-batch" description:"Limit the number of received messages at once." default:"10"`
+	MaxLockTimeout    int64 `long:"max-lock-timeout" description:"Max lock/visibility timeout in milliseconds" default:"43200000"`
+	MaxDeliveryDelay  int64 `long:"max-delivery-delay" description:"Maximum delivery delay in milliseconds." default:"900000"`
+	MaxMessageTTL     int64 `long:"max-message-ttl" description:"Maximum message TTL for the queue. In milliseconds" default:"345600000"`
+	MaxMessageSize    int64 `long:"max-message-size" description:"Maximum message size in bytes." default:"262144"`
+
+	TimeoutCheckBatchSize int64 `long:"tune-process-batch" description:"Internal batching for expired and timedout messages. Large numbers may lead to not desired service timeouts" default:"1000"`
 }
 
 // Config is a generic service config type.
 type Config struct {
+	TextLogLevel        string `long:"log-level" description:"Log level" default:"info" choice:"debug" choice:"info" choice:"warning"`
+	Profiler            string `long:"profiler-address" description:"Enables Go profiler on the defined interface:port" default:""`
 	LogLevel            logging.Level
-	FMPQServerInterface string
-	SQSServerInterface  string
-	SNSServerInterface  string
-	DbFlushInterval     time.Duration
-	DbBufferSize        int64
-	DatabasePath        string
-	PQueueConfig        PQueueConfigData
-	UpdateInterval      time.Duration
+	FMPQServerInterface string `long:"fmpq-address" description:"FireMPQ native protocol." default:":8222"`
+	SQSServerInterface  string `long:"sqs-address" description:"SQS protocol interface for FireMPQ" default:""`
+	SNSServerInterface  string `long:"sns-address" description:"NOT IMPLENTED: SNS protocol interface for FireMPQ" default:""`
+	DbFlushInterval     int64  `long:"flush-interval" description:"Disk synchronization interval in milliseconds" default:"100"`
+	DatabasePath        string `long:"data-dir" description:"FireMPQ database location" default:"fmpq-data"`
+	UpdateInterval      int64  `long:"update-interval" description:"Timeout and expiration check period in milliseconds" default:"100"`
+
 	BinaryLogPath       string
 	BinaryLogBufferSize int
 	BinaryLogPageSize   uint64
 	BinaryLogFrameSize  uint64
+
+	PQueueConfig PQueueConfigData
+
+	PrintConfig bool `long:"print-cfg" description:"Print current config values"`
 }
 
 var CFG *Config
 var CFG_PQ *PQueueConfigData
 
-func init() {
-	NewDefaultConfig()
-}
+func ParseConfigParameters() *Config {
+	cfg := Config{}
 
-func NewDefaultConfig() *Config {
-	cfg := Config{
-		LogLevel:            logging.INFO,
-		FMPQServerInterface: ":8222",
-		SQSServerInterface:  "",
-		SNSServerInterface:  "",
-		DatabasePath:        "./",
-		DbFlushInterval:     100,
-		DbBufferSize:        10000,
-		BinaryLogPath:       "./",
-		BinaryLogBufferSize: 128,
-		BinaryLogPageSize:   2 * 1024 * 1024 * 1025, // 2Gb
-		PQueueConfig: PQueueConfigData{
-			// Max number of messages which can be pushed into the queue. 0 - no limit.
-			DefaultMaxQueueSize: 0,
-			// 10 minutes
-			DefaultMessageTtl: 10 * 60 * 1000,
-			// No delay
-			DefaultDeliveryDelay: 0,
-			// Locked by default 60 seconds.
-			DefaultLockTimeout: 60 * 1000,
-			// Pop operations will not wait by default.
-			DefaultPopWaitTimeout: 0,
-			// Do not time out too many messages at once, it may significantly increase latency.
-			TimeoutCheckBatchSize: 1000,
-			// Pop wait can not be set larger than 30 seconds.
-			MaxPopWaitTimeout: 30000,
-			// Max Pop Batch size limit is 10
-			MaxPopBatchSize: 10,
-			// Max Lock timeout is two hours.
-			MaxLockTimeout: 3600000 * 2,
-			// Max delivery message delay is 12 hours.
-			MaxDeliveryDelay: 3600000 * 12,
-			// Max Message TTL is 14 days.
-			MaxMessageTtl: 3600000 * 24 * 14,
-			// Max Message size is 256KB.
-			MaxMessageSize: 256 * 1024,
-		},
+	_, err := flags.Parse(&cfg)
+	if err != nil {
+		log.Printf("Could not parse CLI parameters: %v", err)
+		os.Exit(255)
 	}
+
+	if cfg.TextLogLevel == "warning" {
+		cfg.LogLevel = 3
+	}
+
+	if cfg.TextLogLevel == "info" {
+		cfg.LogLevel = 4
+	}
+
+	if cfg.TextLogLevel == "debug" {
+		cfg.LogLevel = 5
+	}
+
+	if cfg.PrintConfig {
+		txt, err := json.MarshalIndent(cfg, " ", "  ")
+		if err != nil {
+			log.Fatalf("Could not serialize config to print it: %v ", err)
+		}
+		log.Print(string(txt))
+	}
+
 	CFG = &cfg
 	CFG_PQ = &(cfg.PQueueConfig)
 	return &cfg
-}
-
-func getErrorLine(data []byte, byteOffset int64) (int64, int64, string) {
-	var lineNum int64 = 1
-	var lineOffset int64
-	var lineData []byte
-	for idx, b := range data {
-		if b < 32 {
-			if lineOffset > 0 {
-				lineNum++
-				lineOffset = 0
-				lineData = make([]byte, 0, 32)
-			}
-
-		} else {
-			lineOffset++
-			lineData = append(lineData, b)
-		}
-		if int64(idx) == byteOffset {
-			break
-		}
-	}
-	return lineNum, lineOffset, string(lineData)
-}
-
-func formatTypeError(lineNum, lineOffset int64, lineText string, err *json.UnmarshalTypeError) string {
-	return fmt.Sprintf(
-		"Config error at line %d:%d. Unexpected data type '%s', should be '%s': '%s'",
-		lineNum, lineOffset, err.Value, err.Type.String(), strings.TrimSpace(lineText))
-}
-
-// ReadConfig reads and decodes firempq_cfg.json file.
-func ReadConfig(fileName string) error {
-	confData, err := ioutil.ReadFile(fileName)
-
-	if err != nil {
-		return err
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(confData))
-
-	cfg := NewDefaultConfig()
-	err = decoder.Decode(cfg)
-	if err != nil {
-		if e, ok := err.(*json.UnmarshalTypeError); ok {
-			num, offset, str := getErrorLine(confData, e.Offset)
-			err = errors.New(formatTypeError(num, offset, str, e))
-		}
-		return err
-	}
-	CFG = cfg
-	CFG_PQ = &(cfg.PQueueConfig)
-	return nil
 }
