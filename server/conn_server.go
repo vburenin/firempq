@@ -44,7 +44,7 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			log.Info("Starting SQS Server on: %s", conf.CFG.SQSServerInterface)
+			log.Info("Starting SQS Protocol Server on: %s", conf.CFG.SQSServerInterface)
 
 			mux := http.NewServeMux()
 			mux.Handle("/", &sqsproto.SQSRequestHandler{
@@ -61,7 +61,7 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			log.Info("Starting SNS Server on: %s", conf.CFG.SNSServerInterface)
+			log.Info("Starting SNS Protocol Server on: %s", conf.CFG.SNSServerInterface)
 
 			mux := http.NewServeMux()
 
@@ -77,7 +77,7 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 
 func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 	if conf.CFG.FMPQServerInterface != "" {
-		log.Info("Listening FireMPQ protocol at %s", conf.CFG.FMPQServerInterface)
+		log.Info("Starting FireMPQ Protocol Server at %s", conf.CFG.FMPQServerInterface)
 		listener, err := net.Listen("tcp", conf.CFG.FMPQServerInterface)
 		if err != nil {
 			log.Error("Could not start FireMPQ protocol listener: %v", err)
@@ -118,7 +118,6 @@ func (cs *ConnectionServer) Start() {
 	}
 	go cs.waitForSignal(l)
 	cs.startAWSProtoListeners()
-	log.Info("Ready to serve!")
 	cs.waitGroup.Wait()
 }
 
