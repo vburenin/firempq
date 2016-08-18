@@ -6,7 +6,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	cq "github.com/vburenin/firempq/server/sqsproto/create_queue"
 	gqa "github.com/vburenin/firempq/server/sqsproto/get_queue_attributes"
+
+	"strconv"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -37,6 +41,7 @@ func TestCreateAndDeleteQueues(t *testing.T) {
 		Convey("Create and delete queue with default parameters", func() {
 			qn := "queue_name"
 			deleteQueue(s, t, qn)
+			defer deleteQueue(s, t, qn)
 			resp, err := s.CreateQueue(&sqs.CreateQueueInput{QueueName: &qn})
 
 			So(err, ShouldBeNil)
@@ -55,8 +60,10 @@ func TestCreateAndDeleteQueues(t *testing.T) {
 		})
 
 		Convey("Create and delete queue with default parameters and test their values", func() {
+			ts := time.Now().Unix()
 			qn := "queue_name2"
 			deleteQueue(s, t, qn)
+			defer deleteQueue(s, t, qn)
 			resp, err := s.CreateQueue(&sqs.CreateQueueInput{QueueName: &qn})
 
 			So(err, ShouldBeNil)
@@ -98,8 +105,124 @@ func TestCreateAndDeleteQueues(t *testing.T) {
 			So(*attrs[gqa.AttrReceiveMessageWaitTimeSeconds], ShouldEqual, "0")
 			So(*attrs[gqa.AttrQueueArn], ShouldEqual, "arn:aws:sqs:us-west-2:123456789:"+qn)
 
-			deleteQueue(s, t, qn)
+			modTS, _ := strconv.ParseInt(*attrs[gqa.AttrLastModifiedTimestamp], 10, 0)
+			crtTS, _ := strconv.ParseInt(*attrs[gqa.AttrCreatedTimestamp], 10, 0)
+			So(modTS, ShouldBeGreaterThanOrEqualTo, ts)
+			So(crtTS, ShouldBeGreaterThanOrEqualTo, ts)
 
+			So(modTS, ShouldBeLessThanOrEqualTo, ts+3600)
+			So(crtTS, ShouldBeLessThanOrEqualTo, ts+3600)
+
+		})
+
+		Convey("Create queue, set custom parameters, read them back, they should be the same", func() {
+			ts := time.Now().Unix()
+			qn := "queue_name3"
+			deleteQueue(s, t, qn)
+			defer deleteQueue(s, t, qn)
+			resp, err := s.CreateQueue(&sqs.CreateQueueInput{
+				QueueName: &qn,
+				Attributes: map[string]*string{
+					cq.AttrVisibilityTimeout:             aws.String("1001"),
+					cq.AttrDelaySeconds:                  aws.String("7"),
+					cq.AttrMaximumMessageSize:            aws.String("123456"),
+					cq.AttrMessageRetentionPeriod:        aws.String("7203"),
+					cq.AttrReceiveMessageWaitTimeSeconds: aws.String("11"),
+				},
+			})
+			So(err, ShouldBeNil)
+			So(resp.QueueUrl, ShouldNotBeNil)
+			So(*resp.QueueUrl, ShouldContainSubstring, "/"+qn)
+
+			// Get All Attributes.
+			respAttr, err := s.GetQueueAttributes(&sqs.GetQueueAttributesInput{
+				QueueUrl:       resp.QueueUrl,
+				AttributeNames: []*string{aws.String(gqa.AttrAll)},
+			})
+			So(err, ShouldBeNil)
+			attrs := respAttr.Attributes
+
+			So(attrs, ShouldContainKey, gqa.AttrApproximateNumberOfMessages)
+			So(attrs, ShouldContainKey, gqa.AttrApproximateNumberOfMessagesNotVisible)
+			So(attrs, ShouldContainKey, gqa.AttrApproximateNumberOfMessagesDelayed)
+
+			So(attrs, ShouldContainKey, gqa.AttrVisibilityTimeout)
+			So(attrs, ShouldContainKey, gqa.AttrDelaySeconds)
+
+			So(attrs, ShouldContainKey, gqa.AttrCreatedTimestamp)
+			So(attrs, ShouldContainKey, gqa.AttrLastModifiedTimestamp)
+
+			So(attrs, ShouldContainKey, gqa.AttrMaximumMessageSize)
+			So(attrs, ShouldContainKey, gqa.AttrMessageRetentionPeriod)
+			So(attrs, ShouldContainKey, gqa.AttrReceiveMessageWaitTimeSeconds)
+			So(attrs, ShouldContainKey, gqa.AttrQueueArn)
+
+			So(*attrs[gqa.AttrApproximateNumberOfMessages], ShouldEqual, "0")
+			So(*attrs[gqa.AttrApproximateNumberOfMessagesNotVisible], ShouldEqual, "0")
+			So(*attrs[gqa.AttrApproximateNumberOfMessagesDelayed], ShouldEqual, "0")
+
+			So(*attrs[gqa.AttrVisibilityTimeout], ShouldEqual, "1001")
+			So(*attrs[gqa.AttrDelaySeconds], ShouldEqual, "7")
+
+			So(*attrs[gqa.AttrMaximumMessageSize], ShouldEqual, "123456")
+			So(*attrs[gqa.AttrMessageRetentionPeriod], ShouldEqual, "7203")
+			So(*attrs[gqa.AttrReceiveMessageWaitTimeSeconds], ShouldEqual, "11")
+			So(*attrs[gqa.AttrQueueArn], ShouldEqual, "arn:aws:sqs:us-west-2:123456789:"+qn)
+
+			modTS, _ := strconv.ParseInt(*attrs[gqa.AttrLastModifiedTimestamp], 10, 0)
+			crtTS, _ := strconv.ParseInt(*attrs[gqa.AttrCreatedTimestamp], 10, 0)
+			So(modTS, ShouldBeGreaterThanOrEqualTo, ts)
+			So(crtTS, ShouldBeGreaterThanOrEqualTo, ts)
+
+			So(modTS, ShouldBeLessThanOrEqualTo, ts+3600)
+			So(crtTS, ShouldBeLessThanOrEqualTo, ts+3600)
+
+		})
+
+		Convey("Creating queue with the same name but different parameters should fail if queue exists.", func() {
+			qn := "queue_name3"
+			deleteQueue(s, t, qn)
+			defer deleteQueue(s, t, qn)
+			resp, err := s.CreateQueue(&sqs.CreateQueueInput{
+				QueueName: &qn,
+				Attributes: map[string]*string{
+					cq.AttrVisibilityTimeout:             aws.String("1001"),
+					cq.AttrDelaySeconds:                  aws.String("7"),
+					cq.AttrMaximumMessageSize:            aws.String("123456"),
+					cq.AttrMessageRetentionPeriod:        aws.String("7203"),
+					cq.AttrReceiveMessageWaitTimeSeconds: aws.String("11"),
+				},
+			})
+			So(err, ShouldBeNil)
+			So(resp.QueueUrl, ShouldNotBeNil)
+			So(*resp.QueueUrl, ShouldContainSubstring, "/"+qn)
+
+			resp, err = s.CreateQueue(&sqs.CreateQueueInput{
+				QueueName: &qn,
+				Attributes: map[string]*string{
+					cq.AttrVisibilityTimeout:             aws.String("1001"),
+					cq.AttrDelaySeconds:                  aws.String("7"),
+					cq.AttrMaximumMessageSize:            aws.String("123456"),
+					cq.AttrMessageRetentionPeriod:        aws.String("7203"),
+					cq.AttrReceiveMessageWaitTimeSeconds: aws.String("11"),
+				},
+			})
+			So(err, ShouldBeNil)
+			So(resp.QueueUrl, ShouldNotBeNil)
+			So(*resp.QueueUrl, ShouldContainSubstring, "/"+qn)
+
+			resp, err = s.CreateQueue(&sqs.CreateQueueInput{
+				QueueName: &qn,
+				Attributes: map[string]*string{
+					cq.AttrVisibilityTimeout:             aws.String("1001"),
+					cq.AttrDelaySeconds:                  aws.String("8"),
+					cq.AttrMaximumMessageSize:            aws.String("123456"),
+					cq.AttrMessageRetentionPeriod:        aws.String("7203"),
+					cq.AttrReceiveMessageWaitTimeSeconds: aws.String("11"),
+				},
+			})
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "QueueAlreadyExists")
 		})
 
 	})
