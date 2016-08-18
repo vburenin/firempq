@@ -22,25 +22,28 @@ type GetQueueAttributesResponse struct {
 	RequestId  string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *GetQueueAttributesResponse) HttpCode() int { return http.StatusOK }
-func (self *GetQueueAttributesResponse) XmlDocument() string {
-	return sqs_response.EncodeXml(self)
+func (r *GetQueueAttributesResponse) HttpCode() int { return http.StatusOK }
+func (r *GetQueueAttributesResponse) XmlDocument() string {
+	return sqs_response.EncodeXml(r)
 }
-func (self *GetQueueAttributesResponse) BatchResult(docId string) interface{} { return nil }
+func (r *GetQueueAttributesResponse) BatchResult(docId string) interface{} { return nil }
 
 const (
 	AttrAll                                   = "All"
 	AttrApproximateNumberOfMessages           = "ApproximateNumberOfMessages"
 	AttrApproximateNumberOfMessagesNotVisible = "ApproximateNumberOfMessagesNotVisible"
+	AttrApproximateNumberOfMessagesDelayed    = "ApproximateNumberOfMessagesDelayed"
+
 	AttrVisibilityTimeout                     = "VisibilityTimeout"
+	AttrDelaySeconds                          = "DelaySeconds"
+
 	AttrCreatedTimestamp                      = "CreatedTimestamp"
 	AttrLastModifiedTimestamp                 = "LastModifiedTimestamp"
+
 	AttrMaximumMessageSize                    = "MaximumMessageSize"
 	AttrMessageRetentionPeriod                = "MessageRetentionPeriod"
-	AttrQueueArn                              = "QueueArn"
-	AttrApproximateNumberOfMessagesDelayed    = "ApproximateNumberOfMessagesDelayed"
-	AttrDelaySeconds                          = "DelaySeconds"
 	AttrReceiveMessageWaitTimeSeconds         = "ReceiveMessageWaitTimeSeconds"
+	AttrQueueArn                              = "QueueArn"
 	AttrRedrivePolicy                         = "RedrivePolicy"
 
 	// Not used attribute.

@@ -17,9 +17,9 @@ type GetQueueUrlResult struct {
 	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *GetQueueUrlResult) XmlDocument() string                  { return sqs_response.EncodeXml(self) }
-func (self *GetQueueUrlResult) HttpCode() int                        { return http.StatusOK }
-func (self *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
+func (r *GetQueueUrlResult) XmlDocument() string                  { return sqs_response.EncodeXml(r) }
+func (r *GetQueueUrlResult) HttpCode() int                        { return http.StatusOK }
+func (r *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
 
 func GetQueueUrl(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	svc, ok := svcMgr.GetService(sqsQuery.QueueName)
