@@ -26,7 +26,7 @@ func GetQueueUrl(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_r
 	if !ok {
 		return sqserr.QueueDoesNotExist()
 	}
-	if svc.GetTypeName() != apis.STYPE_PRIORITY_QUEUE {
+	if svc.Info().Type != apis.ServiceTypePriorityQueue {
 		return sqserr.QueueDoesNotExist()
 	}
 

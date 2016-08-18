@@ -284,8 +284,8 @@ func TestStatus(t *testing.T) {
 			So(status[PQ_STATUS_IN_FLIGHT_MSG], ShouldEqual, 0)
 			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 0)
 
-			So(q.GetServiceId(), ShouldEqual, "1")
-			So(q.GetTypeName(), ShouldEqual, apis.STYPE_PRIORITY_QUEUE)
+			So(q.Info().ID, ShouldEqual, "1")
+			So(q.Info().Type, ShouldEqual, apis.ServiceTypePriorityQueue)
 		})
 		Convey("Status for several messages in flight", func() {
 			q.Push("d1", "p", 10000, 0, 9)
@@ -479,7 +479,7 @@ func TestUnlockByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(r, 1)
 
-		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).Receipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
 		VerifyOkResponse(q.UnlockByReceipt(rcpt))
 		VerifyServiceSize(q, 1)
@@ -500,7 +500,7 @@ func TestDeleteByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(r, 1)
 
-		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).Receipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
 		VerifyOkResponse(q.DeleteByReceipt(rcpt))
 		VerifyServiceSize(q, 0)
@@ -518,7 +518,7 @@ func TestUpdateLockByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 		VerifyItemsRespSize(r, 1)
 
-		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).GetReceipt()
+		rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).Receipt()
 		So(len(rcpt), ShouldBeGreaterThan, 2)
 		VerifyOkResponse(q.UpdateLockByRcpt(rcpt, 10000))
 		VerifyServiceSize(q, 1)
@@ -590,7 +590,7 @@ func TestMessagesMovedToAnotherQueue(t *testing.T) {
 			// Need to wait while message transferring is happening.
 			for i := 0; i < 10000; i++ {
 				time.Sleep(time.Microsecond * 1)
-				if failQueue.GetSize() == 2 {
+				if failQueue.Info().Size == 2 {
 					break
 				}
 			}

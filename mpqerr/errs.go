@@ -1,9 +1,9 @@
 package mpqerr
 
 import (
-	"fmt"
-	"bytes"
 	"bufio"
+	"bytes"
+	"fmt"
 
 	"github.com/vburenin/firempq/enc"
 )
@@ -25,7 +25,7 @@ func (e *ErrorResponse) Error() string {
 	return e.ErrorText
 }
 
-func (e *ErrorResponse) GetStringResponse() string {
+func (e *ErrorResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	e.WriteResponse(wb)

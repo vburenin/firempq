@@ -34,17 +34,16 @@ const (
 	AttrApproximateNumberOfMessagesNotVisible = "ApproximateNumberOfMessagesNotVisible"
 	AttrApproximateNumberOfMessagesDelayed    = "ApproximateNumberOfMessagesDelayed"
 
-	AttrVisibilityTimeout                     = "VisibilityTimeout"
-	AttrDelaySeconds                          = "DelaySeconds"
+	AttrVisibilityTimeout     = "VisibilityTimeout"
+	AttrDelaySeconds          = "DelaySeconds"
+	AttrCreatedTimestamp      = "CreatedTimestamp"
+	AttrLastModifiedTimestamp = "LastModifiedTimestamp"
 
-	AttrCreatedTimestamp                      = "CreatedTimestamp"
-	AttrLastModifiedTimestamp                 = "LastModifiedTimestamp"
-
-	AttrMaximumMessageSize                    = "MaximumMessageSize"
-	AttrMessageRetentionPeriod                = "MessageRetentionPeriod"
-	AttrReceiveMessageWaitTimeSeconds         = "ReceiveMessageWaitTimeSeconds"
-	AttrQueueArn                              = "QueueArn"
-	AttrRedrivePolicy                         = "RedrivePolicy"
+	AttrMaximumMessageSize            = "MaximumMessageSize"
+	AttrMessageRetentionPeriod        = "MessageRetentionPeriod"
+	AttrReceiveMessageWaitTimeSeconds = "ReceiveMessageWaitTimeSeconds"
+	AttrQueueArn                      = "QueueArn"
+	AttrRedrivePolicy                 = "RedrivePolicy"
 
 	// Not used attribute.
 	// AttrPolicy                                = "Policy"
@@ -65,9 +64,9 @@ func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 		RequestId: "reqId",
 	}
 	for i := 0; i < paramsLen; i += 2 {
+		allAttr := false
 		if strings.HasPrefix(sqsQuery.ParamsList[i], "AttributeName.") {
 			attrName := sqsQuery.ParamsList[i+1]
-			allAttr := false
 			if attrName == AttrAll {
 				allAttr = true
 				resp.Attributes = make([]*QAttr, 0, 13) // 13 total attributes
@@ -75,7 +74,7 @@ func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 			if allAttr || attrName == AttrApproximateNumberOfMessages {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrApproximateNumberOfMessages,
-					Value: pq.GetSize(),
+					Value: pq.Info().Size,
 				})
 			}
 			if allAttr || attrName == AttrApproximateNumberOfMessagesNotVisible {
@@ -142,8 +141,7 @@ func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 				if pqCfg.PopLimitQueueName != "" {
 					resp.Attributes = append(resp.Attributes, &QAttr{
 						Name: AttrRedrivePolicy,
-						Value: fmt.Sprintf(
-							`{"deadLetterTargetArn":%s,"maxReceiveCount":%d}`,
+						Value: fmt.Sprintf(`{"deadLetterTargetArn":"%s","maxReceiveCount":%d}`,
 							makeQueueArn(pqCfg.PopLimitQueueName), pqCfg.PopCountLimit),
 					})
 				}

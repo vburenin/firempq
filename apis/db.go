@@ -1,5 +1,6 @@
 package apis
 
+// ItemIterator is an iterator interface over key/value storage.
 type ItemIterator interface {
 	Next()
 	Valid() bool
@@ -9,6 +10,8 @@ type ItemIterator interface {
 	GetTrimKey() []byte
 }
 
+// DataStorage is an abstracted interface over the key/value storage
+// currently the main purpose is to to prepend prefixes to the data key.
 type DataStorage interface {
 	WaitFlush()
 	CachedStore2(key1 string, data1 []byte, key2 string, data2 []byte)

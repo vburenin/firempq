@@ -1,8 +1,8 @@
 package resp
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 
 	"github.com/vburenin/firempq/enc"
 )
@@ -23,7 +23,7 @@ func (r *DictResponse) GetDict() map[string]interface{} {
 	return r.dict
 }
 
-func (r *DictResponse) GetStringResponse() string {
+func (r *DictResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	r.WriteResponse(wb)

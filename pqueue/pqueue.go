@@ -141,6 +141,7 @@ func (pq *PQueue) DelayedCount() int {
 }
 
 func (pq *PQueue) GetStatus() map[string]interface{} {
+	status := pq.Info()
 	res := make(map[string]interface{})
 	res[PQ_STATUS_MAX_QUEUE_SIZE] = pq.config.MaxMsgsInQueue
 	res[PQ_STATUS_POP_WAIT_TIMEOUT] = pq.config.PopWaitTimeout
@@ -152,9 +153,9 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res[PQ_STATUS_CREATE_TS] = pq.desc.CreateTs
 	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.LastPushTs
 	res[PQ_STATUS_LAST_POP_TS] = pq.config.LastPopTs
-	res[PQ_STATUS_TOTAL_MSGS] = pq.GetSize()
+	res[PQ_STATUS_TOTAL_MSGS] = status.Size
 	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.lockedMsgCnt
-	res[PQ_STATUS_AVAILABLE_MSGS] = pq.GetSize() - pq.lockedMsgCnt
+	res[PQ_STATUS_AVAILABLE_MSGS] = status.Size - pq.lockedMsgCnt
 	res[PQ_STATUS_FAIL_QUEUE] = pq.config.PopLimitQueueName
 	return res
 }
@@ -204,7 +205,7 @@ func (pq *PQueue) SetParams(params *PQueueParams) apis.IResponse {
 		pq.config.PopWaitTimeout = *params.PopWaitTimeout
 	}
 	pq.lock.Unlock()
-	queue_info.SaveServiceConfig(pq.GetServiceId(), pq.config)
+	queue_info.SaveServiceConfig(pq.desc.ServiceId, pq.config)
 	return resp.OK_RESPONSE
 }
 
@@ -212,16 +213,16 @@ func (pq *PQueue) GetCurrentStatus() apis.IResponse {
 	return resp.NewDictResponse("+STATUS", pq.GetStatus())
 }
 
-func (pq *PQueue) GetServiceId() string {
-	return pq.desc.ServiceId
-}
+func (pq *PQueue) Info() apis.ServiceInfo {
+	pq.lock.Lock()
+	s := len(pq.id2sn)
+	pq.lock.Unlock()
 
-func (pq *PQueue) GetSize() int {
-	return len(pq.id2sn)
-}
-
-func (pq *PQueue) GetTypeName() string {
-	return apis.STYPE_PRIORITY_QUEUE
+	return apis.ServiceInfo{
+		Size: s,
+		ID:   pq.desc.ServiceId,
+		Type: apis.ServiceTypePriorityQueue,
+	}
 }
 
 // Clear drops all locked and unlocked messages in the queue.
@@ -626,7 +627,7 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 		popLimitPq := pq.getFailQueue(pq.config.PopLimitQueueName)
 		if popLimitPq == nil {
 			pq.config.PopLimitQueueName = ""
-			queue_info.SaveServiceConfig(pq.GetServiceId(), pq.config)
+			queue_info.SaveServiceConfig(pq.desc.ServiceId, pq.config)
 			break
 		}
 

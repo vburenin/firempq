@@ -20,7 +20,7 @@ func descKey(serviceId string) string {
 	return ServiceDescPrefix + serviceId
 }
 
-func LoadServiceConfig(serviceId string, cfg apis.Marshalable) error {
+func LoadServiceConfig(serviceId string, cfg apis.BinaryMarshaller) error {
 	db := db.DatabaseInstance()
 	data := db.GetData(cfgKey(serviceId))
 	if len(data) == 0 {
@@ -35,7 +35,7 @@ func LoadServiceConfig(serviceId string, cfg apis.Marshalable) error {
 }
 
 // SaveServiceConfig saves service config into database.
-func SaveServiceConfig(serviceId string, conf apis.MarshalToBin) error {
+func SaveServiceConfig(serviceId string, conf apis.BinaryMarshaller) error {
 	db := db.DatabaseInstance()
 	data, _ := conf.Marshal()
 	err := db.StoreData(cfgKey(serviceId), data)

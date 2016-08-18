@@ -18,15 +18,15 @@ func NewMsgResponseItem(msg *PQMsgMetaData, payload []byte) *MsgResponseItem {
 	}
 }
 
-func (p *MsgResponseItem) GetId() string {
+func (p *MsgResponseItem) ID() string {
 	return p.msg.StrId
 }
 
-func (p *MsgResponseItem) GetPayload() []byte {
+func (p *MsgResponseItem) Payload() []byte {
 	return p.payload
 }
 
-func (p *MsgResponseItem) GetReceipt() string {
+func (p *MsgResponseItem) Receipt() string {
 	return enc.EncodeTo36Base(p.msg.SerialNumber) + "-" + enc.EncodeTo36Base(uint64(p.msg.PopCount))
 }
 

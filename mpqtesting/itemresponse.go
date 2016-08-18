@@ -20,9 +20,9 @@ func VerifyItemsRespSize(r apis.IResponse, size int) ([]apis.IResponseItem, bool
 func VerifySingleItem(r apis.IResponse, itemId, payload string) bool {
 
 	if items, ok := VerifyItemsRespSize(r, 1); ok {
-		So(items[0].GetId(), ShouldEqual, itemId)
-		So(string(items[0].GetPayload()), ShouldEqual, payload)
-		return items[0].GetId() == itemId && string(items[0].GetPayload()) == payload
+		So(items[0].ID(), ShouldEqual, itemId)
+		So(string(items[0].Payload()), ShouldEqual, payload)
+		return items[0].ID() == itemId && string(items[0].Payload()) == payload
 	}
 	return false
 }
@@ -35,8 +35,8 @@ func VerifyItems(r apis.IResponse, size int, itemSpecs ...string) bool {
 			itemPos := i / 2
 			itemId := itemSpecs[i]
 			itemPayload := itemSpecs[i+1]
-			So(items[itemPos].GetId(), ShouldEqual, itemId)
-			So(string(items[itemPos].GetPayload()), ShouldEqual, itemPayload)
+			So(items[itemPos].ID(), ShouldEqual, itemId)
+			So(string(items[itemPos].Payload()), ShouldEqual, itemPayload)
 		}
 		return true
 	}
@@ -48,6 +48,7 @@ func VerifyOkResponse(r apis.IResponse) {
 }
 
 func VerifyServiceSize(s apis.ISvc, size int) bool {
-	So(s.GetSize(), ShouldEqual, size)
-	return s.GetSize() == size
+	is := s.Info().Size
+	So(is, ShouldEqual, size)
+	return is == size
 }

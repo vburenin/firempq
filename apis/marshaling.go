@@ -1,14 +1,7 @@
 package apis
 
-type MarshalToBin interface {
-	Marshal() (data []byte, err error)
-}
-
-type UnmarshalFromBin interface {
+// BinaryMarshaller is the marshaling interface for binary data.
+type BinaryMarshaller interface {
 	Unmarshal(data []byte) error
-}
-
-type Marshalable interface {
-	MarshalToBin
-	UnmarshalFromBin
+	Marshal() (data []byte, err error)
 }

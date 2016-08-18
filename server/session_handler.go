@@ -173,7 +173,7 @@ func (s *SessionHandler) createServiceHandler(tokens []string) apis.IResponse {
 		return mpqerr.ConflictRequest("Service exists already")
 	}
 
-	return s.svcs.CreateService(apis.STYPE_PRIORITY_QUEUE, svcName, tokens[1:])
+	return s.svcs.CreateService(apis.ServiceTypePriorityQueue, svcName, tokens[1:])
 }
 
 // Drop service.

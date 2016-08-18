@@ -19,7 +19,7 @@ func NewAsyncResponse(asyncID string, resp apis.IResponse) apis.IResponse {
 	}
 }
 
-func (r *AsyncResponse) GetStringResponse() string {
+func (r *AsyncResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	r.WriteResponse(wb)

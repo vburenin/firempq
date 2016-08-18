@@ -138,10 +138,10 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 		return nil
 	}
 	sqsMsg := &sqsmsg.SQSMessagePayload{}
-	payload := msg.GetPayload()
+	payload := msg.Payload()
 	if err := sqsMsg.Unmarshal([]byte(payload)); err != nil {
 		// Recovering from error. Non SQS messages will be filled with bulk info.
-		sqsMsg.Payload = string(msg.GetPayload())
+		sqsMsg.Payload = string(msg.Payload())
 		sqsMsg.SenderId = "unknown"
 		sqsMsg.SentTimestamp = strconv.FormatInt(utils.Uts(), 10)
 		sqsMsg.MD5OfMessageAttributes = fmt.Sprintf("%x", md5.Sum(nil))
@@ -153,8 +153,8 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 	output := &MessageResponse{
 		MD5OfMessageAttributes: sqsMsg.MD5OfMessageAttributes,
 		MD5OfMessageBody:       sqsMsg.MD5OfMessageBody,
-		ReceiptHandle:          msg.GetReceipt(),
-		MessageId:              msg.GetId(),
+		ReceiptHandle:          msg.Receipt(),
+		MessageId:              msg.ID(),
 		Body:                   sqsMsg.Payload,
 	}
 

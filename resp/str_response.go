@@ -25,7 +25,7 @@ func NewAsyncAccept(data string) *StrResponse {
 	}
 }
 
-func (r *StrResponse) GetStringResponse() string {
+func (r *StrResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	r.WriteResponse(wb)

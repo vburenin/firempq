@@ -40,9 +40,9 @@ type CreateQueueResponse struct {
 	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *CreateQueueResponse) XmlDocument() string                  { return sqs_response.EncodeXml(self) }
-func (self *CreateQueueResponse) HttpCode() int                        { return http.StatusOK }
-func (self *CreateQueueResponse) BatchResult(docId string) interface{} { return nil }
+func (r *CreateQueueResponse) XmlDocument() string                  { return sqs_response.EncodeXml(r) }
+func (r *CreateQueueResponse) HttpCode() int                        { return http.StatusOK }
+func (r *CreateQueueResponse) BatchResult(docId string) interface{} { return nil }
 
 func NewQueueAttributes() *QueueAttributes {
 	return &QueueAttributes{
@@ -56,24 +56,23 @@ func NewQueueAttributes() *QueueAttributes {
 	}
 }
 
-func (self *QueueAttributes) HandleAttribute(paramName, value string) *sqserr.SQSError {
+func (r *QueueAttributes) HandleAttribute(paramName, value string) *sqserr.SQSError {
 	var err error
 	switch paramName {
 	case AttrVisibilityTimeout:
-		self.VisibilityTimeout, err = strconv.ParseInt(value, 10, 0)
-		self.VisibilityTimeout *= 1000
+		r.VisibilityTimeout, err = strconv.ParseInt(value, 10, 0)
+		r.VisibilityTimeout *= 1000
 	case AttrDelaySeconds:
-		self.DelaySeconds, err = strconv.ParseInt(value, 10, 0)
-		self.DelaySeconds *= 1000
+		r.DelaySeconds, err = strconv.ParseInt(value, 10, 0)
+		r.DelaySeconds *= 1000
 	case AttrMaximumMessageSize:
-		self.MaximumMessageSize, err = strconv.ParseInt(value, 10, 0)
-		self.MaximumMessageSize *= 1000
+		r.MaximumMessageSize, err = strconv.ParseInt(value, 10, 0)
 	case AttrMessageRetentionPeriod:
-		self.MessageRetentionPeriod, err = strconv.ParseInt(value, 10, 0)
-		self.MessageRetentionPeriod *= 1000
+		r.MessageRetentionPeriod, err = strconv.ParseInt(value, 10, 0)
+		r.MessageRetentionPeriod *= 1000
 	case AttrReceiveMessageWaitTimeSeconds:
-		self.ReceiveMessageWaitTimeSeconds, err = strconv.ParseInt(value, 10, 0)
-		self.ReceiveMessageWaitTimeSeconds *= 1000
+		r.ReceiveMessageWaitTimeSeconds, err = strconv.ParseInt(value, 10, 0)
+		r.ReceiveMessageWaitTimeSeconds *= 1000
 	default:
 		return sqserr.InvalidAttributeNameError("Unknown Attribute " + paramName + ".")
 	}
@@ -83,23 +82,25 @@ func (self *QueueAttributes) HandleAttribute(paramName, value string) *sqserr.SQ
 	return nil
 }
 
-func (self *QueueAttributes) MakePQConfig() *conf.PQConfig {
+func (r *QueueAttributes) MakePQConfig() *conf.PQConfig {
 	cfg := pqueue.DefaultPQConfig()
-	if self.DelaySeconds >= 0 {
-		cfg.DeliveryDelay = self.DelaySeconds
+	if r.DelaySeconds >= 0 {
+		cfg.DeliveryDelay = r.DelaySeconds
 	}
-	if self.MessageRetentionPeriod >= 0 {
-		cfg.MsgTtl = self.MessageRetentionPeriod
+	if r.MessageRetentionPeriod >= 0 {
+		cfg.MsgTtl = r.MessageRetentionPeriod
 	}
-	if self.VisibilityTimeout >= 0 {
-		cfg.PopLockTimeout = self.VisibilityTimeout
-
+	if r.VisibilityTimeout >= 0 {
+		cfg.PopLockTimeout = r.VisibilityTimeout
 	}
-	if self.RedrivePolicy >= 0 {
-		cfg.PopCountLimit = self.RedrivePolicy
+	if r.RedrivePolicy >= 0 {
+		cfg.PopCountLimit = r.RedrivePolicy
 	}
-	if self.ReceiveMessageWaitTimeSeconds >= 0 {
-		cfg.PopWaitTimeout = self.ReceiveMessageWaitTimeSeconds
+	if r.ReceiveMessageWaitTimeSeconds >= 0 {
+		cfg.PopWaitTimeout = r.ReceiveMessageWaitTimeSeconds
+	}
+	if r.MaximumMessageSize > 0 {
+		cfg.MaxMsgSize = r.MaximumMessageSize
 	}
 	return cfg
 }
@@ -110,12 +111,12 @@ type ReqQueueAttr struct {
 }
 
 func NewReqQueueAttr() urlutils.ISubContainer { return &ReqQueueAttr{} }
-func (self *ReqQueueAttr) Parse(paramName string, value string) *sqserr.SQSError {
+func (r *ReqQueueAttr) Parse(paramName string, value string) *sqserr.SQSError {
 	switch paramName {
 	case "Name":
-		self.Name = value
+		r.Name = value
 	case "Value":
-		self.Value = value
+		r.Value = value
 	default:
 		return sqserr.InvalidAttributeNameError("Invalid attribute: " + paramName)
 	}
@@ -169,7 +170,7 @@ func CheckAvailableQueues(
 
 	svc, ok := svcMgr.GetService(sqsQuery.QueueName)
 	if ok {
-		if svc.GetTypeName() != apis.STYPE_PRIORITY_QUEUE {
+		if svc.Info().Type != apis.ServiceTypePriorityQueue {
 			return sqserr.QueueAlreadyExistsError("Queue already exists for a different type of service")
 		}
 		pq, _ := svc.(*pqueue.PQueue)

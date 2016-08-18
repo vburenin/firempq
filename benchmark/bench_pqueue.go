@@ -73,22 +73,22 @@ func BenchMassPushMultiQueue() {
 	resp3 := f.DropService("BenchTest3")
 	resp4 := f.DropService("BenchTest4")
 
-	resp1 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest1", []string{})
+	resp1 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest1", []string{})
 	if resp1.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp2 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest2", []string{})
+	resp2 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest2", []string{})
 	if resp2.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp3 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest3", []string{})
+	resp3 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest3", []string{})
 	if resp3.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp4 = f.CreateService(apis.STYPE_PRIORITY_QUEUE, "BenchTest4", []string{})
+	resp4 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest4", []string{})
 	if resp4.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}

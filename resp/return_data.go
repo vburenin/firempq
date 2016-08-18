@@ -23,7 +23,7 @@ func (r *MessagesResponse) GetItems() []apis.IResponseItem {
 	return r.items
 }
 
-func (r *MessagesResponse) GetStringResponse() string {
+func (r *MessagesResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	r.WriteResponse(wb)

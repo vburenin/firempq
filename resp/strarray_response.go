@@ -25,7 +25,7 @@ func (r *StrArrayResponse) IsError() bool {
 	return false
 }
 
-func (r *StrArrayResponse) GetStringResponse() string {
+func (r *StrArrayResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	r.WriteResponse(wb)

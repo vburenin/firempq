@@ -1,3 +1,4 @@
 package apis
 
-const STYPE_PRIORITY_QUEUE = "pqueue"
+// ServiceTypePriorityQueue defines a priority queue service type identifier.
+const ServiceTypePriorityQueue = "pqueue"

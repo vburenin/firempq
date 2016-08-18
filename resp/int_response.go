@@ -16,7 +16,7 @@ func NewIntResponse(val int64) *IntResponse {
 	return &IntResponse{Value: val}
 }
 
-func (r *IntResponse) GetStringResponse() string {
+func (r *IntResponse) StringResponse() string {
 	var buf bytes.Buffer
 	wb := bufio.NewWriter(&buf)
 	r.WriteResponse(wb)

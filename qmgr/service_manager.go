@@ -19,7 +19,7 @@ type ServiceLoader func(apis.IServices, *queue_info.ServiceDescription) (apis.IS
 
 func GetServiceLoader(serviceType string) (ServiceLoader, bool) {
 	switch serviceType {
-	case apis.STYPE_PRIORITY_QUEUE:
+	case apis.ServiceTypePriorityQueue:
 		return pqueue.LoadPQueue, true
 	default:
 		return nil, false
@@ -95,7 +95,7 @@ func (s *ServiceManager) loadService(desc *queue_info.ServiceDescription) (apis.
 // CreateService creates a service of the specified type.
 func (s *ServiceManager) CreateService(svcType string, svcName string, params []string) apis.IResponse {
 	switch svcType {
-	case apis.STYPE_PRIORITY_QUEUE:
+	case apis.ServiceTypePriorityQueue:
 		pqConf, resp := pqueue.ParsePQConfig(params)
 		if resp.IsError() {
 			return resp
@@ -116,7 +116,7 @@ func (s *ServiceManager) CreatePQueue(svcName string, config *conf.PQConfig) api
 		return mpqerr.ERR_SVC_ALREADY_EXISTS
 	}
 
-	desc := queue_info.NewServiceDescription(svcName, apis.STYPE_PRIORITY_QUEUE, s.serviceIdCounter+1)
+	desc := queue_info.NewServiceDescription(svcName, apis.ServiceTypePriorityQueue, s.serviceIdCounter+1)
 	svc := pqueue.InitPQueue(s, desc, config)
 
 	s.serviceIdCounter++
@@ -138,8 +138,9 @@ func (s *ServiceManager) DropService(svcName string) apis.IResponse {
 	}
 	svc.Close()
 	delete(s.allSvcs, svcName)
-	queue_info.DeleteServiceData(svc.GetServiceId())
-	log.Info("Service '%s' has been removed: (id:%s)", svcName, svc.GetServiceId())
+	svcID := svc.Info().ID
+	queue_info.DeleteServiceData(svcID)
+	log.Debug("Service '%s' has been removed: (id:%s)", svcName, svcID)
 	return resp.OK_RESPONSE
 }
 
