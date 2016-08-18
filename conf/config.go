@@ -15,7 +15,7 @@ type CLIParams struct {
 }
 
 type PQueueConfigData struct {
-	DefaultMessageTTL     int64 `long:"default-msg-ttl" description:"Default message TTL for a new queue in milliseconds" default:"3600000"`
+	DefaultMessageTTL     int64 `long:"default-msg-ttl" description:"Default message TTL for a new queue in milliseconds" default:"345600000"`
 	DefaultDeliveryDelay  int64 `long:"default-delivery-delay" description:"Default message delivery delay for a new queue in milliseconds" default:"0"`
 	DefaultLockTimeout    int64 `long:"default-lock-timeout" description:"Default message lock/visibility timeout for a new queue in milliseconds" default:"60000"`
 	DefaultPopCountLimit  int64 `long:"default-pop-count-limit" description:"Default receive attempts limit per message for a new queue" default:"99"`
