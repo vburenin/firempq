@@ -179,6 +179,43 @@ func TestCreateAndDeleteQueues(t *testing.T) {
 
 		})
 
+		Convey("Create queue, read selected parameters", func() {
+			qn := "queue_name5"
+			deleteQueue(s, t, qn)
+			defer deleteQueue(s, t, qn)
+			resp, err := s.CreateQueue(&sqs.CreateQueueInput{
+				QueueName: &qn,
+				Attributes: map[string]*string{
+					cq.AttrVisibilityTimeout:             aws.String("1001"),
+					cq.AttrDelaySeconds:                  aws.String("7"),
+					cq.AttrMaximumMessageSize:            aws.String("123456"),
+					cq.AttrMessageRetentionPeriod:        aws.String("7203"),
+					cq.AttrReceiveMessageWaitTimeSeconds: aws.String("11"),
+				},
+			})
+			So(err, ShouldBeNil)
+			So(resp.QueueUrl, ShouldNotBeNil)
+			So(*resp.QueueUrl, ShouldContainSubstring, "/"+qn)
+
+			// Get All Attributes.
+			respAttr, err := s.GetQueueAttributes(&sqs.GetQueueAttributesInput{
+				QueueUrl: resp.QueueUrl,
+				AttributeNames: []*string{
+					aws.String(gqa.AttrApproximateNumberOfMessages),
+					aws.String(gqa.AttrDelaySeconds),
+				},
+			})
+			So(err, ShouldBeNil)
+			attrs := respAttr.Attributes
+
+			So(len(attrs), ShouldEqual, 2)
+			So(attrs, ShouldContainKey, gqa.AttrApproximateNumberOfMessages)
+			So(attrs, ShouldContainKey, gqa.AttrDelaySeconds)
+
+			So(*attrs[gqa.AttrApproximateNumberOfMessages], ShouldEqual, "0")
+			So(*attrs[gqa.AttrDelaySeconds], ShouldEqual, "7")
+		})
+
 		Convey("Creating queue with the same name but different parameters should fail if queue exists.", func() {
 			qn := "queue_name3"
 			deleteQueue(s, t, qn)
