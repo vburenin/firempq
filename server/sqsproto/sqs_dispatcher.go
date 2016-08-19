@@ -8,6 +8,7 @@ import (
 
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/server/sqsproto/add_permission"
 	"github.com/vburenin/firempq/server/sqsproto/change_message_visibility"
 	"github.com/vburenin/firempq/server/sqsproto/change_message_visibility_batch"
 	"github.com/vburenin/firempq/server/sqsproto/create_queue"
@@ -19,14 +20,13 @@ import (
 	"github.com/vburenin/firempq/server/sqsproto/list_queues"
 	"github.com/vburenin/firempq/server/sqsproto/purge_queue"
 	"github.com/vburenin/firempq/server/sqsproto/receive_message"
+	"github.com/vburenin/firempq/server/sqsproto/remove_permission"
 	"github.com/vburenin/firempq/server/sqsproto/send_message"
 	"github.com/vburenin/firempq/server/sqsproto/send_message_batch"
 	"github.com/vburenin/firempq/server/sqsproto/set_queue_attributes"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
-	"github.com/vburenin/firempq/server/sqsproto/add_permission"
-	"github.com/vburenin/firempq/server/sqsproto/remove_permission"
 )
 
 type SQSRequestHandler struct {
@@ -41,20 +41,20 @@ func ParseQueueName(urlPath string) (string, error) {
 	return "", sqserr.MalformedInputError("Invalid URL Format")
 }
 
-func (self *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func (rh *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
 	case "CreateQueue":
-		return create_queue.CreateQueue(self.ServiceManager, sqsQuery)
+		return create_queue.CreateQueue(rh.ServiceManager, sqsQuery)
 	case "GetQueueUrl":
-		return get_queue_url.GetQueueUrl(self.ServiceManager, sqsQuery)
+		return get_queue_url.GetQueueUrl(rh.ServiceManager, sqsQuery)
 	case "ListQueues":
-		return list_queues.ListQueues(self.ServiceManager, sqsQuery)
+		return list_queues.ListQueues(rh.ServiceManager, sqsQuery)
 	case "ListDeadLetterSourceQueues":
 	}
 	return sqserr.InvalidActionError(sqsQuery.Action)
 }
 
-func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func (rh *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
 	case "SendMessage":
 		return send_message.SendMessage(pq, sqsQuery)
@@ -71,7 +71,7 @@ func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *u
 	case "ChangeMessageVisibilityBatch":
 		return change_message_visibility_batch.ChangeMessageVisibilityBatch(pq, sqsQuery)
 	case "DeleteQueue":
-		return delete_queue.DeleteQueue(self.ServiceManager, sqsQuery)
+		return delete_queue.DeleteQueue(rh.ServiceManager, sqsQuery)
 	case "PurgeQueue":
 		return purge_queue.PurgeQueue(pq, sqsQuery)
 	case "GetQueueAttributes":
@@ -86,13 +86,14 @@ func (self *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *u
 	return sqserr.InvalidActionError(sqsQuery.Action)
 }
 
-func (self *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSResponse {
+func (rh *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSResponse {
 	var queuePath string
 
 	sqsQuery, err := urlutils.ParseSQSQuery(r)
 	if err != nil {
 		return sqserr.ServiceDeniedError()
 	}
+
 	if sqsQuery.QueueUrl != "" {
 		queueUrl, err := url.ParseRequestURI(sqsQuery.QueueUrl)
 		if err != nil {
@@ -102,23 +103,24 @@ func (self *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQ
 	} else {
 		queuePath = r.URL.Path
 	}
+
 	if strings.HasPrefix(queuePath, "/queue/") {
 		sqsQuery.QueueName = strings.SplitN(queuePath, "/queue/", 2)[1]
-		svc, ok := self.ServiceManager.GetService(sqsQuery.QueueName)
+		svc, ok := rh.ServiceManager.GetService(sqsQuery.QueueName)
 		if !ok {
 			return sqserr.QueueDoesNotExist()
 		}
 		pq, _ := svc.(*pqueue.PQueue)
-		return self.handleQueueActions(pq, sqsQuery)
-
+		return rh.handleQueueActions(pq, sqsQuery)
 	} else if r.URL.Path == "/" {
-		return self.handleManageActions(sqsQuery)
+		return rh.handleManageActions(sqsQuery)
 	}
+
 	return sqserr.ServiceDeniedError()
 }
 
-func (self *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resp := self.dispatchSQSQuery(r)
+func (rh *SQSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resp := rh.dispatchSQSQuery(r)
 	if resp == nil {
 		return
 	}
