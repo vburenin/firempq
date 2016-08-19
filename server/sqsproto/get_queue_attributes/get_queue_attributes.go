@@ -54,7 +54,6 @@ func makeQueueArn(name string) string {
 }
 
 func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-
 	paramsLen := len(sqsQuery.ParamsList) - 1
 
 	pqCfg := pq.Config()
@@ -63,9 +62,10 @@ func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 	resp := &GetQueueAttributesResponse{
 		RequestId: "reqId",
 	}
+
 	for i := 0; i < paramsLen; i += 2 {
 		allAttr := false
-		if strings.HasPrefix(sqsQuery.ParamsList[i], "AttributeName.") {
+		if strings.HasPrefix(sqsQuery.ParamsList[i], "AttributeName") {
 			attrName := sqsQuery.ParamsList[i+1]
 			if attrName == AttrAll {
 				allAttr = true
