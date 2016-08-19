@@ -34,6 +34,19 @@ func deleteQueue(s *sqs.SQS, t *testing.T, queueName string) {
 	}
 }
 
+func checkQueueSize(s *sqs.SQS, t *testing.T, queueURL *string, avail, inFlight, delayed int64) {
+	// Get All Attributes.
+	respAttr, err := s.GetQueueAttributes(&sqs.GetQueueAttributesInput{
+		QueueUrl:       queueURL,
+		AttributeNames: []*string{aws.String(gqa.AttrAll)},
+	})
+
+	So(err, ShouldBeNil)
+	So(*respAttr.Attributes[gqa.AttrApproximateNumberOfMessages], ShouldEqual, strconv.FormatInt(avail, 10))
+	So(*respAttr.Attributes[gqa.AttrApproximateNumberOfMessagesNotVisible], ShouldEqual, strconv.FormatInt(inFlight, 10))
+	So(*respAttr.Attributes[gqa.AttrApproximateNumberOfMessagesDelayed], ShouldEqual, strconv.FormatInt(delayed, 10))
+}
+
 func TestCreateAndDeleteQueues(t *testing.T) {
 	s := initSQSClient()
 	Convey("Queues should be created and removed", t, func() {
@@ -262,5 +275,64 @@ func TestCreateAndDeleteQueues(t *testing.T) {
 			So(err.Error(), ShouldContainSubstring, "QueueAlreadyExists")
 		})
 
+	})
+}
+
+func TestSendReceiveDeleteReturnMessages(t *testing.T) {
+	s := initSQSClient()
+	Convey("Message delivery should work correctly", t, func() {
+		Convey("Message should be sent into empty queue, delivered and removed", func() {
+			qn := "queue_name_sent_1"
+			deleteQueue(s, t, qn)
+			defer deleteQueue(s, t, qn)
+
+			resp, err := s.CreateQueue(&sqs.CreateQueueInput{
+				QueueName: &qn,
+				Attributes: map[string]*string{
+					cq.AttrVisibilityTimeout:             aws.String("10"),
+					cq.AttrDelaySeconds:                  aws.String("0"),
+					cq.AttrMaximumMessageSize:            aws.String("123456"),
+					cq.AttrMessageRetentionPeriod:        aws.String("300"),
+					cq.AttrReceiveMessageWaitTimeSeconds: aws.String("15"),
+				},
+			})
+			So(err, ShouldBeNil)
+			So(resp.QueueUrl, ShouldNotBeNil)
+			So(*resp.QueueUrl, ShouldContainSubstring, "/"+qn)
+
+			sresp, err := s.SendMessage(&sqs.SendMessageInput{
+				QueueUrl:    resp.QueueUrl,
+				MessageBody: aws.String("message data"),
+			})
+
+			So(err, ShouldBeNil)
+			So(sresp.MD5OfMessageAttributes, ShouldBeNil)
+			So(sresp.MD5OfMessageBody, ShouldNotBeNil)
+			So(sresp.MessageId, ShouldNotBeNil)
+			So(*sresp.MD5OfMessageBody, ShouldEqual, "4605064d9e2ce534ff7259b3872ce05e")
+
+			checkQueueSize(s, t, resp.QueueUrl, 1, 0, 0)
+
+			msg, err := s.ReceiveMessage(&sqs.ReceiveMessageInput{
+				QueueUrl:        resp.QueueUrl,
+				WaitTimeSeconds: aws.Int64(10),
+			})
+			So(err, ShouldBeNil)
+
+			m := msg.Messages[0]
+			So(len(msg.Messages), ShouldEqual, 1)
+			So(len(m.MessageAttributes), ShouldEqual, 0)
+			So(m.MD5OfMessageAttributes, ShouldBeNil)
+			So(*m.MD5OfBody, ShouldEqual, "4605064d9e2ce534ff7259b3872ce05e")
+
+			checkQueueSize(s, t, resp.QueueUrl, 0, 1, 0)
+
+			_, err = s.DeleteMessage(&sqs.DeleteMessageInput{
+				QueueUrl:      resp.QueueUrl,
+				ReceiptHandle: m.ReceiptHandle,
+			})
+			So(err, ShouldBeNil)
+			checkQueueSize(s, t, resp.QueueUrl, 0, 0, 0)
+		})
 	})
 }

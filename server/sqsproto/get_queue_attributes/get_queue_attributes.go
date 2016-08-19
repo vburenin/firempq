@@ -71,72 +71,84 @@ func GetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 				allAttr = true
 				resp.Attributes = make([]*QAttr, 0, 13) // 13 total attributes
 			}
+
 			if allAttr || attrName == AttrApproximateNumberOfMessages {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrApproximateNumberOfMessages,
-					Value: pq.Info().Size,
+					Value: pq.AvailableMessages(),
 				})
 			}
+
 			if allAttr || attrName == AttrApproximateNumberOfMessagesNotVisible {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrApproximateNumberOfMessagesNotVisible,
 					Value: pq.LockedCount(),
 				})
 			}
+
 			if allAttr || attrName == AttrVisibilityTimeout {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrVisibilityTimeout,
 					Value: pqCfg.PopLockTimeout / 1000,
 				})
 			}
+
 			if allAttr || attrName == AttrCreatedTimestamp {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrCreatedTimestamp,
 					Value: pqDesc.CreateTs / 1000,
 				})
 			}
+
 			if allAttr || attrName == AttrLastModifiedTimestamp {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrLastModifiedTimestamp,
 					Value: pqCfg.LastUpdateTs / 1000,
 				})
 			}
+
 			if allAttr || attrName == AttrMaximumMessageSize {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrMaximumMessageSize,
 					Value: pqCfg.MaxMsgSize,
 				})
 			}
+
 			if allAttr || attrName == AttrMessageRetentionPeriod {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrMessageRetentionPeriod,
 					Value: pqCfg.MsgTtl / 1000,
 				})
 			}
+
 			if allAttr || attrName == AttrQueueArn {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrQueueArn,
 					Value: makeQueueArn(pqDesc.Name),
 				})
 			}
+
 			if allAttr || attrName == AttrApproximateNumberOfMessagesDelayed {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrApproximateNumberOfMessagesDelayed,
 					Value: pq.DelayedCount(),
 				})
 			}
+
 			if allAttr || attrName == AttrDelaySeconds {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrDelaySeconds,
 					Value: pqCfg.DeliveryDelay / 1000,
 				})
 			}
+
 			if allAttr || attrName == AttrReceiveMessageWaitTimeSeconds {
 				resp.Attributes = append(resp.Attributes, &QAttr{
 					Name:  AttrReceiveMessageWaitTimeSeconds,
 					Value: pqCfg.PopWaitTimeout / 1000,
 				})
 			}
+
 			if allAttr || attrName == AttrRedrivePolicy {
 				if pqCfg.PopLimitQueueName != "" {
 					resp.Attributes = append(resp.Attributes, &QAttr{

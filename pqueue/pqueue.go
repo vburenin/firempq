@@ -52,7 +52,7 @@ type PQueue struct {
 	msgSerialNumber uint64
 
 	// Number of message which are locked
-	lockedMsgCnt int
+	lockedMsgCnt int64
 }
 
 func InitPQueue(svcs apis.IServices, desc *queue_info.ServiceDescription, config *conf.PQConfig) *PQueue {
@@ -128,20 +128,38 @@ func (pq *PQueue) Description() *queue_info.ServiceDescription {
 }
 
 // LockedCount is the number of messages which are locked at the moment.
-func (pq *PQueue) LockedCount() int {
-	return pq.lockedMsgCnt
+func (pq *PQueue) LockedCount() int64 {
+	return atomic.LoadInt64(&pq.lockedMsgCnt)
 }
 
 // DelayedCount is the number of messages which are delayed for delivery.
-func (pq *PQueue) DelayedCount() int {
+func (pq *PQueue) DelayedCount() int64 {
 	pq.lock.Lock()
-	delayed := len(pq.id2sn) - pq.availMsgs.Len() - pq.lockedMsgCnt
+	delayed := int64(len(pq.id2sn)) - int64(pq.availMsgs.Len()) - pq.lockedMsgCnt
 	pq.lock.Unlock()
 	return delayed
 }
 
+// TotalMessages returns a number of all messages currently in the queue.
+func (pq *PQueue) TotalMessages() int64 {
+	pq.lock.Lock()
+	r := int64(len(pq.id2sn))
+	pq.lock.Unlock()
+	return r
+}
+
+// AvailableMessages returns number of available messages.
+func (pq *PQueue) AvailableMessages() int64 {
+	pq.lock.Lock()
+	r := int64(pq.availMsgs.Len())
+	pq.lock.Unlock()
+	return r
+}
+
+// GetStatus returns detailed queue status information.
 func (pq *PQueue) GetStatus() map[string]interface{} {
-	status := pq.Info()
+	totalMsg := pq.TotalMessages()
+	lockedCount := pq.LockedCount()
 	res := make(map[string]interface{})
 	res[PQ_STATUS_MAX_QUEUE_SIZE] = pq.config.MaxMsgsInQueue
 	res[PQ_STATUS_POP_WAIT_TIMEOUT] = pq.config.PopWaitTimeout
@@ -151,11 +169,11 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	res[PQ_STATUS_POP_LOCK_TIMEOUT] = pq.config.PopLockTimeout
 	res[PQ_STATUS_POP_COUNT_LIMIT] = pq.config.PopCountLimit
 	res[PQ_STATUS_CREATE_TS] = pq.desc.CreateTs
-	res[PQ_STATUS_LAST_PUSH_TS] = pq.config.LastPushTs
-	res[PQ_STATUS_LAST_POP_TS] = pq.config.LastPopTs
-	res[PQ_STATUS_TOTAL_MSGS] = status.Size
-	res[PQ_STATUS_IN_FLIGHT_MSG] = pq.lockedMsgCnt
-	res[PQ_STATUS_AVAILABLE_MSGS] = status.Size - pq.lockedMsgCnt
+	res[PQ_STATUS_LAST_PUSH_TS] = atomic.LoadInt64(&pq.config.LastPushTs)
+	res[PQ_STATUS_LAST_POP_TS] = atomic.LoadInt64(&pq.config.LastPopTs)
+	res[PQ_STATUS_TOTAL_MSGS] = totalMsg
+	res[PQ_STATUS_IN_FLIGHT_MSG] = lockedCount
+	res[PQ_STATUS_AVAILABLE_MSGS] = totalMsg - lockedCount
 	res[PQ_STATUS_FAIL_QUEUE] = pq.config.PopLimitQueueName
 	return res
 }
