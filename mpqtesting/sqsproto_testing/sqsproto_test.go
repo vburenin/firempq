@@ -12,11 +12,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func initSession() *session.Session {
-	s, _ := session.NewSession(aws.NewConfig().WithEndpoint("http://127.0.0.1:8333").WithRegion("us-west-2"))
+	s, _ := session.NewSession(aws.NewConfig().WithEndpoint("http://127.0.0.1:8333").WithRegion(
+		"us-west-2").WithCredentials(credentials.AnonymousCredentials))
 	return s
 }
 
