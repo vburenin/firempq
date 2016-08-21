@@ -3,7 +3,7 @@ package mpqtesting
 import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/vburenin/firempq/apis"
-	"github.com/vburenin/firempq/resp"
+	"github.com/vburenin/firempq/mpqproto/resp"
 )
 
 func VerifyItemsRespSize(r apis.IResponse, size int) ([]apis.IResponseItem, bool) {

@@ -3,9 +3,8 @@ package pqueue
 import (
 	"strings"
 	"sync"
-	"time"
-
 	"sync/atomic"
+	"time"
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
@@ -14,8 +13,8 @@ import (
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
+	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/queue_info"
-	"github.com/vburenin/firempq/resp"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
 )

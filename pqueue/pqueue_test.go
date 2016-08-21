@@ -11,9 +11,9 @@ import (
 	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
+	"github.com/vburenin/firempq/mpqproto/resp"
 	. "github.com/vburenin/firempq/mpqtesting"
 	"github.com/vburenin/firempq/queue_info"
-	"github.com/vburenin/firempq/resp"
 	"github.com/vburenin/firempq/utils"
 )
 

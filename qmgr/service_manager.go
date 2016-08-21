@@ -9,9 +9,9 @@ import (
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
+	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/queue_info"
-	"github.com/vburenin/firempq/resp"
 )
 
 type ServiceConstructor func(apis.IServices, *queue_info.ServiceDescription, []string) (apis.ISvc, apis.IResponse)
