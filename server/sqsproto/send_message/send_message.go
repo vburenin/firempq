@@ -13,6 +13,7 @@ import (
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/idgen"
+	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
@@ -37,14 +38,14 @@ type SendMessageBatchResult struct {
 	MD5OfMessageAttributes string `xml:"MD5OfMessageAttributes,omitempty"`
 }
 
-func (self *SendMessageResponse) HttpCode() int       { return http.StatusOK }
-func (self *SendMessageResponse) XmlDocument() string { return sqs_response.EncodeXml(self) }
-func (self *SendMessageResponse) BatchResult(docId string) interface{} {
+func (r *SendMessageResponse) HttpCode() int       { return http.StatusOK }
+func (r *SendMessageResponse) XmlDocument() string { return sqs_response.EncodeXml(r) }
+func (r *SendMessageResponse) BatchResult(docId string) interface{} {
 	return &SendMessageBatchResult{
 		Id:                     docId,
-		MessageId:              self.MessageId,
-		MD5OfMessageBody:       self.MD5OfMessageBody,
-		MD5OfMessageAttributes: self.MD5OfMessageAttributes,
+		MessageId:              r.MessageId,
+		MD5OfMessageBody:       r.MD5OfMessageBody,
+		MD5OfMessageAttributes: r.MD5OfMessageAttributes,
 	}
 }
 
@@ -56,24 +57,25 @@ type ReqMsgAttr struct {
 }
 
 func NewReqQueueAttr() urlutils.ISubContainer { return &ReqMsgAttr{} }
-func (self *ReqMsgAttr) Parse(paramName string, value string) *sqserr.SQSError {
+func (ma *ReqMsgAttr) Parse(paramName string, value string) *sqserr.SQSError {
 	switch paramName {
 	case "Name":
-		self.Name = value
+		ma.Name = value
 	case "Value.DataType":
-		self.DataType = value
+		ma.DataType = value
 	case "Value.StringValue":
-		self.StringValue = value
+		ma.StringValue = value
 	case "Value.BinaryValue":
-		binValue, err := base64.RawStdEncoding.DecodeString(value)
+		binValue, err := base64.StdEncoding.DecodeString(value)
 		if err != nil {
 			return sqserr.InvalidParameterValueError("Invalid binary data: %s", err.Error())
 		}
-		self.BinaryValue = string(binValue)
+		ma.BinaryValue = string(binValue)
 	}
 	return nil
 }
 
+// EncodeAttrTo encodes messages attributes to the appropriate SQS AWS format.
 func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	nLen := len(name)
 	b = append(b, byte(nLen>>24), byte(nLen>>16), byte(nLen>>8), byte(nLen))
@@ -94,7 +96,7 @@ func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	return b
 }
 
-// Calculates MD5 for message attributes.
+// CalcAttrMd5 calculates MD5 for message attributes.
 // Amazon doc: http://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/SQSMessageAttributes.html
 // There is a caveat, all binary content must be base64 encoded when transferred over the wire.
 func CalcAttrMd5(attrMap map[string]*sqsmsg.UserAttribute) string {
@@ -118,19 +120,20 @@ func CalcAttrMd5(attrMap map[string]*sqsmsg.UserAttribute) string {
 	return fmt.Sprintf("%x", md5.Sum(md5buf))
 }
 
+// MessageParams defines a parameters which are set to a new message.
 type MessageParams struct {
 	DelaySeconds int64
 	MessageBody  string
 }
 
-func (self *MessageParams) Parse(paramName, value string) *sqserr.SQSError {
+func (mp *MessageParams) Parse(paramName, value string) *sqserr.SQSError {
 	var err error
 	switch paramName {
 	case "DelaySeconds":
-		self.DelaySeconds, err = strconv.ParseInt(value, 10, 0)
-		self.DelaySeconds *= 1000
+		mp.DelaySeconds, err = strconv.ParseInt(value, 10, 0)
+		mp.DelaySeconds *= 1000
 	case "MessageBody":
-		self.MessageBody = value
+		mp.MessageBody = value
 	}
 
 	if err != nil {
@@ -189,11 +192,22 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 		}
 
 		if reqMsgAttr.BinaryValue != "" {
+			if reqMsgAttr.DataType != "Binary" {
+				return sqserr.InvalidParameterValueError(
+					"The message attribute '%s' with type 'Binary' must use field 'Binary'", reqMsgAttr.Name)
+			}
 			outAttrs[reqMsgAttr.Name] = &sqsmsg.UserAttribute{
 				Type:  reqMsgAttr.DataType,
 				Value: reqMsgAttr.BinaryValue,
 			}
-		} else {
+			continue
+		}
+
+		if reqMsgAttr.StringValue != "" {
+			if reqMsgAttr.DataType != "String" && reqMsgAttr.DataType != "Number" {
+				return sqserr.InvalidParameterValueError(
+					"The message attribute '%s' with type 'String' must use field 'String'", reqMsgAttr.Name)
+			}
 			outAttrs[reqMsgAttr.Name] = &sqsmsg.UserAttribute{
 				Type:  reqMsgAttr.DataType,
 				Value: reqMsgAttr.StringValue,
@@ -220,7 +234,10 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 		Payload:                out.MessageBody,
 	}
 
-	d, _ := msgPayload.Marshal()
+	d, marshalErr := msgPayload.Marshal()
+	if marshalErr != nil {
+		log.Error("Failed to serialize message payload: %v", err)
+	}
 	payload := enc.UnsafeBytesToString(d)
 
 	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds, 1)

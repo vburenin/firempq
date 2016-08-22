@@ -115,8 +115,8 @@ func (self *ReceiveMessageOptions) Parse(paramName, value string) *sqserr.SQSErr
 
 func MakeMessageAttr(name string, sqsAttr *sqsmsg.UserAttribute) *MessageAttribute {
 	if strings.HasPrefix(sqsAttr.Type, "Binary") {
-		encodedBin := make([]byte, base64.RawStdEncoding.EncodedLen(len(sqsAttr.Value)))
-		base64.RawStdEncoding.Encode(encodedBin, enc.UnsafeStringToBytes(sqsAttr.Value))
+		encodedBin := make([]byte, base64.StdEncoding.EncodedLen(len(sqsAttr.Value)))
+		base64.StdEncoding.Encode(encodedBin, enc.UnsafeStringToBytes(sqsAttr.Value))
 		return &MessageAttribute{
 			Name:        name,
 			Type:        sqsAttr.Type,
