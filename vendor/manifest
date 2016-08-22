@@ -460,6 +460,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/vburenin/nsync",
+			"repository": "https://github.com/vburenin/nsync",
+			"vcs": "git",
+			"revision": "9a75d1c80410815ac45d65fc01ccabac9c98dd4a",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "go4.org/syncutil/singleflight",
 			"repository": "https://github.com/camlistore/go4",
 			"vcs": "git",

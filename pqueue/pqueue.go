@@ -17,6 +17,7 @@ import (
 	"github.com/vburenin/firempq/queue_info"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
+	"github.com/vburenin/nsync"
 )
 
 type PQueue struct {
@@ -33,7 +34,7 @@ type PQueue struct {
 	// All locked messages
 	id2sn map[string]uint64
 	// Set as True if the service is closed.
-	closed utils.BoolFlag
+	closed nsync.SyncFlag
 	// Instance of the database.
 	config *conf.PQConfig
 
@@ -97,7 +98,7 @@ func (pq *PQueue) StartUpdate() {
 		var cnt int64
 		for {
 			pq.closed.Lock()
-			if pq.closed.IsFalse() {
+			if pq.closed.IsUnset() {
 				pq.lock.Lock()
 				cnt = pq.checkTimeouts(utils.Uts())
 				pq.lock.Unlock()
@@ -269,7 +270,7 @@ func (pq *PQueue) Clear() {
 
 func (pq *PQueue) Close() {
 	log.Debug("Closing PQueue service: %s", pq.desc.Name)
-	pq.closed.SetTrue()
+	pq.closed.Set()
 	// This should break a goroutine loop.
 	select {
 	case pq.popLimitMoveChan <- nil:
@@ -277,9 +278,7 @@ func (pq *PQueue) Close() {
 	}
 }
 
-func (pq *PQueue) IsClosed() bool {
-	return pq.closed.IsTrue()
-}
+func (pq *PQueue) IsClosed() bool { return pq.closed.IsSet() }
 
 func (pq *PQueue) TimeoutItems(cutOffTs int64) apis.IResponse {
 	var total int64
@@ -629,7 +628,7 @@ func (pq *PQueue) getFailQueue(name string) *PQueue {
 func (pq *PQueue) moveToPopLimitedQueue() {
 	log.Debug("%s: Starting pop limit loop", pq.desc.Name)
 	var msg *PQMsgMetaData
-	for pq.closed.IsFalse() {
+	for pq.closed.IsUnset() {
 		select {
 		case msg = <-pq.popLimitMoveChan:
 		case <-signals.QuitChan:
