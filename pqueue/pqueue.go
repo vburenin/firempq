@@ -558,10 +558,14 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 		pq.availMsgs.Remove(msg.SerialNumber)
 	}
 
-	msg.UnlockTs = utils.Uts() + lockTimeout
+	if lockTimeout == 0 {
+		pq.returnToFront(msg)
+	} else {
+		msg.UnlockTs = utils.Uts() + lockTimeout
+		pq.trackHeap.Push(msg)
+		pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
+	}
 
-	pq.trackHeap.Push(msg)
-	pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
 	pq.lock.Unlock()
 
 	return resp.OK_RESPONSE

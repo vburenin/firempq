@@ -13,6 +13,8 @@ import (
 	cq "github.com/vburenin/firempq/server/sqsproto/create_queue"
 	gqa "github.com/vburenin/firempq/server/sqsproto/get_queue_attributes"
 
+	"fmt"
+
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -33,7 +35,8 @@ func getQueueName(qn string) string {
 }
 
 func initSession() *session.Session {
-	s, _ := session.NewSession(aws.NewConfig().WithEndpoint("http://127.0.0.1:8333").WithRegion(
+	s, _ := session.NewSession(aws.NewConfig().WithEndpoint(
+		"http://127.0.0.1:8333").WithRegion(
 		"us-west-2").WithCredentials(credentials.AnonymousCredentials))
 	return s
 }
@@ -446,7 +449,7 @@ func TestSendReceiveDeleteReturnMessages(t *testing.T) {
 		})
 
 		Convey("Message with numberic attribute should go through with correct checksums.", func() {
-			qn := getQueueName("queue_name_sent_3")
+			qn := getQueueName("queue_name_sent_4")
 			defer deleteQueue(s, qn)
 
 			qurl := createDefaultQueue(s, qn, nil)
@@ -480,5 +483,149 @@ func TestSendReceiveDeleteReturnMessages(t *testing.T) {
 			So(*m.MessageAttributes["attr1"].StringValue, ShouldEqual, "10")
 			So(*m.MessageAttributes["attr1"].DataType, ShouldEqual, "Number")
 		})
+	})
+
+	Convey("Sending -> receiving -> deleting batch of messages", t, func() {
+		Convey("Send and receive 3 messages in one batch", func() {
+			qn := getQueueName("queue_name_batch_1")
+			defer deleteQueue(s, qn)
+			qurl := createDefaultQueue(s, qn, nil)
+
+			origM1 := &sqs.SendMessageBatchRequestEntry{
+				Id:          aws.String("m1"),
+				MessageBody: aws.String("body1"),
+			}
+			origM2 := &sqs.SendMessageBatchRequestEntry{
+				Id:          aws.String("m2"),
+				MessageBody: aws.String("body2"),
+			}
+			origM3 := &sqs.SendMessageBatchRequestEntry{
+				Id:          aws.String("m3"),
+				MessageBody: aws.String("body3"),
+			}
+
+			resp, err := s.SendMessageBatch(&sqs.SendMessageBatchInput{
+				QueueUrl: qurl,
+				Entries:  []*sqs.SendMessageBatchRequestEntry{origM1, origM2, origM3},
+			})
+			So(err, ShouldBeNil)
+			So(len(resp.Failed), ShouldEqual, 0)
+			So(len(resp.Successful), ShouldEqual, 3)
+
+			m1, m2, m3 := false, false, false
+
+			for _, v := range resp.Successful {
+				switch *v.Id {
+				case "m1":
+					m1 = true
+					So(*v.MD5OfMessageBody, ShouldEqual, "d6ed8ba2adae5a938c5a3757bcccf4dd")
+					So(v.MD5OfMessageAttributes, ShouldBeNil)
+				case "m2":
+					m2 = true
+					So(*v.MD5OfMessageBody, ShouldEqual, "76af63c5bd77b2a3a2cfcbd52645fa38")
+					So(v.MD5OfMessageAttributes, ShouldBeNil)
+				case "m3":
+					m3 = true
+					So(*v.MD5OfMessageBody, ShouldEqual, "5525786dab1a6e4b36a0b49fe1090875")
+					So(v.MD5OfMessageAttributes, ShouldBeNil)
+				}
+			}
+
+			So(m1, ShouldBeTrue)
+			So(m2, ShouldBeTrue)
+			So(m3, ShouldBeTrue)
+			m1, m2, m3 = false, false, false
+
+			rmsg, err := s.ReceiveMessage(&sqs.ReceiveMessageInput{
+				QueueUrl:            qurl,
+				MaxNumberOfMessages: aws.Int64(5),
+			})
+
+			So(err, ShouldBeNil)
+			So(len(rmsg.Messages), ShouldEqual, 3)
+
+			for _, v := range rmsg.Messages {
+				So(v.MessageId, ShouldNotBeNil)
+				So(v.MD5OfMessageAttributes, ShouldBeNil)
+				So(len(v.Attributes), ShouldEqual, 0)
+				switch *v.Body {
+				case "body1":
+					m1 = true
+					So(*v.MD5OfBody, ShouldEqual, "d6ed8ba2adae5a938c5a3757bcccf4dd")
+				case "body2":
+					m2 = true
+					So(*v.MD5OfBody, ShouldEqual, "76af63c5bd77b2a3a2cfcbd52645fa38")
+				case "body3":
+					m3 = true
+					So(*v.MD5OfBody, ShouldEqual, "5525786dab1a6e4b36a0b49fe1090875")
+				}
+			}
+			So(m1, ShouldBeTrue)
+			So(m2, ShouldBeTrue)
+			So(m3, ShouldBeTrue)
+			checkQueueSize(s, qurl, 0, 3, 0)
+
+			mbe := make([]*sqs.DeleteMessageBatchRequestEntry, 0, len(rmsg.Messages))
+			for i, m := range rmsg.Messages {
+				mbe = append(mbe, &sqs.DeleteMessageBatchRequestEntry{
+					Id:            aws.String(fmt.Sprintf("did%d", i+1)),
+					ReceiptHandle: m.ReceiptHandle,
+				})
+			}
+
+			dr, err := s.DeleteMessageBatch(&sqs.DeleteMessageBatchInput{
+				QueueUrl: qurl,
+				Entries:  mbe,
+			})
+
+			So(len(dr.Failed), ShouldEqual, 0)
+			So(len(dr.Successful), ShouldEqual, 3)
+
+			m1, m2, m3 = false, false, false
+			for _, v := range dr.Successful {
+				switch *v.Id {
+				case "did1":
+					m1 = true
+				case "did2":
+					m2 = true
+				case "did3":
+					m3 = true
+				}
+			}
+			So(m1, ShouldBeTrue)
+			So(m2, ShouldBeTrue)
+			So(m3, ShouldBeTrue)
+		})
+	})
+
+	Convey("Receive and return messages back 10 times", t, func() {
+		qn := getQueueName("queue_name_return_1")
+		defer deleteQueue(s, qn)
+
+		qurl := createDefaultQueue(s, qn, nil)
+
+		_, err := s.SendMessage(&sqs.SendMessageInput{
+			QueueUrl:    qurl,
+			MessageBody: aws.String("data"),
+		})
+		So(err, ShouldBeNil)
+
+		for x := 0; x < 10; x++ {
+			checkQueueSize(s, qurl, 1, 0, 0)
+			mresp, err := s.ReceiveMessage(&sqs.ReceiveMessageInput{
+				QueueUrl:          qurl,
+				VisibilityTimeout: aws.Int64(1200),
+			})
+			So(err, ShouldBeNil)
+			checkQueueSize(s, qurl, 0, 1, 0)
+
+			So(len(mresp.Messages), ShouldEqual, 1)
+			_, err = s.ChangeMessageVisibility(&sqs.ChangeMessageVisibilityInput{
+				QueueUrl:          qurl,
+				VisibilityTimeout: aws.Int64(0),
+				ReceiptHandle:     mresp.Messages[0].ReceiptHandle,
+			})
+			So(err, ShouldBeNil)
+		}
 	})
 }
