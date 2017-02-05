@@ -485,7 +485,7 @@ func TestUnlockByReceipt(t *testing.T) {
 		VerifyServiceSize(q, 1)
 
 		// Unlocking message using the same receipt should succeed.
-		So(q.UnlockByReceipt(rcpt), ShouldEqual, resp.OK_RESPONSE)
+		So(q.UnlockByReceipt(rcpt), ShouldEqual, resp.OK)
 		q.Pop(100000, 0, 2, true)
 		So(q.UnlockByReceipt(rcpt), ShouldEqual, mpqerr.ERR_RECEIPT_EXPIRED)
 	})

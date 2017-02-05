@@ -39,5 +39,5 @@ func (r *AsyncResponse) WriteResponse(buf *bufio.Writer) error {
 	return err
 }
 
-var RESP_PONG = NewStrResponse("PONG")
-var OK_RESPONSE = NewStrResponse("OK")
+var PONG = NewStrResponse("PONG")
+var OK = NewStrResponse("OK")

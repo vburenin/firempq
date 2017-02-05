@@ -103,7 +103,7 @@ func (s *SessionHandler) DispatchConn() {
 // to see if there is a processor for the rest of the tokens.
 func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 	if len(cmdTokens) == 0 {
-		return resp.OK_RESPONSE
+		return resp.OK
 	}
 
 	cmd := cmdTokens[0]
@@ -205,7 +205,7 @@ func (s *SessionHandler) ctxHandler(tokens []string) apis.IResponse {
 		return mpqerr.ERR_NO_SVC
 	}
 	s.ctx = svc.NewContext(s)
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 // Stop the processing loop.
@@ -219,7 +219,7 @@ func (s *SessionHandler) quitHandler(tokens []string) apis.IResponse {
 		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
 	s.Stop()
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 // List all active services.
@@ -240,7 +240,7 @@ func pingHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
 		return mpqerr.ERR_CMD_WITH_NO_PARAMS
 	}
-	return resp.RESP_PONG
+	return resp.PONG
 }
 
 // Returns current server unix time stamp in milliseconds.
@@ -261,7 +261,7 @@ func logLevelHandler(tokens []string) apis.IResponse {
 	}
 	log.Warning("Log level changed to: %d", l)
 	log.SetLevel(l)
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func panicHandler(tokens []string) apis.IResponse {
@@ -271,7 +271,7 @@ func panicHandler(tokens []string) apis.IResponse {
 
 	log.Critical("Panic requested!")
 	panic("Panic requested")
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func dbstatHandler(tokens []string) apis.IResponse {

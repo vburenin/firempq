@@ -102,7 +102,7 @@ func NewServiceDescription(name, sType string, exportId uint64) *ServiceDescript
 		CreateTs:  utils.Uts(),
 		Disabled:  false,
 		ToDelete:  false,
-		ServiceId: enc.EncodeTo36Base(exportId),
+		ServiceId: enc.To36Base(exportId),
 	}
 }
 

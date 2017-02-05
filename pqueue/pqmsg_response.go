@@ -27,7 +27,7 @@ func (p *MsgResponseItem) Payload() []byte {
 }
 
 func (p *MsgResponseItem) Receipt() string {
-	return enc.EncodeTo36Base(p.msg.SerialNumber) + "-" + enc.EncodeTo36Base(uint64(p.msg.PopCount))
+	return enc.To36Base(p.msg.SerialNumber) + "-" + enc.To36Base(uint64(p.msg.PopCount))
 }
 
 func (p *MsgResponseItem) GetMeta() *PQMsgMetaData {
@@ -59,9 +59,9 @@ func (p *MsgResponseItem) WriteResponse(buf *bufio.Writer) error {
 
 	if p.msg.UnlockTs > 0 {
 		_, err = buf.WriteString(" RCPT ")
-		_, err = buf.WriteString(enc.EncodeTo36Base(p.msg.SerialNumber))
+		_, err = buf.WriteString(enc.To36Base(p.msg.SerialNumber))
 		err = buf.WriteByte('-')
-		_, err = buf.WriteString(enc.EncodeTo36Base(uint64(p.msg.PopCount)))
+		_, err = buf.WriteString(enc.To36Base(uint64(p.msg.PopCount)))
 	}
 	return err
 }

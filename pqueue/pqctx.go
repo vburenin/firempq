@@ -12,7 +12,6 @@ import (
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
-	"github.com/vburenin/firempq/queue_info"
 	"github.com/vburenin/firempq/utils"
 )
 
@@ -83,14 +82,6 @@ const (
 	CPRM_POP_WAIT          = "WAIT"
 )
 
-func CreatePQueue(svcs apis.IServices, desc *queue_info.ServiceDescription, params []string) (apis.ISvc, apis.IResponse) {
-	config, err_resp := ParsePQConfig(params)
-	if err_resp.IsError() {
-		return nil, err_resp
-	}
-	return InitPQueue(svcs, desc, config), resp.OK_RESPONSE
-}
-
 func DefaultPQConfig() *conf.PQConfig {
 	cfg := &conf.Config{}
 	flags.ParseArgs(cfg, []string{"firempq"})
@@ -141,7 +132,7 @@ func ParsePQConfig(params []string) (*conf.PQConfig, apis.IResponse) {
 			return nil, err
 		}
 	}
-	return cfg, resp.OK_RESPONSE
+	return cfg, resp.OK
 }
 
 // Call dispatches to the command handler to process necessary parameters.
@@ -181,7 +172,7 @@ func (ctx *PQContext) Call(cmd string, params []string) apis.IResponse {
 		return ctx.CheckTimeouts(params)
 	case PQ_CMD_PURGE:
 		ctx.pq.Clear()
-		return resp.OK_RESPONSE
+		return resp.OK
 	}
 	return mpqerr.InvalidRequest("Unknown command: " + cmd)
 }
@@ -280,8 +271,8 @@ func (ctx *PQContext) asyncPop(asyncId string, lockTimeout, popWaitTimeout, limi
 	go func() {
 		ctx.asyncGroup.Add(1)
 		res := ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, lock)
-		resp := resp.NewAsyncResponse(asyncId, res)
-		if err := ctx.responseWriter.WriteResponse(resp); err != nil {
+		r := resp.NewAsyncResponse(asyncId, res)
+		if err := ctx.responseWriter.WriteResponse(r); err != nil {
 			log.LogConnError(err)
 		}
 		ctx.asyncGroup.Done()

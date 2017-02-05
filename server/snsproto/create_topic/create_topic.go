@@ -36,7 +36,10 @@ func CreateTopic(tm *tmgr.TopicManager, snsQuery *sns_query.SNSQuery) sns_respon
 	arn := tm.CreateTopic(topicName)
 
 	return &CreateTopicResponse{
-		XMLName:   xml.Name{snsdefs.XMLSpace, "CreateTopicResponse"},
+		XMLName: xml.Name{
+			Space: snsdefs.XMLSpace,
+			Local: "CreateTopicResponse",
+		},
 		TopicArn:  arn,
 		RequestId: "reqId",
 	}

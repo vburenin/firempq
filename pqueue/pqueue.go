@@ -224,7 +224,7 @@ func (pq *PQueue) SetParams(params *PQueueParams) apis.IResponse {
 	}
 	pq.lock.Unlock()
 	queue_info.SaveServiceConfig(pq.desc.ServiceId, pq.config)
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) GetCurrentStatus() apis.IResponse {
@@ -377,7 +377,7 @@ func (pq *PQueue) DeleteLockedById(msgId string) apis.IResponse {
 	pq.deleteMessage(sn)
 	pq.lockedMsgCnt--
 
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
@@ -391,7 +391,7 @@ func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
 		return mpqerr.ERR_MSG_IS_LOCKED
 	}
 	pq.deleteMessage(sn)
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int64) apis.IResponse {
@@ -431,7 +431,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int
 
 	signals.NewMessageNotify(pq.newMsgNotification)
 
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.IResponseItem {
@@ -490,7 +490,7 @@ func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) apis.IResponse
 			msg.UnlockTs = utils.Uts() + lockTimeout
 			pq.trackHeap.Push(msg)
 			pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
-			return resp.OK_RESPONSE
+			return resp.OK
 		} else {
 			return mpqerr.ERR_MSG_NOT_LOCKED
 		}
@@ -514,7 +514,7 @@ func (pq *PQueue) UnlockMessageById(msgId string) apis.IResponse {
 	}
 	// Message exists, push it into the front of the queue.
 	pq.returnToFront(msg)
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 // WARNING: this function acquires lock! It automatically releases lock if message is not found.
@@ -568,7 +568,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 
 	pq.lock.Unlock()
 
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) DeleteByReceipt(rcpt string) apis.IResponse {
@@ -580,7 +580,7 @@ func (pq *PQueue) DeleteByReceipt(rcpt string) apis.IResponse {
 	pq.lockedMsgCnt--
 	pq.deleteMessage(msg.SerialNumber)
 	pq.lock.Unlock()
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) UnlockByReceipt(rcpt string) apis.IResponse {
@@ -593,7 +593,7 @@ func (pq *PQueue) UnlockByReceipt(rcpt string) apis.IResponse {
 		pq.returnToFront(msg)
 	}
 	pq.lock.Unlock()
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (pq *PQueue) deleteMessage(sn uint64) bool {

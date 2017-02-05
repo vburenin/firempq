@@ -99,7 +99,6 @@ var ERR_ONE_ID_ONLY = InvalidRequest("Only one ID at the time is currently suppo
 
 var ERR_CMD_WITH_NO_PARAMS = InvalidRequest("Command doesn't accept any parameters")
 var ERR_CMD_PARAM_NOT_PROVIDED = InvalidRequest("At least one parameter should be provided")
-var ERR_UNKNOWN_ERROR = NewError("Unknown server error", 500)
 
 var ERR_TS_PARAMETER_NEEDED = InvalidRequest("TS parameters must be provided")
 

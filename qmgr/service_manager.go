@@ -96,9 +96,9 @@ func (s *ServiceManager) loadService(desc *queue_info.ServiceDescription) (apis.
 func (s *ServiceManager) CreateService(svcType string, svcName string, params []string) apis.IResponse {
 	switch svcType {
 	case apis.ServiceTypePriorityQueue:
-		pqConf, resp := pqueue.ParsePQConfig(params)
-		if resp.IsError() {
-			return resp
+		pqConf, r := pqueue.ParsePQConfig(params)
+		if r.IsError() {
+			return r
 		}
 		return s.CreatePQueue(svcName, pqConf)
 	default:
@@ -125,7 +125,7 @@ func (s *ServiceManager) CreatePQueue(svcName string, config *conf.PQConfig) api
 
 	svc.StartUpdate()
 
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 // DropService drops service.
@@ -141,7 +141,7 @@ func (s *ServiceManager) DropService(svcName string) apis.IResponse {
 	svcID := svc.Info().ID
 	queue_info.DeleteServiceData(svcID)
 	log.Debug("Service '%s' has been removed: (id:%s)", svcName, svcID)
-	return resp.OK_RESPONSE
+	return resp.OK
 }
 
 func (s *ServiceManager) BuildServiceNameList(svcPrefix string) []string {

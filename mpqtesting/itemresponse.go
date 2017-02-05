@@ -44,7 +44,7 @@ func VerifyItems(r apis.IResponse, size int, itemSpecs ...string) bool {
 }
 
 func VerifyOkResponse(r apis.IResponse) {
-	So(r, ShouldEqual, resp.OK_RESPONSE)
+	So(r, ShouldEqual, resp.OK)
 }
 
 func VerifyServiceSize(s apis.ISvc, size int) bool {
