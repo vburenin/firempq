@@ -15,12 +15,12 @@ type CLIParams struct {
 }
 
 type PQueueConfigData struct {
-	DefaultMessageTTL     int64 `long:"default-msg-ttl" description:"Default message TTL for a new queue in milliseconds" default:"345600000"`
-	DefaultDeliveryDelay  int64 `long:"default-delivery-delay" description:"Default message delivery delay for a new queue in milliseconds" default:"0"`
-	DefaultLockTimeout    int64 `long:"default-lock-timeout" description:"Default message lock/visibility timeout for a new queue in milliseconds" default:"60000"`
-	DefaultPopCountLimit  int64 `long:"default-pop-count-limit" description:"Default receive attempts limit per message for a new queue" default:"99"`
-	DefaultMaxQueueSize   int64 `long:"default-max-queue-size" description:"Default max number of messages per queue" default:"100000000"`
-	DefaultPopWaitTimeout int64 `long:"default-wait-timeout" description:"Default wait timeout to receive a message for a new queue in milliseconds." default:"0"`
+	DefaultMessageTTL     int64 `long:"msg-ttl" description:"Default message TTL for a new queue in milliseconds" default:"345600000"`
+	DefaultDeliveryDelay  int64 `long:"delivery-delay" description:"Default message delivery delay for a new queue in milliseconds" default:"0"`
+	DefaultLockTimeout    int64 `long:"lock-timeout" description:"Default message lock/visibility timeout for a new queue in milliseconds" default:"60000"`
+	DefaultPopCountLimit  int64 `long:"pop-count-limit" description:"Default receive attempts limit per message for a new queue" default:"99"`
+	DefaultMaxQueueSize   int64 `long:"max-queue-size" description:"Default max number of messages per queue" default:"100000000"`
+	DefaultPopWaitTimeout int64 `long:"wait-timeout" description:"Default wait timeout to receive a message for a new queue in milliseconds." default:"0"`
 
 	MaxPopWaitTimeout int64 `long:"max-wait-timeout" description:"Limit receive wait timeout. Milliseconds." default:"20000"`
 	MaxPopBatchSize   int64 `long:"max-receive-batch" description:"Limit the number of received messages at once." default:"10"`
@@ -36,20 +36,20 @@ type PQueueConfigData struct {
 type Config struct {
 	FMPQServerInterface string `long:"fmpq-address" description:"FireMPQ native protocol." default:":8222"`
 	SQSServerInterface  string `long:"sqs-address" description:"SQS protocol interface for FireMPQ" default:""`
-	SNSServerInterface  string `long:"sns-address" description:"NOT IMPLEMENTED: SNS protocol interface for FireMPQ" default:""`
+	SNSServerInterface  string // `long:"sns-address" description:"NOT IMPLEMENTED: SNS protocol interface for FireMPQ" default:""`
 	DbFlushInterval     int64  `long:"flush-interval" description:"Disk synchronization interval in milliseconds" default:"100"`
-	DatabasePath        string `long:"data-dir" description:"FireMPQ database location" default:"fmpq-data"`
+	DatabasePath        string `long:"data-dir" description:"FireMPQ database location" default:"./fmpq-data"`
 	UpdateInterval      int64  `long:"update-interval" description:"Timeout and expiration check period in milliseconds" default:"100"`
 
-	BinaryLogPath       string
-	BinaryLogBufferSize int
-	BinaryLogPageSize   uint64
-	BinaryLogFrameSize  uint64
+	//BinaryLogPath       string
+	//BinaryLogBufferSize int
+	//BinaryLogPageSize   uint64
+	//BinaryLogFrameSize  uint64
 
 	PQueueConfig PQueueConfigData
 
 	TextLogLevel string `long:"log-level" description:"Log level" default:"info" choice:"debug" choice:"info" choice:"warning"`
-	PrintConfig  bool   `long:"print-cfg" description:"Print current config values"`
+	PrintConfig  bool   `long:"log-config" description:"Print current config values"`
 	Profiler     string `long:"profiler-address" description:"Enables Go profiler on the defined interface:port" default:""`
 	LogLevel     logging.Level
 }
