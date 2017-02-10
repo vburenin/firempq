@@ -555,7 +555,11 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 	}
 
 	if msg.UnlockTs == 0 {
-		pq.availMsgs.Remove(msg.SerialNumber)
+		if lockTimeout > 0 {
+			pq.availMsgs.Remove(msg.SerialNumber)
+		} else {
+			return resp.OK
+		}
 	}
 
 	if lockTimeout == 0 {
