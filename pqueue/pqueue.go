@@ -270,12 +270,13 @@ func (pq *PQueue) Clear() {
 
 func (pq *PQueue) Close() {
 	log.Debug("Closing PQueue service: %s", pq.desc.Name)
-	pq.closed.Set()
-	// This should break a goroutine loop.
-	select {
-	case pq.popLimitMoveChan <- nil:
-	default:
+	pq.lock.Lock()
+	if !pq.IsClosed() {
+		pq.closed.Set()
+		// This should break a goroutine loop.
+		close(pq.popLimitMoveChan)
 	}
+	pq.lock.Unlock()
 }
 
 func (pq *PQueue) IsClosed() bool { return pq.closed.IsSet() }
@@ -635,16 +636,18 @@ func (pq *PQueue) getFailQueue(name string) *PQueue {
 
 func (pq *PQueue) moveToPopLimitedQueue() {
 	log.Debug("%s: Starting pop limit loop", pq.desc.Name)
+	defer log.Debug("%s: Finishing pop limit loop", pq.desc.Name)
+
 	var msg *PQMsgMetaData
+	var ok bool
+
 	for pq.closed.IsUnset() {
 		select {
-		case msg = <-pq.popLimitMoveChan:
+		case msg, ok = <-pq.popLimitMoveChan:
+			if !ok {
+				return
+			}
 		case <-signals.QuitChan:
-			break
-		}
-
-		// Nil can be received only in case of service is closing.
-		if msg == nil {
 			return
 		}
 
@@ -657,31 +660,17 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 
 		// Make sure service is not closed while we are pushing messages into it.
 		popLimitPq.closed.Lock()
-		for msg != nil {
 
-			binSn := msg.Sn2Bin()
+		binSn := msg.Sn2Bin()
+		popLimitPq.Push(msg.StrId,
+			string(pq.Payload(binSn)),
+			popLimitPq.config.MsgTtl,
+			popLimitPq.config.DeliveryDelay,
+			msg.Priority)
 
-			popLimitPq.Push(msg.StrId,
-				string(pq.Payload(binSn)),
-				popLimitPq.config.MsgTtl,
-				popLimitPq.config.DeliveryDelay,
-				msg.Priority)
-
-			pq.DeleteAllItemData(binSn)
-
-			select {
-			case msg = <-pq.popLimitMoveChan:
-				// Same thing. Service is closing.
-				if msg == nil {
-					return
-				}
-			default:
-				msg = nil
-			}
-		}
+		pq.DeleteAllItemData(binSn)
 		popLimitPq.closed.Unlock()
 	}
-	log.Debug("%s: Finishing pop limit loop", pq.desc.Name)
 }
 
 // Attempts to return a message into the front of the queue.
