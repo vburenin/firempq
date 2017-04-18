@@ -11,6 +11,7 @@ protobuf:
 	find ./pqueue -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 	find ./conf -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 	find ./queue_info -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
+	find ./msg -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 
 clean:
 	go clean ./...

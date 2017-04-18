@@ -8,12 +8,13 @@ import (
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/db/linear"
 	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
+	"github.com/vburenin/firempq/pmsg"
 	"github.com/vburenin/firempq/queue_info"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
@@ -22,7 +23,7 @@ import (
 
 type PQueue struct {
 	// A wrapper on top of common database operations.
-	db.DBService
+	db *linear.LinearDB
 	// Payload access should be protected separately.
 	payloadLock sync.Mutex
 	// For messages jumping around all their jumps should be protected.
@@ -41,7 +42,7 @@ type PQueue struct {
 	svcs apis.IServices
 
 	// This queue will be used to push messages exceeded pop limit attempts. All errors are ignored.
-	popLimitMoveChan chan *PQMsgMetaData
+	popLimitMoveChan chan *pmsg.PMsgMeta
 
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *queue_info.ServiceDescription
@@ -66,10 +67,16 @@ func InitPQueue(svcs apis.IServices, desc *queue_info.ServiceDescription, config
 		newMsgNotification: make(chan struct{}),
 		msgSerialNumber:    0,
 		lockedMsgCnt:       0,
-		popLimitMoveChan:   make(chan *PQMsgMetaData, 16384),
+		popLimitMoveChan:   make(chan *pmsg.PMsgMeta, 16384),
 	}
+
 	// Init inherited service db.
-	pq.InitServiceDB(desc.ServiceId)
+	db, err := linear.OpenDB(desc.ServiceId)
+	if err != nil {
+		return nil
+	}
+	pq.db = db
+
 	queue_info.SaveServiceConfig(desc.ServiceId, config)
 	pq.loadAllMessages()
 	return &pq
@@ -402,7 +409,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int
 	}
 
 	nowTs := utils.Uts()
-	msg := NewPQMsgMetaData(msgId, priority, nowTs+msgTtl+delay, 0)
+	msg := pmsg.NewPMsgMeta(msgId, priority, nowTs+msgTtl+delay, 0)
 
 	atomic.StoreInt64(&pq.config.LastPushTs, nowTs)
 
@@ -415,7 +422,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int
 
 	pq.msgSerialNumber++
 	sn := pq.msgSerialNumber
-	msg.SerialNumber = sn
+	msg.Serial = sn
 	pq.id2sn[msgId] = sn
 
 	if delay == 0 {
@@ -426,7 +433,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay, priority int
 	pq.trackHeap.Push(msg)
 	// Payload is a race conditional case, since it is not always flushed on disk and may or may not exist in memory.
 	pq.payloadLock.Lock()
-	pq.CacheAllItemData(enc.Sn2Bin(sn), msg.ByteMarshal(), enc.UnsafeStringToBytes(payload))
+	pq.db.Add(msg, enc.UnsafeStringToBytes(payload))
 	pq.payloadLock.Unlock()
 	pq.lock.Unlock()
 
@@ -450,7 +457,6 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.
 		}
 
 		msg := pq.availMsgs.Pop()
-		snDb := msg.Sn2Bin()
 
 		if lock {
 			pq.lockedMsgCnt++
@@ -459,18 +465,18 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.
 			// Changing priority to -1 guarantees that message will stay at the top of the queue.
 			msg.Priority = -1
 			pq.trackHeap.Push(msg)
-			pq.CacheItemData(snDb, msg.ByteMarshal())
+			pq.db.Update(msg)
 		} else {
 			delete(pq.id2sn, msg.StrId)
 		}
 
 		pq.payloadLock.Lock()
 		pq.lock.Unlock()
-		payload := pq.Payload(snDb)
+		payload := pq.db.Payload(msg.Serial)
 		msgs = append(msgs, NewMsgResponseItem(msg, payload))
 
 		if !lock {
-			pq.DeleteAllItemData(snDb)
+			pq.db.Delete(msg.Serial)
 		}
 
 		pq.payloadLock.Unlock()
@@ -490,7 +496,7 @@ func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) apis.IResponse
 		if msg.UnlockTs > 0 {
 			msg.UnlockTs = utils.Uts() + lockTimeout
 			pq.trackHeap.Push(msg)
-			pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
+			pq.db.Update(msg)
 			return resp.OK
 		} else {
 			return mpqerr.ERR_MSG_NOT_LOCKED
@@ -519,7 +525,7 @@ func (pq *PQueue) UnlockMessageById(msgId string) apis.IResponse {
 }
 
 // WARNING: this function acquires lock! It automatically releases lock if message is not found.
-func (pq *PQueue) acquireLockAndGetReceiptMessage(rcpt string) (*PQMsgMetaData, *mpqerr.ErrorResponse) {
+func (pq *PQueue) acquireLockAndGetReceiptMessage(rcpt string) (*pmsg.PMsgMeta, *mpqerr.ErrorResponse) {
 	parts := strings.SplitN(rcpt, "-", 2)
 
 	if len(parts) != 2 {
@@ -557,7 +563,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 
 	if msg.UnlockTs == 0 {
 		if lockTimeout > 0 {
-			pq.availMsgs.Remove(msg.SerialNumber)
+			pq.availMsgs.Remove(msg.Serial)
 		} else {
 			return resp.OK
 		}
@@ -568,7 +574,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 	} else {
 		msg.UnlockTs = utils.Uts() + lockTimeout
 		pq.trackHeap.Push(msg)
-		pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
+		pq.db.Update(msg)
 	}
 
 	pq.lock.Unlock()
@@ -583,7 +589,7 @@ func (pq *PQueue) DeleteByReceipt(rcpt string) apis.IResponse {
 		return err
 	}
 	pq.lockedMsgCnt--
-	pq.deleteMessage(msg.SerialNumber)
+	pq.deleteMessage(msg.Serial)
 	pq.lock.Unlock()
 	return resp.OK
 }
@@ -609,7 +615,7 @@ func (pq *PQueue) deleteMessage(sn uint64) bool {
 		}
 		delete(pq.id2sn, msg.StrId)
 		pq.payloadLock.Lock()
-		pq.DeleteAllItemData(msg.Sn2Bin())
+		pq.db.Delete(msg.Serial)
 		pq.payloadLock.Unlock()
 		return true
 	}
@@ -638,7 +644,7 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 	log.Debug("%s: Starting pop limit loop", pq.desc.Name)
 	defer log.Debug("%s: Finishing pop limit loop", pq.desc.Name)
 
-	var msg *PQMsgMetaData
+	var msg *pmsg.PMsgMeta
 	var ok bool
 
 	for pq.closed.IsUnset() {
@@ -661,30 +667,29 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 		// Make sure service is not closed while we are pushing messages into it.
 		popLimitPq.closed.Lock()
 
-		binSn := msg.Sn2Bin()
 		popLimitPq.Push(msg.StrId,
-			string(pq.Payload(binSn)),
+			string(pq.db.Payload(msg.Serial)),
 			popLimitPq.config.MsgTtl,
 			popLimitPq.config.DeliveryDelay,
 			msg.Priority)
 
-		pq.DeleteAllItemData(binSn)
+		pq.db.Delete(msg.Serial)
 		popLimitPq.closed.Unlock()
 	}
 }
 
 // Attempts to return a message into the front of the queue.
 // If a number of POP attempts has exceeded, message will be deleted.
-func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
+func (pq *PQueue) returnToFront(msg *pmsg.PMsgMeta) {
 	if msg.PopCount > 0 {
 		pq.lockedMsgCnt--
 	}
 	popLimit := pq.config.PopCountLimit
 	if popLimit > 0 && msg.PopCount >= popLimit {
 		if pq.config.PopLimitQueueName == "" {
-			pq.deleteMessage(msg.SerialNumber)
+			pq.deleteMessage(msg.Serial)
 		} else {
-			pq.trackHeap.Remove(msg.SerialNumber)
+			pq.trackHeap.Remove(msg.Serial)
 			delete(pq.id2sn, msg.StrId)
 			pq.popLimitMoveChan <- msg
 		}
@@ -692,7 +697,7 @@ func (pq *PQueue) returnToFront(msg *PQMsgMetaData) {
 		msg.UnlockTs = 0
 		pq.availMsgs.Push(msg)
 		pq.trackHeap.Push(msg)
-		pq.CacheItemData(msg.Sn2Bin(), msg.ByteMarshal())
+		pq.db.Update(msg)
 	}
 }
 
@@ -716,7 +721,7 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 			}
 		} else if msg.ExpireTs < ts {
 			cntDel++
-			pq.deleteMessage(msg.SerialNumber)
+			pq.deleteMessage(msg.Serial)
 		} else {
 			break
 		}
@@ -732,52 +737,52 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 }
 
 func (pq *PQueue) loadAllMessages() {
-	nowTs := utils.Uts()
-	log.Debug("Initializing queue: %s", pq.desc.Name)
-	msgIter := pq.ItemIterator()
-	delSn := []uint64{}
-
-	for ; msgIter.Valid(); msgIter.Next() {
-		sn := enc.DecodeBytesToUnit64(msgIter.GetTrimKey())
-		msg := UnmarshalPQMsgMetaData(sn, msgIter.GetValue())
-		// Message data has errors.
-		if msg == nil {
-			continue
-		}
-
-		// Store list if message IDs that should be removed.
-		if msg.ExpireTs <= nowTs && msg.UnlockTs == 0 {
-			delSn = append(delSn, sn)
-		} else {
-			// Don't count expired message to figure out the serial number.
-			// It may happen so that there is a chance to even reset a serial number
-			if sn > pq.msgSerialNumber {
-				pq.msgSerialNumber = sn
-			}
-			pq.id2sn[msg.StrId] = sn
-			pq.trackHeap.Push(msg)
-			if msg.UnlockTs == 0 {
-				pq.availMsgs.Push(msg)
-			} else {
-				if msg.PopCount > 0 {
-					pq.lockedMsgCnt++
-				}
-			}
-		}
-	}
-
-	msgIter.Close()
-
-	if len(delSn) > 0 {
-		log.Debug("Deleting %d expired messages", len(delSn))
-		for _, dsn := range delSn {
-			pq.DeleteAllItemData(enc.Sn2Bin(dsn))
-		}
-	}
-
-	log.Debug("Total messages: %d", len(pq.id2sn))
-	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
-	log.Debug("Available messages: %d", pq.availMsgs.Len())
+	//nowTs := utils.Uts()
+	//log.Debug("Initializing queue: %s", pq.desc.Name)
+	//msgIter := pq.ItemIterator()
+	//delSn := []uint64{}
+	//
+	//for ; msgIter.Valid(); msgIter.Next() {
+	//	sn := enc.DecodeBytesToUnit64(msgIter.GetTrimKey())
+	//	msg := pmsg.DecodePMsgMeta(sn, msgIter.GetValue())
+	//	// Message data has errors.
+	//	if msg == nil {
+	//		continue
+	//	}
+	//
+	//	// Store list if message IDs that should be removed.
+	//	if msg.ExpireTs <= nowTs && msg.UnlockTs == 0 {
+	//		delSn = append(delSn, sn)
+	//	} else {
+	//		// Don't count expired message to figure out the serial number.
+	//		// It may happen so that there is a chance to even reset a serial number
+	//		if sn > pq.msgSerialNumber {
+	//			pq.msgSerialNumber = sn
+	//		}
+	//		pq.id2sn[msg.StrId] = sn
+	//		pq.trackHeap.Push(msg)
+	//		if msg.UnlockTs == 0 {
+	//			pq.availMsgs.Push(msg)
+	//		} else {
+	//			if msg.PopCount > 0 {
+	//				pq.lockedMsgCnt++
+	//			}
+	//		}
+	//	}
+	//}
+	//
+	//msgIter.Close()
+	//
+	//if len(delSn) > 0 {
+	//	log.Debug("Deleting %d expired messages", len(delSn))
+	//	for _, dsn := range delSn {
+	//		pq.DeleteAllItemData(enc.Sn2Bin(dsn))
+	//	}
+	//}
+	//
+	//log.Debug("Total messages: %d", len(pq.id2sn))
+	//log.Debug("Locked messages: %d", pq.lockedMsgCnt)
+	//log.Debug("Available messages: %d", pq.availMsgs.Len())
 }
 
 var _ apis.ISvc = &PQueue{}

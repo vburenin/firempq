@@ -4,14 +4,15 @@ import (
 	"bufio"
 
 	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/pmsg"
 )
 
 type MsgResponseItem struct {
-	msg     *PQMsgMetaData
+	msg     *pmsg.PMsgMeta
 	payload []byte
 }
 
-func NewMsgResponseItem(msg *PQMsgMetaData, payload []byte) *MsgResponseItem {
+func NewMsgResponseItem(msg *pmsg.PMsgMeta, payload []byte) *MsgResponseItem {
 	return &MsgResponseItem{
 		msg:     msg,
 		payload: payload,
@@ -27,10 +28,10 @@ func (p *MsgResponseItem) Payload() []byte {
 }
 
 func (p *MsgResponseItem) Receipt() string {
-	return enc.To36Base(p.msg.SerialNumber) + "-" + enc.To36Base(uint64(p.msg.PopCount))
+	return enc.To36Base(p.msg.Serial) + "-" + enc.To36Base(uint64(p.msg.PopCount))
 }
 
-func (p *MsgResponseItem) GetMeta() *PQMsgMetaData {
+func (p *MsgResponseItem) GetMeta() *pmsg.PMsgMeta {
 	return p.msg
 }
 
@@ -59,7 +60,7 @@ func (p *MsgResponseItem) WriteResponse(buf *bufio.Writer) error {
 
 	if p.msg.UnlockTs > 0 {
 		_, err = buf.WriteString(" RCPT ")
-		_, err = buf.WriteString(enc.To36Base(p.msg.SerialNumber))
+		_, err = buf.WriteString(enc.To36Base(p.msg.Serial))
 		err = buf.WriteByte('-')
 		_, err = buf.WriteString(enc.To36Base(uint64(p.msg.PopCount)))
 	}

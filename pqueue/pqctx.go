@@ -373,7 +373,8 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 		if len(asyncId) == 0 {
 			res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 			if !res.IsError() {
-				ctx.pq.WaitFlush()
+				// TODO(vburenin): Add flush wait.
+				// ctx.pq.WaitFlush()
 			}
 			return res
 		} else {
@@ -381,7 +382,8 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 				ctx.asyncGroup.Add(1)
 				res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
 				if !res.IsError() {
-					ctx.pq.WaitFlush()
+					// TODO(vburenin): Add flush wait.
+					// ctx.pq.WaitFlush()
 				}
 				ctx.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
 				ctx.asyncGroup.Done()
