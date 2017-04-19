@@ -1,6 +1,7 @@
 package pqueue
 
 import (
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -71,6 +72,7 @@ func InitPQueue(svcs apis.IServices, desc *queue_info.ServiceDescription, config
 	}
 
 	// Init inherited service db.
+	pq.loadAllMessages(desc.ServiceId)
 	db, err := linear.OpenDB(desc.ServiceId)
 	if err != nil {
 		return nil
@@ -78,7 +80,6 @@ func InitPQueue(svcs apis.IServices, desc *queue_info.ServiceDescription, config
 	pq.db = db
 
 	queue_info.SaveServiceConfig(desc.ServiceId, config)
-	pq.loadAllMessages()
 	return &pq
 }
 
@@ -736,53 +737,67 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	return cntDel + cntRet
 }
 
-func (pq *PQueue) loadAllMessages() {
-	//nowTs := utils.Uts()
-	//log.Debug("Initializing queue: %s", pq.desc.Name)
-	//msgIter := pq.ItemIterator()
-	//delSn := []uint64{}
-	//
-	//for ; msgIter.Valid(); msgIter.Next() {
-	//	sn := enc.DecodeBytesToUnit64(msgIter.GetTrimKey())
-	//	msg := pmsg.DecodePMsgMeta(sn, msgIter.GetValue())
-	//	// Message data has errors.
-	//	if msg == nil {
-	//		continue
-	//	}
-	//
-	//	// Store list if message IDs that should be removed.
-	//	if msg.ExpireTs <= nowTs && msg.UnlockTs == 0 {
-	//		delSn = append(delSn, sn)
-	//	} else {
-	//		// Don't count expired message to figure out the serial number.
-	//		// It may happen so that there is a chance to even reset a serial number
-	//		if sn > pq.msgSerialNumber {
-	//			pq.msgSerialNumber = sn
-	//		}
-	//		pq.id2sn[msg.StrId] = sn
-	//		pq.trackHeap.Push(msg)
-	//		if msg.UnlockTs == 0 {
-	//			pq.availMsgs.Push(msg)
-	//		} else {
-	//			if msg.PopCount > 0 {
-	//				pq.lockedMsgCnt++
-	//			}
-	//		}
-	//	}
-	//}
-	//
-	//msgIter.Close()
-	//
-	//if len(delSn) > 0 {
-	//	log.Debug("Deleting %d expired messages", len(delSn))
-	//	for _, dsn := range delSn {
-	//		pq.DeleteAllItemData(enc.Sn2Bin(dsn))
-	//	}
-	//}
-	//
-	//log.Debug("Total messages: %d", len(pq.id2sn))
-	//log.Debug("Locked messages: %d", pq.lockedMsgCnt)
-	//log.Debug("Available messages: %d", pq.availMsgs.Len())
+func (pq *PQueue) loadAllMessages(dbName string) {
+	nowTs := utils.Uts()
+	log.Debug("Initializing queue: %s", pq.desc.Name)
+	msgIter, err := linear.NewIterator(dbName)
+	if err != nil {
+		log.Error("Failed to restore message state from the log: %s", err)
+		return
+	}
+
+	decodeErrCount := 0
+
+	replay := make(map[uint64]*pmsg.PMsgMeta, 128*1024)
+	for {
+		b, err := msgIter.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Error("Read error: %s", err)
+			return
+		}
+
+		dd := &pmsg.DiskData{}
+		err = dd.Unmarshal(b)
+		if err != nil {
+			log.Debug("Failed to decode message: %s", err)
+			decodeErrCount += 1
+			continue
+		}
+
+		msg := dd.Meta
+		switch dd.Action {
+		case pmsg.New, pmsg.Update:
+			replay[msg.Serial] = msg
+		case pmsg.Delete:
+			delete(replay, msg.Serial)
+		}
+	}
+
+	for _, msg := range replay {
+		// Ignore expired messages.
+		// TODO(vburenin): Move expired messages into fail queue.
+		if msg.ExpireTs >= nowTs || msg.UnlockTs > 0 {
+			pq.id2sn[msg.StrId] = msg.Serial
+			pq.trackHeap.Push(msg)
+			if msg.UnlockTs == 0 {
+				pq.availMsgs.Push(msg)
+			} else {
+				if msg.PopCount > 0 {
+					pq.lockedMsgCnt++
+				}
+			}
+		}
+	}
+
+	msgIter.Close()
+
+	log.Debug("Total messages: %d", len(pq.id2sn))
+	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
+	log.Debug("Available messages: %d", pq.availMsgs.Len())
+	log.Debug("Decode errors: %d", decodeErrCount)
 }
 
 var _ apis.ISvc = &PQueue{}
