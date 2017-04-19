@@ -20,8 +20,10 @@ type PayloadPos struct {
 }
 
 type LinearDB struct {
-	metaWriter *os.File
-	writer     *bufio.Writer
+	metaFile   *os.File
+	payloadFile *os.File
+	metaWriter *bufio.Writer
+	payloadWriter *bufio.Writer
 	mu         sync.Mutex
 }
 
@@ -115,8 +117,8 @@ func OpenDB(qid string) (*LinearDB, error) {
 	}
 
 	ldb := &LinearDB{
-		metaWriter: f,
-		writer:     bufio.NewWriterSize(f, 1024*1024),
+		metaFile:   f,
+		metaWriter: bufio.NewWriterSize(f, 1024*1024),
 	}
 	go ldb.flushLoop()
 	return ldb, nil
@@ -126,7 +128,7 @@ func (l *LinearDB) flushLoop() {
 	for {
 		time.Sleep(time.Second)
 		l.mu.Lock()
-		if err := l.writer.Flush(); err != nil {
+		if err := l.metaWriter.Flush(); err != nil {
 			log.Error("Failed to flush data on disk: %s", err)
 		}
 		l.mu.Unlock()
@@ -136,8 +138,8 @@ func (l *LinearDB) flushLoop() {
 func (l *LinearDB) writeMeta(m *pmsg.DiskData) error {
 	d, _ := m.Marshal()
 	l.mu.Lock()
-	l.writer.WriteByte(byte(len(d)))
-	_, err := l.writer.Write(d)
+	l.metaWriter.WriteByte(byte(len(d)))
+	_, err := l.metaWriter.Write(d)
 	l.mu.Unlock()
 	if err != nil {
 		log.Error("Could not store data: %s", err)
@@ -146,6 +148,7 @@ func (l *LinearDB) writeMeta(m *pmsg.DiskData) error {
 }
 
 func (l *LinearDB) Add(m *pmsg.PMsgMeta, payload []byte) error {
+	l.payloadFile
 	return l.writeMeta(&pmsg.DiskData{Meta: m, Action: pmsg.New})
 }
 
