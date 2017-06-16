@@ -79,11 +79,11 @@ func (ma *ReqMsgAttr) Parse(paramName string, value string) *sqserr.SQSError {
 func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	nLen := len(name)
 	b = append(b, byte(nLen>>24), byte(nLen>>16), byte(nLen>>8), byte(nLen))
-	b = append(b, enc.UnsafeStringToBytes(name)...)
+	b = append(b, []byte(name)...)
 
 	tLen := len(data.Type)
 	b = append(b, byte(tLen>>24), byte(tLen>>16), byte(tLen>>8), byte(tLen))
-	b = append(b, enc.UnsafeStringToBytes(data.Type)...)
+	b = append(b, []byte(data.Type)...)
 
 	if strings.HasPrefix(data.Type, "String") || strings.HasPrefix(data.Type, "Number") {
 		b = append(b, 1)
@@ -92,7 +92,7 @@ func EncodeAttrTo(name string, data *sqsmsg.UserAttribute, b []byte) []byte {
 	}
 	valLen := len(data.Value)
 	b = append(b, byte(valLen>>24), byte(valLen>>16), byte(valLen>>8), byte(valLen))
-	b = append(b, enc.UnsafeStringToBytes(data.Value)...)
+	b = append(b, []byte(data.Value)...)
 	return b
 }
 
@@ -220,9 +220,9 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 		out.DelaySeconds = pq.Config().DeliveryDelay
 	} else if out.DelaySeconds > conf.CFG_PQ.MaxDeliveryDelay {
 		return sqserr.InvalidParameterValueError(
-			"Delay secods must be between 0 and %d", conf.CFG_PQ.MaxDeliveryDelay/1000)
+			"Delay seconds must be between 0 and %d", conf.CFG_PQ.MaxDeliveryDelay/1000)
 	}
-	bodyMd5str := fmt.Sprintf("%x", md5.Sum(enc.UnsafeStringToBytes(out.MessageBody)))
+	bodyMd5str := fmt.Sprintf("%x", md5.Sum([]byte(out.MessageBody)))
 	attrMd5 := CalcAttrMd5(outAttrs)
 
 	msgPayload := sqsmsg.SQSMessagePayload{

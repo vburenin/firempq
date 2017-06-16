@@ -116,7 +116,7 @@ func (self *ReceiveMessageOptions) Parse(paramName, value string) *sqserr.SQSErr
 func MakeMessageAttr(name string, sqsAttr *sqsmsg.UserAttribute) *MessageAttribute {
 	if strings.HasPrefix(sqsAttr.Type, "Binary") {
 		encodedBin := make([]byte, base64.StdEncoding.EncodedLen(len(sqsAttr.Value)))
-		base64.StdEncoding.Encode(encodedBin, enc.UnsafeStringToBytes(sqsAttr.Value))
+		base64.StdEncoding.Encode(encodedBin, []byte(sqsAttr.Value))
 		return &MessageAttribute{
 			Name:        name,
 			Type:        sqsAttr.Type,
@@ -145,7 +145,7 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 		sqsMsg.SenderId = "unknown"
 		sqsMsg.SentTimestamp = strconv.FormatInt(utils.Uts(), 10)
 		sqsMsg.MD5OfMessageAttributes = fmt.Sprintf("%x", md5.Sum(nil))
-		sqsMsg.MD5OfMessageBody = fmt.Sprintf("%x", md5.Sum(enc.UnsafeStringToBytes(sqsMsg.Payload)))
+		sqsMsg.MD5OfMessageBody = fmt.Sprintf("%x", md5.Sum([]byte(sqsMsg.Payload)))
 	}
 
 	msgMeta := msg.GetMeta()
