@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/idgen"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/pqueue"
@@ -238,7 +237,7 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 	if marshalErr != nil {
 		log.Error("Failed to serialize message payload: %v", err)
 	}
-	payload := enc.UnsafeBytesToString(d)
+	payload := string(d)
 
 	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds, 1)
 	if resp.IsError() {

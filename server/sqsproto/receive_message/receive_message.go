@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/vburenin/firempq/apis"
-	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pqueue"
@@ -120,7 +119,7 @@ func MakeMessageAttr(name string, sqsAttr *sqsmsg.UserAttribute) *MessageAttribu
 		return &MessageAttribute{
 			Name:        name,
 			Type:        sqsAttr.Type,
-			BinaryValue: enc.UnsafeBytesToString(encodedBin),
+			BinaryValue: string(encodedBin),
 		}
 	} else {
 		return &MessageAttribute{
