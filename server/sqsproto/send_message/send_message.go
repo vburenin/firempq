@@ -240,7 +240,7 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 	}
 	payload := enc.UnsafeBytesToString(d)
 
-	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds, 1)
+	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds)
 	if resp.IsError() {
 		e, _ := resp.(error)
 		return sqserr.InvalidParameterValueError(e.Error())

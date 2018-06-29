@@ -212,7 +212,7 @@ func CreateQueue(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_r
 		return errResp
 	}
 
-	resp := svcMgr.CreatePQueue(sqsQuery.QueueName, queueAttributes.MakePQConfig())
+	resp := svcMgr.CreateQueue(sqsQuery.QueueName, queueAttributes.MakePQConfig())
 	if resp.IsError() {
 		e, _ := resp.(error)
 		return sqserr.ServerSideError(e.Error())

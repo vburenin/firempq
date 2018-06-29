@@ -1,14 +1,13 @@
 all: clean build
 
 build: protobuf
-	go build firempq.go
+	go build cmd/firempq/firempq.go
 
 install:
-	go install firempq
+	go install cmd/firempq/firempq.go
 
 protobuf:
 	find ./server -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
-	find ./pqueue -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 	find ./conf -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 	find ./queue_info -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.
 	find ./pmsg -name "*.proto" -type f -print0 | xargs -0 -n 1 protoc --gogoslick_out=.

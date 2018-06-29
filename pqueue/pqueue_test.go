@@ -58,14 +58,14 @@ func (f *FakeSvcLoader) GetService(name string) (apis.ISvc, bool) {
 }
 
 func CreateTestQueue() *PQueue {
-	return InitPQueue(NewFakeSvcLoader(), getDesc(), getConfig())
+	return NewPQueue(NewFakeSvcLoader(), getDesc(), getConfig())
 }
 
 func CreateTestQueueWithName(fsl *FakeSvcLoader, name string) *PQueue {
 	d := getDesc()
 	c := getConfig()
 	d.Name = name
-	q := InitPQueue(fsl, d, c)
+	q := NewPQueue(fsl, d, c)
 	fsl.data[name] = q
 	return q
 }
@@ -466,7 +466,7 @@ func TestSize(t *testing.T) {
 		VerifyServiceSize(q, 5)
 		So(q.availMsgs.Len(), ShouldEqual, 3)
 		So(q.lockedMsgCnt, ShouldEqual, 2)
-		So(len(q.id2sn), ShouldEqual, 5)
+		So(len(q.id2msg), ShouldEqual, 5)
 	})
 }
 

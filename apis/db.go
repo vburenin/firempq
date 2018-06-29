@@ -2,28 +2,24 @@ package apis
 
 // ItemIterator is an iterator interface over key/value storage.
 type ItemIterator interface {
-	Next()
+	Next() error
+	GetData() []byte
 	Valid() bool
-	Close()
-	GetValue() []byte
-	GetKey() []byte
-	GetTrimKey() []byte
+	Close() error
 }
 
-// DataStorage is an abstracted interface over the key/value storage
-// currently the main purpose is to to prepend prefixes to the data key.
+type PayloadLocation struct {
+	FileID   int64
+	Position int64
+}
+
 type DataStorage interface {
-	WaitFlush()
-	CachedStore2(key1 string, data1 []byte, key2 string, data2 []byte)
-	CachedStore(key string, data []byte)
-	DeleteDataWithPrefix(prefix string) int
-	StoreData(key string, data []byte) error
-	FlushCache()
-	DeleteData(key ...string) error
-	DeleteCacheData(id ...string)
-	IterData(prefix string) ItemIterator
-	GetData(id string) []byte
+	Flush() error
 	GetStats() map[string]interface{}
-	Close()
-	IsClosed() bool
+	Close() error
+
+	AddPayload(payload []byte) (int64, int64, error)
+	RetrievePayload(fileID, pos int64) ([]byte, error)
+
+	AddMetadata(metadata []byte) error
 }

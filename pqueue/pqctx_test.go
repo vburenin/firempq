@@ -50,7 +50,7 @@ func i2a(v int64) string { return strconv.FormatInt(v, 10) }
 
 func CreateQueueTestContext() (*PQContext, *TestResponseWriter) {
 	rw := NewTestResponseWriter()
-	return InitPQueue(&FakeCtxSvcLoader{}, getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
+	return NewPQueue(&FakeCtxSvcLoader{}, getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
 }
 
 func CreateNewQueueTestContext() (*PQContext, *TestResponseWriter) {
@@ -105,22 +105,22 @@ func TestCtxPopLock(t *testing.T) {
 	Convey("Test POPLOCK command", t, func() {
 		q, rw := CreateNewQueueTestContext()
 		Convey("Lock timeout error should occure", func() {
-			resp := q.Call(PQ_CMD_POPLOCK, []string{PRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(PQ_CMD_POPLOCK, []string{PrmLockTimeout, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxLockTimeout))
 		})
 
 		Convey("Limit error should occure", func() {
-			resp := q.Call(PQ_CMD_POPLOCK, []string{PRM_LIMIT, "-1"})
+			resp := q.Call(PQ_CMD_POPLOCK, []string{PrmLimit, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxPopBatchSize))
 		})
 
 		Convey("Pop wait error should occure", func() {
-			resp := q.Call(PQ_CMD_POPLOCK, []string{PRM_POP_WAIT, "-1"})
+			resp := q.Call(PQ_CMD_POPLOCK, []string{PrmPopWait, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxPopWaitTimeout))
 		})
 
 		Convey("Async error should occure", func() {
-			resp := q.Call(PQ_CMD_POPLOCK, []string{PRM_ASYNC, "--++--"})
+			resp := q.Call(PQ_CMD_POPLOCK, []string{PrmAsync, "--++--"})
 			So(resp.StringResponse(), ShouldContainSubstring, "Only [_a-z")
 		})
 
@@ -130,7 +130,7 @@ func TestCtxPopLock(t *testing.T) {
 		})
 
 		Convey("Async pop should return empty list", func() {
-			resp := q.Call(PQ_CMD_POPLOCK, []string{PRM_ASYNC, "a1", PRM_POP_WAIT, "1"})
+			resp := q.Call(PQ_CMD_POPLOCK, []string{PrmAsync, "a1", PrmPopWait, "1"})
 			So(resp.StringResponse(), ShouldEqual, "+A a1")
 			time.Sleep(time.Millisecond * 10)
 			So(len(rw.GetResponses()), ShouldEqual, 1)
@@ -138,7 +138,7 @@ func TestCtxPopLock(t *testing.T) {
 		})
 
 		Convey("Pop should return empty list", func() {
-			p := []string{PRM_POP_WAIT, "1", PRM_LOCK_TIMEOUT, "100", PRM_LIMIT, "10"}
+			p := []string{PrmPopWait, "1", PrmLockTimeout, "100", PrmLimit, "10"}
 			resp := q.Call(PQ_CMD_POPLOCK, p)
 			VerifyItems(resp, 0)
 		})
@@ -151,17 +151,17 @@ func TestCtxPop(t *testing.T) {
 		q, rw := CreateNewQueueTestContext()
 
 		Convey("Limit error should occure", func() {
-			resp := q.Call(PQ_CMD_POP, []string{PRM_LIMIT, "-1"})
+			resp := q.Call(PQ_CMD_POP, []string{PrmLimit, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxPopBatchSize))
 		})
 
 		Convey("Pop wait error should occure", func() {
-			resp := q.Call(PQ_CMD_POP, []string{PRM_POP_WAIT, "-1"})
+			resp := q.Call(PQ_CMD_POP, []string{PrmPopWait, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxPopWaitTimeout))
 		})
 
 		Convey("Async error should occure", func() {
-			resp := q.Call(PQ_CMD_POP, []string{PRM_ASYNC, "--++--"})
+			resp := q.Call(PQ_CMD_POP, []string{PrmAsync, "--++--"})
 			So(resp.StringResponse(), ShouldContainSubstring, "Only [_a-z")
 		})
 
@@ -171,7 +171,7 @@ func TestCtxPop(t *testing.T) {
 		})
 
 		Convey("Async pop should return empty list", func() {
-			resp := q.Call(PQ_CMD_POP, []string{PRM_ASYNC, "a1", PRM_POP_WAIT, "1"})
+			resp := q.Call(PQ_CMD_POP, []string{PrmAsync, "a1", PrmPopWait, "1"})
 			So(resp.StringResponse(), ShouldEqual, "+A a1")
 			time.Sleep(time.Millisecond * 10)
 			So(len(rw.GetResponses()), ShouldEqual, 1)
@@ -179,13 +179,13 @@ func TestCtxPop(t *testing.T) {
 		})
 
 		Convey("Pop async run error because POP WAIT is 0", func() {
-			p := []string{PRM_POP_WAIT, "0", PRM_LIMIT, "10", PRM_ASYNC, "id1"}
+			p := []string{PrmPopWait, "0", PrmLimit, "10", PrmAsync, "id1"}
 			resp := q.Call(PQ_CMD_POP, p)
 			So(resp.StringResponse(), ShouldContainSubstring, "+ASYNC id1 -ERR")
 		})
 
 		Convey("Pop should return empty list", func() {
-			p := []string{PRM_POP_WAIT, "1", PRM_LIMIT, "10"}
+			p := []string{PrmPopWait, "1", PrmLimit, "10"}
 			resp := q.Call(PQ_CMD_POP, p)
 			VerifyItems(resp, 0)
 		})
@@ -226,7 +226,7 @@ func TestCtxDeleteLockedByID(t *testing.T) {
 		})
 
 		Convey("Message is not locked error should be returned", func() {
-			q.Call(PQ_CMD_PUSH, []string{PRM_PAYLOAD, "t", PRM_ID, "id1", PRM_DELAY, "0"})
+			q.Call(PQ_CMD_PUSH, []string{PrmPayload, "t", PrmID, "id1", PrmDelay, "0"})
 			resp := q.Call(PQ_CMD_DELETE_LOCKED_BY_ID, []string{"id1"})
 			So(resp, ShouldEqual, mpqerr.ERR_MSG_NOT_LOCKED)
 			VerifyServiceSize(q.pq, 1)
@@ -248,7 +248,7 @@ func TestCtxDeleteByID(t *testing.T) {
 		})
 
 		Convey("Message should be deleted", func() {
-			q.Call(PQ_CMD_PUSH, []string{PRM_PAYLOAD, "t", PRM_ID, "id1", PRM_DELAY, "0"})
+			q.Call(PQ_CMD_PUSH, []string{PrmPayload, "t", PrmID, "id1", PrmDelay, "0"})
 			resp := q.Call(PQ_CMD_DELETE_BY_ID, []string{"id1"})
 			VerifyOkResponse(resp)
 		})
@@ -260,42 +260,42 @@ func TestCtxPush(t *testing.T) {
 		q, rw := CreateNewQueueTestContext()
 
 		Convey("Should not accept messages with underscore prefix", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "_ab", PRM_PAYLOAD, "p"})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "_ab", PrmPayload, "p"})
 			So(resp, ShouldEqual, mpqerr.ERR_USER_ID_IS_WRONG)
 		})
 
 		Convey("Priority should be out of range", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_PRIORITY, "-1"})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", PRM_PRIORITY, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 
 		Convey("Message ttl should error", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_MSG_TTL, "-1"})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", PrmMsgTTL, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTTL))
 		})
 
 		Convey("Delivery delay must be out of range", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_DELAY, "-1"})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", PrmDelay, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxDeliveryDelay))
 		})
 		Convey("Push with sync wait. Push should succed. Nothing special will happen.", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_DELAY, "1", PRM_SYNC_WAIT})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", PrmDelay, "1", PrmSyncWait})
 			VerifyOkResponse(resp)
 			VerifyServiceSize(q.pq, 1)
 		})
 		Convey("Push async with no wait flag. Should fail with error", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_DELAY, "1", PRM_ASYNC, "asid"})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", PrmDelay, "1", PrmAsync, "asid"})
 			So(resp.StringResponse(), ShouldContainSubstring, "+ASYNC asid -ERR")
 		})
 		Convey("Push async with wait flag. Should succed with two responses.", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", PRM_ASYNC, "asid", PRM_SYNC_WAIT})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", PrmAsync, "asid", PrmSyncWait})
 			So(resp.StringResponse(), ShouldContainSubstring, "+A asid")
 			time.Sleep(time.Millisecond * 10)
 			So(rw.GetResponses()[0].StringResponse(), ShouldEqual, "+ASYNC asid +OK")
 			VerifyServiceSize(q.pq, 1)
 		})
 		Convey("Push with unknown param.", func() {
-			resp := q.Call(PQ_CMD_PUSH, []string{PRM_ID, "ab", PRM_PAYLOAD, "p", "TEST_PARAM"})
+			resp := q.Call(PQ_CMD_PUSH, []string{PrmID, "ab", PrmPayload, "p", "TEST_PARAM"})
 			So(resp.StringResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 	})
@@ -305,30 +305,30 @@ func TestCtxUpdateLock(t *testing.T) {
 	Convey("Update lock should work fine", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("Should fail with unknown param", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "ab", "TEST_PARAM"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PrmID, "ab", "TEST_PARAM"})
 			So(resp.StringResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 		Convey("Failure with incorrect message id", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "$ab", PRM_LOCK_TIMEOUT, "10000"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PrmID, "$ab", PrmLockTimeout, "10000"})
 			So(resp, ShouldEqual, mpqerr.ERR_ID_IS_WRONG)
 		})
 
 		Convey("Failure with empty message id", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_LOCK_TIMEOUT, "1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PrmLockTimeout, "1"})
 			So(resp, ShouldEqual, mpqerr.ERR_MSG_ID_NOT_DEFINED)
 		})
 		Convey("Failure with no timeout defined", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "1234"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PrmID, "1234"})
 			So(resp, ShouldEqual, mpqerr.ERR_MSG_TIMEOUT_NOT_DEFINED)
 		})
 
 		Convey("Failure with no message", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "100"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PrmID, "1234", PrmLockTimeout, "100"})
 			So(resp, ShouldEqual, mpqerr.ERR_MSG_NOT_FOUND)
 		})
 
 		Convey("Failure with to wrong timeout", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PRM_ID, "1234", PRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_ID, []string{PrmID, "1234", PrmLockTimeout, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxLockTimeout))
 		})
 	})
@@ -380,11 +380,11 @@ func TestCtxCheckTimeouts(t *testing.T) {
 			So(resp.StringResponse(), ShouldContainSubstring, "TEST_PARAM")
 		})
 		Convey("Should return wrong TS error", func() {
-			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{PRM_TIMESTAMP, "-1"})
+			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{PrmTimeStamp, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 		Convey("Should work", func() {
-			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{PRM_TIMESTAMP, "1000"})
+			resp := q.Call(PQ_CMD_CHECK_TIMEOUTS, []string{PrmTimeStamp, "1000"})
 			So(resp.StringResponse(), ShouldEqual, "+DATA :0")
 		})
 	})
@@ -474,11 +474,11 @@ func TestCtxUpdateLockByReceipt(t *testing.T) {
 	Convey("All call scenarios should return expected response", t, func() {
 		q, _ := CreateNewQueueTestContext()
 		Convey("Should return no timeout parameter error", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{PRM_RECEIPT, "1-2"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{PrmReceipt, "1-2"})
 			So(resp, ShouldEqual, mpqerr.ERR_MSG_TIMEOUT_NOT_DEFINED)
 		})
 		Convey("Should return invalid timeout error", func() {
-			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{PRM_RECEIPT, "1-2", PRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(PQ_CMD_UPD_LOCK_BY_RCPT, []string{PrmReceipt, "1-2", PrmLockTimeout, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxLockTimeout))
 		})
 		Convey("Should return unknown parameter error", func() {

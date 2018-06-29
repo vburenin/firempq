@@ -57,18 +57,17 @@ const (
 )
 
 const (
-	PRM_ID           = "ID"
-	PRM_RECEIPT      = "RCPT"
-	PRM_POP_WAIT     = "WAIT"
-	PRM_LOCK_TIMEOUT = "TIMEOUT"
-	PRM_PRIORITY     = "PRIORITY"
-	PRM_LIMIT        = "LIMIT"
-	PRM_PAYLOAD      = "PL"
-	PRM_DELAY        = "DELAY"
-	PRM_TIMESTAMP    = "TS"
-	PRM_ASYNC        = "ASYNC"
-	PRM_SYNC_WAIT    = "SYNCWAIT"
-	PRM_MSG_TTL      = "TTL"
+	PrmID          = "ID"
+	PrmReceipt     = "RCPT"
+	PrmPopWait     = "WAIT"
+	PrmLockTimeout = "TIMEOUT"
+	PrmLimit       = "LIMIT"
+	PrmPayload     = "PL"
+	PrmDelay       = "DELAY"
+	PrmTimeStamp   = "TS"
+	PrmAsync       = "ASYNC"
+	PrmSyncWait    = "SYNCWAIT"
+	PrmMsgTTL      = "TTL"
 )
 
 const (
@@ -212,13 +211,13 @@ func (ctx *PQContext) PopLock(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PRM_LOCK_TIMEOUT:
+		case PrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
-		case PRM_LIMIT:
+		case PrmLimit:
 			params, limit, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxPopBatchSize)
-		case PRM_POP_WAIT:
+		case PrmPopWait:
 			params, popWaitTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxPopWaitTimeout)
-		case PRM_ASYNC:
+		case PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -244,11 +243,11 @@ func (ctx *PQContext) Pop(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PRM_LIMIT:
+		case PrmLimit:
 			params, limit, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxPopBatchSize)
-		case PRM_POP_WAIT:
+		case PrmPopWait:
 			params, popWaitTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxPopWaitTimeout)
-		case PRM_ASYNC:
+		case PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -332,7 +331,6 @@ func (ctx *PQContext) UnlockByReceipt(params []string) apis.IResponse {
 func (ctx *PQContext) Push(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var msgId string
-	var priority int64 = 0
 	var syncWait bool
 	var asyncId string
 	var payload string
@@ -343,20 +341,18 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PRM_ID:
+		case PrmID:
 			params, msgId, err = mpqproto.ParseUserItemId(params)
-		case PRM_PRIORITY:
-			params, priority, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
-		case PRM_PAYLOAD:
+		case PrmPayload:
 			params, payload, err = mpqproto.ParseStringParam(params, 1, PAYLOAD_LIMIT)
-		case PRM_DELAY:
+		case PrmDelay:
 			params, delay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
-		case PRM_MSG_TTL:
+		case PrmMsgTTL:
 			params, msgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
-		case PRM_SYNC_WAIT:
+		case PrmSyncWait:
 			params = params[1:]
 			syncWait = true
-		case PRM_ASYNC:
+		case PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -371,7 +367,7 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 
 	if syncWait {
 		if len(asyncId) == 0 {
-			res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
+			res := ctx.pq.Push(msgId, payload, msgTtl, delay)
 			if !res.IsError() {
 				// TODO(vburenin): Add flush wait.
 				// ctx.pq.WaitFlush()
@@ -380,7 +376,7 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 		} else {
 			go func() {
 				ctx.asyncGroup.Add(1)
-				res := ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
+				res := ctx.pq.Push(msgId, payload, msgTtl, delay)
 				if !res.IsError() {
 					// TODO(vburenin): Add flush wait.
 					// ctx.pq.WaitFlush()
@@ -394,7 +390,7 @@ func (ctx *PQContext) Push(params []string) apis.IResponse {
 	if len(asyncId) > 0 {
 		return resp.NewAsyncResponse(asyncId, mpqerr.ERR_ASYNC_PUSH)
 	}
-	return ctx.pq.Push(msgId, payload, msgTtl, delay, priority)
+	return ctx.pq.Push(msgId, payload, msgTtl, delay)
 }
 
 // UpdateLockByRcpt updates message lock according to provided receipt.
@@ -405,9 +401,9 @@ func (ctx *PQContext) UpdateLockByRcpt(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PRM_RECEIPT:
+		case PrmReceipt:
 			params, rcpt, err = mpqproto.ParseReceiptParam(params)
-		case PRM_LOCK_TIMEOUT:
+		case PrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -436,9 +432,9 @@ func (ctx *PQContext) UpdateLockById(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PRM_ID:
+		case PrmID:
 			params, msgId, err = mpqproto.ParseItemId(params)
-		case PRM_LOCK_TIMEOUT:
+		case PrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -478,7 +474,7 @@ func (ctx *PQContext) CheckTimeouts(params []string) apis.IResponse {
 	var ts int64 = -1
 	for len(params) > 0 {
 		switch params[0] {
-		case PRM_TIMESTAMP:
+		case PrmTimeStamp:
 			params, ts, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
 		default:
 			return mpqerr.UnknownParam(params[0])

@@ -107,6 +107,10 @@ func (p *Parser) getAlignmentInfo() alignmentInfo {
 func wrapText(s string, l int, prefix string) string {
 	var ret string
 
+	if l < 10 {
+		l = 10
+	}
+
 	// Basic text wrapping of s at spaces to fit in l
 	lines := strings.Split(s, "\n")
 
@@ -212,19 +216,21 @@ func (p *Parser) writeHelpOption(writer *bufio.Writer, option *Option, info alig
 
 		var def string
 
-		if len(option.DefaultMask) != 0 && option.DefaultMask != "-" {
-			def = option.DefaultMask
+		if len(option.DefaultMask) != 0 {
+			if option.DefaultMask != "-" {
+				def = option.DefaultMask
+			}
 		} else {
 			def = option.defaultLiteral
 		}
 
 		var envDef string
-		if option.EnvDefaultKey != "" {
+		if option.EnvKeyWithNamespace() != "" {
 			var envPrintable string
 			if runtime.GOOS == "windows" {
-				envPrintable = "%" + option.EnvDefaultKey + "%"
+				envPrintable = "%" + option.EnvKeyWithNamespace() + "%"
 			} else {
-				envPrintable = "$" + option.EnvDefaultKey
+				envPrintable = "$" + option.EnvKeyWithNamespace()
 			}
 			envDef = fmt.Sprintf(" [%s]", envPrintable)
 		}

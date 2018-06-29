@@ -1,24 +1,13 @@
 syntax = "proto3";
 package pmsg;
 
-message PMsgMeta {
-	int64 priority = 1;
-	int64 expire_ts = 2;
-	int64 pop_count = 3;
-	int64 unlock_ts = 4;
-	string str_id = 5;
-    uint64 serial = 6;
+message MsgMeta {
+    uint64 serial = 1;
+    string str_id = 2;
+    int64 pop_count = 3;
+	int64 expire_ts = 4;
+	int64 unlock_ts = 5;
 
-    uint64 payload_offset = 7;
-    uint64 payload_block = 8;
-}
-
-message DiskData {
-    enum Action {
-        New = 0;
-        Update = 1;
-        Delete = 2;
-    }
-    Action action = 1;
-    PMsgMeta meta = 3;
+    int64 payload_file_id = 6;
+    int64 payload_offset = 7;
 }

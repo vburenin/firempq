@@ -8,11 +8,11 @@ import (
 )
 
 type MsgResponseItem struct {
-	msg     *pmsg.PMsgMeta
+	msg     *pmsg.MsgMeta
 	payload []byte
 }
 
-func NewMsgResponseItem(msg *pmsg.PMsgMeta, payload []byte) *MsgResponseItem {
+func NewMsgResponseItem(msg *pmsg.MsgMeta, payload []byte) *MsgResponseItem {
 	return &MsgResponseItem{
 		msg:     msg,
 		payload: payload,
@@ -31,7 +31,7 @@ func (p *MsgResponseItem) Receipt() string {
 	return enc.To36Base(p.msg.Serial) + "-" + enc.To36Base(uint64(p.msg.PopCount))
 }
 
-func (p *MsgResponseItem) GetMeta() *pmsg.PMsgMeta {
+func (p *MsgResponseItem) GetMeta() *pmsg.MsgMeta {
 	return p.msg
 }
 

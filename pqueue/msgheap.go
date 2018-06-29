@@ -2,59 +2,42 @@ package pqueue
 
 import "github.com/vburenin/firempq/pmsg"
 
-func NewSnHeap() *MsgHeap {
-	h := NewMsgHeap()
-	h.geq = func(l *pmsg.PMsgMeta, r *pmsg.PMsgMeta) bool {
-		v := l.Priority - r.Priority
-		if v == 0 {
-			return l.Serial >= r.Serial
-		}
-		return v > 0
-	}
-	return h
-}
-
-func NewTsHeap() *MsgHeap {
-	h := NewMsgHeap()
-	h.geq = func(l *pmsg.PMsgMeta, r *pmsg.PMsgMeta) bool {
-		if l.UnlockTs == 0 {
-			if r.UnlockTs == 0 {
-				return l.ExpireTs >= r.ExpireTs
-			} else {
-				return l.ExpireTs >= r.UnlockTs
-			}
+func geq(l *pmsg.MsgMeta, r *pmsg.MsgMeta) bool {
+	if l.UnlockTs == 0 {
+		if r.UnlockTs == 0 {
+			return l.ExpireTs >= r.ExpireTs
 		} else {
-			if r.UnlockTs == 0 {
-				return l.UnlockTs >= r.ExpireTs
-			} else {
-				return l.UnlockTs >= r.UnlockTs
-			}
+			return l.ExpireTs >= r.UnlockTs
+		}
+	} else {
+		if r.UnlockTs == 0 {
+			return l.UnlockTs >= r.ExpireTs
+		} else {
+			return l.UnlockTs >= r.UnlockTs
 		}
 	}
-	return h
 }
 
-type MsgHeap struct {
-	geq   func(*pmsg.PMsgMeta, *pmsg.PMsgMeta) bool
-	data  []*pmsg.PMsgMeta
+type TimeoutHeap struct {
+	data  []*pmsg.MsgMeta
 	index map[uint64]int
 }
 
-func NewMsgHeap() *MsgHeap {
-	return &MsgHeap{
-		data:  make([]*pmsg.PMsgMeta, 0, 128),
-		index: make(map[uint64]int, 128),
+func NewTimeoutHeap() *TimeoutHeap {
+	return &TimeoutHeap{
+		data:  make([]*pmsg.MsgMeta, 0, 4096),
+		index: make(map[uint64]int, 4096),
 	}
 }
 
-func (s *MsgHeap) Init() {
+func (s *TimeoutHeap) Init() {
 	n := len(s.data)
 	for i := n/2 - 1; i >= 0; i-- {
 		s.down(i, n)
 	}
 }
 
-func (s *MsgHeap) Push(msg *pmsg.PMsgMeta) {
+func (s *TimeoutHeap) Push(msg *pmsg.MsgMeta) {
 	sn := msg.Serial
 	if _, ok := s.index[sn]; ok {
 		s.Remove(sn)
@@ -65,7 +48,7 @@ func (s *MsgHeap) Push(msg *pmsg.PMsgMeta) {
 	s.up(l)
 }
 
-func (s *MsgHeap) Pop() *pmsg.PMsgMeta {
+func (s *TimeoutHeap) Pop() *pmsg.MsgMeta {
 	v := s.data[0]
 	n := len(s.data) - 1
 	s.swap(0, n)
@@ -75,7 +58,7 @@ func (s *MsgHeap) Pop() *pmsg.PMsgMeta {
 	return v
 }
 
-func (s *MsgHeap) Remove(sn uint64) *pmsg.PMsgMeta {
+func (s *TimeoutHeap) Remove(sn uint64) *pmsg.MsgMeta {
 	if i, ok := s.index[sn]; ok {
 		v := s.data[i]
 		n := len(s.data) - 1
@@ -91,45 +74,45 @@ func (s *MsgHeap) Remove(sn uint64) *pmsg.PMsgMeta {
 	return nil
 }
 
-func (s *MsgHeap) MinMsg() *pmsg.PMsgMeta {
+func (s *TimeoutHeap) MinMsg() *pmsg.MsgMeta {
 	return s.data[0]
 }
 
-func (s *MsgHeap) GetMsg(sn uint64) *pmsg.PMsgMeta {
+func (s *TimeoutHeap) GetMsg(sn uint64) *pmsg.MsgMeta {
 	if pos, ok := s.index[sn]; ok {
 		return s.data[pos]
 	}
 	return nil
 }
 
-func (s *MsgHeap) Len() int {
+func (s *TimeoutHeap) Len() int {
 	return len(s.data)
 }
 
-func (s *MsgHeap) NotEmpty() bool {
+func (s *TimeoutHeap) NotEmpty() bool {
 	return len(s.data) > 0
 }
 
-func (s *MsgHeap) Empty() bool {
+func (s *TimeoutHeap) Empty() bool {
 	return len(s.data) == 0
 }
 
-func (s *MsgHeap) ContainsSn(sn uint64) bool {
+func (s *TimeoutHeap) ContainsSn(sn uint64) bool {
 	_, ok := s.index[sn]
 	return ok
 }
 
 // Swap and reindex data in heap.
-func (s *MsgHeap) swap(i, j int) {
+func (s *TimeoutHeap) swap(i, j int) {
 	d := s.data
 	d[i], d[j] = d[j], d[i]
 	s.index[d[i].Serial], s.index[d[j].Serial] = i, j
 }
 
-func (s *MsgHeap) up(j int) {
+func (s *TimeoutHeap) up(j int) {
 	for {
 		i := (j - 1) / 2 // parent
-		if i == j || s.geq(s.data[j], s.data[i]) {
+		if i == j || geq(s.data[j], s.data[i]) {
 			break
 		}
 		s.swap(i, j)
@@ -137,17 +120,17 @@ func (s *MsgHeap) up(j int) {
 	}
 }
 
-func (s MsgHeap) down(i, n int) {
+func (s TimeoutHeap) down(i, n int) {
 	for {
 		j1 := 2*i + 1
 		if j1 >= n || j1 < 0 {
 			break
 		}
 		j := j1
-		if j2 := j1 + 1; j2 < n && s.geq(s.data[j1], s.data[j2]) {
+		if j2 := j1 + 1; j2 < n && geq(s.data[j1], s.data[j2]) {
 			j = j2
 		}
-		if s.geq(s.data[j], s.data[i]) {
+		if geq(s.data[j], s.data[i]) {
 			break
 		}
 		s.swap(i, j)

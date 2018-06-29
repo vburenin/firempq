@@ -36,7 +36,7 @@ func BenchMassPush() {
 	ctx.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
-	data := []string{pqueue.PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
+	data := []string{pqueue.PrmPayload, "7777777777777777777777777777777777777777777777777777777777777777"}
 
 	testFunc := func() {
 		for i := 0; i < 1000000; i++ {
@@ -126,7 +126,7 @@ func BenchMassPushMultiQueue() {
 	ctx4.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
 
 	startTs := time.Now().UnixNano()
-	data := []string{pqueue.PRM_PAYLOAD, "7777777777777777777777777777777777777777777777777777777777777777"}
+	data := []string{pqueue.PrmPayload, "7777777777777777777777777777777777777777777777777777777777777777"}
 
 	var grp sync.WaitGroup
 	testFunc := func(ctx apis.ServiceContext) {

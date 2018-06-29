@@ -5,7 +5,7 @@ import (
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/db/ldb"
+	"github.com/vburenin/firempq/db/linear"
 	"github.com/vburenin/firempq/log"
 )
 
@@ -23,17 +23,12 @@ func SetDatabase(ds apis.DataStorage) {
 func getDatabase() apis.DataStorage {
 	if database == nil {
 		var err error
-		database, err = ldb.NewLevelDBStorage(conf.CFG)
+		database, err = linear.NewFlatStorage(conf.CFG.DatabasePath, 2000000000, 2000000000)
 		if err != nil {
 			log.Error("Cannot initialize FireMPQ database: %s", err)
 			os.Exit(255)
 		}
 		return database
-	}
-
-	if database.IsClosed() {
-		database = nil
-		return getDatabase()
 	}
 	return database
 }

@@ -103,6 +103,7 @@ var ERR_CMD_PARAM_NOT_PROVIDED = InvalidRequest("At least one parameter should b
 var ERR_TS_PARAMETER_NEEDED = InvalidRequest("TS parameters must be provided")
 
 var ERR_SIZE_EXCEEDED = TemporaryError("Service capacity reached its limit")
+var ERR_DB_PROBLEM = TemporaryError("database returned error")
 
 // Parsers errors
 

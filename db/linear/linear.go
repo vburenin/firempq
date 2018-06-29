@@ -2,166 +2,67 @@ package linear
 
 import (
 	"bufio"
-	"fmt"
-	"io"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/vburenin/firempq/log"
-	"github.com/vburenin/firempq/pmsg"
+	"github.com/vburenin/firempq/fctx"
+	"github.com/vburenin/firempq/ferr"
 )
 
-const DataFileTimeLength = time.Second * 86400
+const (
+	MetaFilePrefix    = "metadata"
+	PayloadFilePrefix = "payload"
+	DBFileExt         = "ldb"
+)
 
-type PayloadPos struct {
-	FileID uint64
-	Pos    uint64
-}
+type syncWriter struct {
+	file *os.File
 
-type LinearDB struct {
-	metaFile   *os.File
-	payloadFile *os.File
-	metaWriter *bufio.Writer
-	payloadWriter *bufio.Writer
 	mu         sync.Mutex
+	writer     *bufio.Writer
+	syncPeriod time.Duration
 }
 
-type Iterator struct {
-	position   int
-	files      []string
-	reader     *bufio.Reader
-	openedFile *os.File
-	readBuf    []byte
-}
-
-func (it *Iterator) Next() ([]byte, error) {
-	if it.openedFile == nil {
-		return nil, io.EOF
-	}
-	sb, err := it.reader.ReadByte()
-	size := int(sb)
+func NewSyncWriter(filename string, syncPeriod time.Duration, bufSize int) (*syncWriter, error) {
+	f, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0664)
 	if err != nil {
-		return nil, err
+		return nil, ferr.Wrapf(err, "failed to file: %s", filename)
 	}
 
-	buf := it.readBuf[:size]
-	n, err := io.ReadAtLeast(it.reader, buf, size)
-	if err != nil {
-		return nil, err
-	}
-	log.Info("Expected %d actual %d", size, n)
-	return buf, nil
-}
-
-func (it *Iterator) Close() error {
-	it.position = len(it.files)
-	return it.openedFile.Close()
-}
-
-func (it *Iterator) nextReader() error {
-	if it.position >= len(it.files) {
-		return io.EOF
-	}
-	f, err := os.Open(it.files[it.position])
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		log.Error("Failed to open database file %s: %s", it.files[it.position], err)
-		return err
+	sw := &syncWriter{
+		file:       f,
+		writer:     bufio.NewWriterSize(f, bufSize),
+		syncPeriod: syncPeriod,
 	}
 
-	if it.openedFile != nil {
-		if err := it.openedFile.Close(); err != nil {
-			log.Error("Failed to close database file %s: %s", it.files[it.position], err)
-		}
-	}
-
-	it.openedFile = f
-	it.reader = bufio.NewReaderSize(f, 1024*1024)
-	it.position += 1
-	return nil
-}
-
-func NewIterator(qid string) (*Iterator, error) {
-	it := &Iterator{
-		position: 0,
-		files:    []string{DBFileName(qid)},
-		readBuf:  make([]byte, 255),
-	}
-	err := it.nextReader()
-	return it, err
-}
-
-func DBFileName(qid string) string {
-	return "fmpq_" + qid + ".firedb"
-}
-
-func OpenDB(qid string) (*LinearDB, error) {
-	var err error
-	var f *os.File
-	dbFileName := DBFileName(qid)
-
-	if s, err := os.Stat(dbFileName); err == nil {
+	if s, err := os.Stat(filename); err == nil {
 		if s.IsDir() {
-			log.Error("Failed to open database %s, since it is a directory", dbFileName)
-			return nil, fmt.Errorf("Database has to be a file: %s", dbFileName)
+			return nil, ferr.Errorf("database has to be a file: %s", filename)
 		}
 	}
 
-	f, err = os.OpenFile(dbFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0664)
-	if err != nil {
-		log.Error("Failed to open database file: %s", err)
-		return nil, err
-	}
-
-	ldb := &LinearDB{
-		metaFile:   f,
-		metaWriter: bufio.NewWriterSize(f, 1024*1024),
-	}
-	go ldb.flushLoop()
-	return ldb, nil
+	ctx := fctx.Background("file sync loop: " + filename)
+	sw.startLoop(ctx)
+	return sw, nil
 }
 
-func (l *LinearDB) flushLoop() {
-	for {
-		time.Sleep(time.Second)
-		l.mu.Lock()
-		if err := l.metaWriter.Flush(); err != nil {
-			log.Error("Failed to flush data on disk: %s", err)
+func (sw *syncWriter) startLoop(ctx *fctx.Context) {
+	go func() {
+		for {
+			sw.mu.Lock()
+			s := sw.syncPeriod
+			sw.mu.Unlock()
+
+			time.Sleep(s)
+
+			sw.mu.Lock()
+			err := sw.writer.Flush()
+			sw.mu.Unlock()
+			if err != nil {
+				ctx.Errorf("Failed to flush data on disk: %s", err)
+			}
+			sw.mu.Unlock()
 		}
-		l.mu.Unlock()
-	}
-}
-
-func (l *LinearDB) writeMeta(m *pmsg.DiskData) error {
-	d, _ := m.Marshal()
-	l.mu.Lock()
-	l.metaWriter.WriteByte(byte(len(d)))
-	_, err := l.metaWriter.Write(d)
-	l.mu.Unlock()
-	if err != nil {
-		log.Error("Could not store data: %s", err)
-	}
-	return err
-}
-
-func (l *LinearDB) Add(m *pmsg.PMsgMeta, payload []byte) error {
-	l.payloadFile
-	return l.writeMeta(&pmsg.DiskData{Meta: m, Action: pmsg.New})
-}
-
-func (l *LinearDB) Update(m *pmsg.PMsgMeta) error {
-	return l.writeMeta(&pmsg.DiskData{Meta: m, Action: pmsg.Update})
-}
-
-func (l *LinearDB) Delete(serial uint64) error {
-	return l.writeMeta(&pmsg.DiskData{
-		Meta:   &pmsg.PMsgMeta{Serial: serial},
-		Action: pmsg.Delete})
-}
-
-func (l *LinearDB) Payload(serial uint64) []byte {
-	return []byte("data")
+	}()
 }
