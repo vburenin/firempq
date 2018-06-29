@@ -2,7 +2,7 @@
 *.o
 *.a
 *.so
-
+*.firedb
 # Folders
 _obj
 _test
