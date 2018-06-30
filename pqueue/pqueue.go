@@ -418,7 +418,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.I
 	if delay == 0 {
 		pq.availMsgs.Add(msg)
 	}
-
+	pq.metadb.AddMetadata(msg)
 	pq.timeoutHeap.Push(msg)
 	pq.lock.Unlock()
 
