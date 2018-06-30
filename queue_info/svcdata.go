@@ -82,9 +82,10 @@ func GetServiceDescriptions(path string) (ServiceDescriptionList, error) {
 		if f.IsDir() || !strings.HasSuffix(f.Name(), ".desc") {
 			continue
 		}
-		desc, err := GetServiceDescription(path)
+		desc, err := GetServiceDescription(filepath.Join(path, f.Name()))
 		if err != nil {
 			log.Error(err.Error())
+			continue
 		}
 		sdList = append(sdList, desc)
 	}
