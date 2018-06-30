@@ -1,4 +1,4 @@
-package mpqtesting
+package resp_writer
 
 import (
 	"sync"

@@ -105,9 +105,15 @@ func (s *ServiceManager) CreateQueue(svcName string, config *conf.PQConfig) apis
 	desc := queue_info.NewServiceDescription(svcName, s.serviceIdCounter+1)
 	svc := pqueue.NewPQueue(s, db.DatabaseInstance(), desc, config)
 
+	if err := queue_info.SaveServiceDescription(conf.CFG.DatabasePath, desc); err != nil {
+		log.Error("could not save service description: %s", err)
+	}
+	confPath := queue_info.ConfigFilePath(conf.CFG.DatabasePath, desc.ServiceId)
+	if err := queue_info.SaveServiceConfig(confPath, config); err != nil {
+		log.Error("could not save service config: %s", err)
+	}
+
 	s.serviceIdCounter++
-	queue_info.SaveServiceDescription(conf.CFG.DatabasePath, desc)
-	queue_info.SaveServiceConfig(conf.CFG.DatabasePath, config)
 	s.allSvcs[svcName] = svc
 
 	svc.StartUpdate()
