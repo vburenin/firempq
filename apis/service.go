@@ -30,22 +30,3 @@ type ServiceInfo struct {
 	Size int
 	ID   string
 }
-
-// ISvc a service interface used to start/stop and receive basic service info.
-type ISvc interface {
-	NewContext(ResponseWriter) ServiceContext
-	StartUpdate()
-	Info() ServiceInfo
-	Close()
-}
-
-// ServiceContext is a user protocol parser in scope of a single connection.
-type ServiceContext interface {
-	Call(cmd string, params []string) IResponse
-	Finish()
-}
-
-// IServices all instantiated service container interface.
-type IServices interface {
-	GetService(string) (ISvc, bool)
-}

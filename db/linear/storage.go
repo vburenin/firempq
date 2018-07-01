@@ -26,6 +26,7 @@ type OpenedFile struct {
 	sync.Mutex
 	curPos   int64
 	file     *os.File
+	writeBuf *bufio.Writer
 	filepath string
 	// Work buffer of 8 bytes. Used to avoid memory allocation for every in conversion.
 	workBuf8bytes []byte
@@ -54,8 +55,13 @@ func NewOpenedFile(filepath string, ro bool) (*OpenedFile, error) {
 		return nil, err
 	}
 
+	var wb *bufio.Writer
+	if !ro {
+		wb = bufio.NewWriterSize(f, 16*1024*1024)
+	}
 	return &OpenedFile{
 		file:          f,
+		writeBuf:      wb,
 		curPos:        pos,
 		workBuf8bytes: make([]byte, 8),
 		filepath:      filepath,
@@ -63,6 +69,9 @@ func NewOpenedFile(filepath string, ro bool) (*OpenedFile, error) {
 }
 
 func (of *OpenedFile) ReopenRO() error {
+	if of.writeBuf != nil {
+		of.writeBuf.Flush()
+	}
 	err := of.file.Close()
 	if err != nil {
 		return err
@@ -71,14 +80,21 @@ func (of *OpenedFile) ReopenRO() error {
 	return err
 }
 
+func (of *OpenedFile) Flush() error {
+	if of.writeBuf != nil {
+		return of.writeBuf.Flush()
+	}
+	return nil
+}
+
 func (of *OpenedFile) WriteTo(data []byte) (pos int64, err error) {
 	pos = of.curPos
 
 	// write down payload size as 8 bytes.
 	enc.Uint64ToBin(uint64(len(data)), of.workBuf8bytes)
 	// ignore error here.
-	n, err := of.file.Write(of.workBuf8bytes)
-	n, err = of.file.Write(data)
+	n, err := of.writeBuf.Write(of.workBuf8bytes)
+	n, err = of.writeBuf.Write(data)
 
 	of.curPos += int64(n) + 8
 	return pos, err
@@ -105,6 +121,7 @@ func (of *OpenedFile) RetrieveData(pos int64) ([]byte, error) {
 }
 
 func (of *OpenedFile) Close() error {
+	of.Flush()
 	return of.file.Close()
 }
 
@@ -115,6 +132,7 @@ type FlatStorage struct {
 	curPayloadFileID int64
 	payloadFileLimit int64
 	curPayloadBlob   *OpenedFile
+	payloadCache     *PayloadCache
 
 	muMeta        sync.Mutex
 	metaDataBuf   *bufio.Writer
@@ -129,59 +147,7 @@ type FlatStorage struct {
 }
 
 var PayloadFileNotFound = fmt.Errorf("payload file not found")
-
 var NameMatchRE = regexp.MustCompile("^(payload|metadata)-(\\d+)\\.ldb$")
-
-func findLatestIds(files []os.FileInfo) (metaID, payloadID int64) {
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
-		if len(data) > 0 && len(data[0]) == 3 {
-			db := data[0][1]
-			seq, err := strconv.ParseInt(data[0][2], 10, 64)
-			if err != nil {
-				continue
-			}
-			if db == PayloadFilePrefix {
-				if seq > payloadID {
-					payloadID = seq
-				}
-			} else if db == MetaFilePrefix {
-				if seq > metaID {
-					metaID = seq
-				}
-			}
-		}
-
-	}
-	return metaID, payloadID
-}
-
-func sortMetaFileIds(files []os.FileInfo) []int64 {
-	var metafileIDs []int64
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
-		if len(data) > 0 && len(data[0]) == 3 {
-			db := data[0][1]
-			seq, err := strconv.ParseInt(data[0][2], 10, 64)
-			if err != nil {
-				continue
-			}
-			if db == MetaFilePrefix {
-				metafileIDs = append(metafileIDs, seq)
-			}
-		}
-	}
-	sort.Slice(metafileIDs, func(i, j int) bool {
-		return metafileIDs[i] < metafileIDs[j]
-	})
-	return metafileIDs
-}
 
 func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*FlatStorage, error) {
 	files, err := ioutil.ReadDir(dbPath)
@@ -198,6 +164,7 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 		curMetaFileID:    metaID,
 		metaEncBuf:       make([]byte, 8),
 		activePayloads:   make(map[int64]*OpenedFile, 64),
+		payloadCache:     NewPayloadCache(1024),
 	}
 	if err := fs.metaRollover(); err != nil {
 		return nil, err
@@ -211,9 +178,13 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 
 func (fstg *FlatStorage) Flush() error {
 	fstg.mu.Lock()
-	err := fstg.metaDataBuf.Flush()
+	err1 := fstg.metaDataBuf.Flush()
+	err2 := fstg.curPayloadBlob.Flush()
 	fstg.mu.Unlock()
-	return err
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 func (fstg *FlatStorage) GetStats() map[string]interface{} {
@@ -298,7 +269,6 @@ func (fstg *FlatStorage) openPayloadFile(fileID int64, readOnly bool) error {
 	fpath := filepath.Join(fstg.dbPath, MakePayloadFileName(fileID))
 	payloadFile, err := NewOpenedFile(fpath, readOnly)
 	if err != nil {
-		fstg.muPayloads.Unlock()
 		if os.IsNotExist(err) {
 			return PayloadFileNotFound
 		}
@@ -329,17 +299,25 @@ func (fstg *FlatStorage) RetrievePayload(fileID, pos int64) ([]byte, error) {
 func (fstg *FlatStorage) AddPayload(payload []byte) (int64, int64, error) {
 	fstg.mu.Lock()
 	fstg.curPayloadBlob.Lock()
+
 	pos, err := fstg.curPayloadBlob.WriteTo(payload)
 	fstg.curPayloadBlob.Unlock()
+
 	if err != nil {
 		fstg.mu.Unlock()
 		return 0, 0, err
 	}
 
 	fileID := fstg.curPayloadFileID
+	if fstg.payloadCache.AddPayload(fileID, pos, payload) {
+		if err := fstg.curPayloadBlob.Flush(); err != nil {
+			return 0, 0, ferr.Wrap(err, "failed to flush payload")
+		}
+	}
 	if pos > fstg.payloadFileLimit {
 		err = fstg.payloadRollover()
 	}
+
 	fstg.mu.Unlock()
 	return fileID, pos, err
 }
@@ -372,4 +350,55 @@ func MakePayloadFileName(num int64) string {
 
 func MakeMetaFileName(num int64) string {
 	return fmt.Sprintf("%s-%d.%s", MetaFilePrefix, num, DBFileExt)
+}
+
+func findLatestIds(files []os.FileInfo) (metaID, payloadID int64) {
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
+		if len(data) > 0 && len(data[0]) == 3 {
+			db := data[0][1]
+			seq, err := strconv.ParseInt(data[0][2], 10, 64)
+			if err != nil {
+				continue
+			}
+			if db == PayloadFilePrefix {
+				if seq > payloadID {
+					payloadID = seq
+				}
+			} else if db == MetaFilePrefix {
+				if seq > metaID {
+					metaID = seq
+				}
+			}
+		}
+
+	}
+	return metaID, payloadID
+}
+
+func sortMetaFileIds(files []os.FileInfo) []int64 {
+	var metafileIDs []int64
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
+		if len(data) > 0 && len(data[0]) == 3 {
+			db := data[0][1]
+			seq, err := strconv.ParseInt(data[0][2], 10, 64)
+			if err != nil {
+				continue
+			}
+			if db == MetaFilePrefix {
+				metafileIDs = append(metafileIDs, seq)
+			}
+		}
+	}
+	sort.Slice(metafileIDs, func(i, j int) bool {
+		return metafileIDs[i] < metafileIDs[j]
+	})
+	return metafileIDs
 }

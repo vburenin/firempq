@@ -48,12 +48,12 @@ func (f *FakeCtxSvcLoader) GetService(name string) (apis.ISvc, bool) { return ni
 
 func i2a(v int64) string { return strconv.FormatInt(v, 10) }
 
-func CreateQueueTestContext() (*PQContext, *TestResponseWriter) {
+func CreateQueueTestContext() (*ConnScope, *TestResponseWriter) {
 	rw := NewTestResponseWriter()
-	return NewPQueue(&FakeCtxSvcLoader{}, getCtxDesc(), getCtxConfig()).NewContext(rw).(*PQContext), rw
+	return NewPQueue(&FakeCtxSvcLoader{}, getCtxDesc(), getCtxConfig()).ConnScope(rw).(*ConnScope), rw
 }
 
-func CreateNewQueueTestContext() (*PQContext, *TestResponseWriter) {
+func CreateNewQueueTestContext() (*ConnScope, *TestResponseWriter) {
 	log.InitLogging()
 	log.SetLevel(1)
 	db.SetDatabase(NewInMemDBService())

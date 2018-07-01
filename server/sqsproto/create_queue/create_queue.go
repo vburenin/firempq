@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/log"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
@@ -164,21 +163,13 @@ const (
 )
 
 func CheckAvailableQueues(
-	svcMgr *qmgr.ServiceManager,
+	svcMgr *qmgr.QueueManager,
 	attr *QueueAttributes,
 	sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 
-	svc, ok := svcMgr.GetService(sqsQuery.QueueName)
-	if ok {
-		if svc.Info().Type != apis.ServiceTypePriorityQueue {
-			return sqserr.QueueAlreadyExistsError("Queue already exists for a different type of service")
-		}
-		pq, _ := svc.(*pqueue.PQueue)
-		pqConfig := pq.Config()
-		if !ok {
-			log.Error("Unexpected config type from the found service!")
-			return sqserr.ServerSideError("Queue config data error")
-		}
+	queue := svcMgr.GetQueue(sqsQuery.QueueName)
+	if queue != nil {
+		pqConfig := queue.Config()
 		if attr.VisibilityTimeout >= 0 && attr.VisibilityTimeout != pqConfig.PopLockTimeout {
 			return sqserr.QueueAlreadyExistsError(errQueueExists + AttrVisibilityTimeout)
 		}
@@ -202,7 +193,7 @@ func CheckAvailableQueues(
 	return nil
 }
 
-func CreateQueue(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func CreateQueue(ctx *fctx.Context, svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	queueAttributes, parseErr := ParseCreateQueueAttributes(sqsQuery)
 	if parseErr != nil {
 		return parseErr
@@ -212,7 +203,7 @@ func CreateQueue(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_r
 		return errResp
 	}
 
-	resp := svcMgr.CreateQueue(sqsQuery.QueueName, queueAttributes.MakePQConfig())
+	resp := svcMgr.CreateQueue(ctx, sqsQuery.QueueName, queueAttributes.MakePQConfig())
 	if resp.IsError() {
 		e, _ := resp.(error)
 		return sqserr.ServerSideError(e.Error())

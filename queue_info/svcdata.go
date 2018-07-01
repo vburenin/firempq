@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/ferr"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/utils"
@@ -93,12 +94,22 @@ func GetServiceDescriptions(path string) (ServiceDescriptionList, error) {
 	return sdList, nil
 }
 
-func DeleteServiceData(path string, serviceId string) {
+func DeleteServiceData(ctx *fctx.Context, path string, serviceId string) error {
 	fdesc := DescFilePath(path, serviceId)
 	fconf := ConfigFilePath(path, serviceId)
 	// TODO(vburenin): Handle errors.
-	os.Remove(fdesc)
-	os.Remove(fconf)
+	err1 := os.Remove(fdesc)
+	if err1 != nil {
+		ctx.Errorf("failed to remove service description: %s", err1)
+	}
+	err2 := os.Remove(fconf)
+	if err2 != nil {
+		ctx.Errorf("failed to remove service config: %s", err2)
+	}
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 func NewServiceDescription(name string, exportId uint64) *ServiceDescription {

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/sqsproto/add_permission"
@@ -30,7 +31,7 @@ import (
 )
 
 type SQSRequestHandler struct {
-	ServiceManager *qmgr.ServiceManager
+	ServiceManager *qmgr.QueueManager
 }
 
 func ParseQueueName(urlPath string) (string, error) {
@@ -41,10 +42,10 @@ func ParseQueueName(urlPath string) (string, error) {
 	return "", sqserr.MalformedInputError("Invalid URL Format")
 }
 
-func (rh *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func (rh *SQSRequestHandler) handleManageActions(ctx *fctx.Context, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
 	case "CreateQueue":
-		return create_queue.CreateQueue(rh.ServiceManager, sqsQuery)
+		return create_queue.CreateQueue(ctx, rh.ServiceManager, sqsQuery)
 	case "GetQueueUrl":
 		return get_queue_url.GetQueueUrl(rh.ServiceManager, sqsQuery)
 	case "ListQueues":
@@ -54,7 +55,7 @@ func (rh *SQSRequestHandler) handleManageActions(sqsQuery *urlutils.SQSQuery) sq
 	return sqserr.InvalidActionError(sqsQuery.Action)
 }
 
-func (rh *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func (rh *SQSRequestHandler) handleQueueActions(ctx *fctx.Context, pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	switch sqsQuery.Action {
 	case "SendMessage":
 		return send_message.SendMessage(pq, sqsQuery)
@@ -71,7 +72,7 @@ func (rh *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *url
 	case "ChangeMessageVisibilityBatch":
 		return change_message_visibility_batch.ChangeMessageVisibilityBatch(pq, sqsQuery)
 	case "DeleteQueue":
-		return delete_queue.DeleteQueue(rh.ServiceManager, sqsQuery)
+		return delete_queue.DeleteQueue(ctx, rh.ServiceManager, sqsQuery)
 	case "PurgeQueue":
 		return purge_queue.PurgeQueue(pq, sqsQuery)
 	case "GetQueueAttributes":
@@ -88,9 +89,11 @@ func (rh *SQSRequestHandler) handleQueueActions(pq *pqueue.PQueue, sqsQuery *url
 
 func (rh *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSResponse {
 	var queuePath string
+	ctx := fctx.WithParent(r.Context(), "sqs-id")
 
 	sqsQuery, err := urlutils.ParseSQSQuery(r)
 	if err != nil {
+		ctx.Warnf("invalid query: %s", err)
 		return sqserr.ServiceDeniedError()
 	}
 
@@ -106,14 +109,13 @@ func (rh *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSR
 
 	if strings.HasPrefix(queuePath, "/queue/") {
 		sqsQuery.QueueName = strings.SplitN(queuePath, "/queue/", 2)[1]
-		svc, ok := rh.ServiceManager.GetService(sqsQuery.QueueName)
-		if !ok {
+		queue := rh.ServiceManager.GetQueue(sqsQuery.QueueName)
+		if queue != nil {
 			return sqserr.QueueDoesNotExist()
 		}
-		pq, _ := svc.(*pqueue.PQueue)
-		return rh.handleQueueActions(pq, sqsQuery)
+		return rh.handleQueueActions(ctx, queue, sqsQuery)
 	} else if r.URL.Path == "/" {
-		return rh.handleManageActions(sqsQuery)
+		return rh.handleManageActions(ctx, sqsQuery)
 	}
 
 	return sqserr.ServiceDeniedError()

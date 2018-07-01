@@ -20,7 +20,7 @@ func (self *ListQueuesResponse) HttpCode() int                        { return h
 func (self *ListQueuesResponse) XmlDocument() string                  { return sqs_response.EncodeXml(self) }
 func (self *ListQueuesResponse) BatchResult(docId string) interface{} { return nil }
 
-func ListQueues(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func ListQueues(svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	nameList := svcMgr.BuildServiceNameList(sqsQuery.QueueNamePrefix)
 	sort.Strings(nameList)
 

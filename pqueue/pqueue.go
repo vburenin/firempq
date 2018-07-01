@@ -42,7 +42,7 @@ type PQueue struct {
 	// Instance of the database.
 	config *conf.PQConfig
 
-	svcs apis.IServices
+	queueGetter func(queueName string) *PQueue
 
 	// This queue will be used to push messages exceeded pop limit attempts. All errors are ignored.
 	popLimitMoveChan chan *pmsg.MsgMeta
@@ -60,7 +60,7 @@ type PQueue struct {
 }
 
 func NewPQueue(
-	svcs apis.IServices,
+	queueGetter func(queueName string) *PQueue,
 	db apis.DataStorage,
 	desc *queue_info.ServiceDescription,
 	config *conf.PQConfig) *PQueue {
@@ -68,7 +68,7 @@ func NewPQueue(
 	return &PQueue{
 		desc:               desc,
 		config:             config,
-		svcs:               svcs,
+		queueGetter:        queueGetter,
 		id2msg:             make(map[string]*pmsg.MsgMeta),
 		availMsgs:          NewMsgQueue(),
 		timeoutHeap:        NewTimeoutHeap(),
@@ -81,8 +81,8 @@ func NewPQueue(
 	}
 }
 
-func (pq *PQueue) NewContext(rw apis.ResponseWriter) apis.ServiceContext {
-	return NewPQContext(pq, rw)
+func (pq *PQueue) ConnScope(rw apis.ResponseWriter) *ConnScope {
+	return NewConnScope(pq, rw)
 }
 
 // StartUpdate runs a loop of periodic data updates.
@@ -188,7 +188,7 @@ type PQueueParams struct {
 func (pq *PQueue) SetParams(params *PQueueParams) apis.IResponse {
 
 	if params.FailQueue != "" {
-		if fq := pq.getFailQueue(params.FailQueue); fq == nil {
+		if fq := pq.queueGetter(params.FailQueue); fq == nil {
 			return mpqerr.InvalidRequest("PQueue doesn't exist: " + params.FailQueue)
 		}
 		pq.config.PopLimitQueueName = params.FailQueue
@@ -596,24 +596,6 @@ func (pq *PQueue) deleteMessage(sn uint64) bool {
 	return false
 }
 
-func (pq *PQueue) getFailQueue(name string) *PQueue {
-	// Get service and make sure it is still available.
-	popQ, ok := pq.svcs.GetService(name)
-	if !ok {
-		log.Debug("No '%s' queue to push messages (exceeded pop limit) from '%s'",
-			pq.config.PopLimitQueueName, pq.desc.Name)
-		return nil
-	}
-	// Make sure retrieved service has an appropriate type.
-	popLimitPq, ok := popQ.(*PQueue)
-	if !ok {
-		log.Debug("'%s' has a wrong type to push pop limit exceeded messages from '%s'",
-			pq.config.PopLimitQueueName, pq.desc.Name)
-		return nil
-	}
-	return popLimitPq
-}
-
 func (pq *PQueue) moveToPopLimitedQueue() {
 	log.Debug("%s: Starting pop limit loop", pq.desc.Name)
 	defer log.Debug("%s: Finishing pop limit loop", pq.desc.Name)
@@ -631,7 +613,7 @@ func (pq *PQueue) moveToPopLimitedQueue() {
 			return
 		}
 
-		popLimitPq := pq.getFailQueue(pq.config.PopLimitQueueName)
+		popLimitPq := pq.queueGetter(pq.config.PopLimitQueueName)
 		if popLimitPq == nil {
 			pq.config.PopLimitQueueName = ""
 			queue_info.SaveServiceConfig(pq.desc.ServiceId, pq.config)
@@ -764,5 +746,3 @@ func (pq *PQueue) rebuildState(messages msgArray) {
 	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
 	log.Debug("Available messages: %d", pq.availMsgs.Size())
 }
-
-var _ apis.ISvc = &PQueue{}

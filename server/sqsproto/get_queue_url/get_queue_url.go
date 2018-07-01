@@ -21,12 +21,12 @@ func (r *GetQueueUrlResult) XmlDocument() string                  { return sqs_r
 func (r *GetQueueUrlResult) HttpCode() int                        { return http.StatusOK }
 func (r *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
 
-func GetQueueUrl(svcMgr *qmgr.ServiceManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-	svc, ok := svcMgr.GetService(sqsQuery.QueueName)
-	if !ok {
+func GetQueueUrl(svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+	queue := svcMgr.GetQueue(sqsQuery.QueueName)
+	if queue == nil {
 		return sqserr.QueueDoesNotExist()
 	}
-	if svc.Info().Type != apis.ServiceTypePriorityQueue {
+	if queue.Info().Type != apis.ServiceTypePriorityQueue {
 		return sqserr.QueueDoesNotExist()
 	}
 

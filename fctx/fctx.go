@@ -19,7 +19,7 @@ type Context struct {
 func WithCancel(parent context.Context, traceID string) (*Context, context.CancelFunc) {
 	p, ok := parent.(*Context)
 	pctx := parent
-	if !ok {
+	if ok {
 		pctx = p.ctx
 	}
 	ctx, cancel := context.WithCancel(pctx)
@@ -49,6 +49,14 @@ func Empty(traceID string) *Context {
 func TODO(traceID string) *Context {
 	return &Context{
 		ctx:     context.TODO(),
+		traceID: traceID,
+		Logger:  log.Logger,
+	}
+}
+
+func WithParent(parent context.Context, traceID string) *Context {
+	return &Context{
+		ctx:     parent,
 		traceID: traceID,
 		Logger:  log.Logger,
 	}

@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/snsproto"
@@ -27,14 +27,14 @@ const (
 type QueueOpFunc func(req []string) error
 
 type ConnectionServer struct {
-	serviceManager *qmgr.ServiceManager
+	serviceManager *qmgr.QueueManager
 	signalChan     chan os.Signal
 	waitGroup      sync.WaitGroup
 }
 
-func NewServer() apis.IServer {
+func NewServer(ctx *fctx.Context) *ConnectionServer {
 	return &ConnectionServer{
-		serviceManager: qmgr.CreateServiceManager(),
+		serviceManager: qmgr.NewServiceManager(ctx),
 		signalChan:     make(chan os.Signal, 1),
 	}
 }
@@ -85,6 +85,10 @@ func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 		}
 		cs.waitGroup.Add(1)
 		go func() {
+			<-signals.QuitChan
+			listener.Close()
+		}()
+		go func() {
 			defer cs.waitGroup.Done()
 			defer listener.Close()
 			for {
@@ -119,13 +123,14 @@ func (cs *ConnectionServer) Start() {
 	go cs.waitForSignal(l)
 	cs.startAWSProtoListeners()
 	cs.waitGroup.Wait()
+	cs.Shutdown()
 }
 
 func (cs *ConnectionServer) Shutdown() {
-	cs.waitGroup.Wait()
 	log.Info("Closing queues...")
 	cs.serviceManager.Close()
 	db.DatabaseInstance().Close()
+	time.Sleep(100 * time.Millisecond)
 	log.Info("Server stopped.")
 }
 
@@ -139,7 +144,7 @@ func (cs *ConnectionServer) waitForSignal(l net.Listener) {
 }
 
 func (cs *ConnectionServer) Stop() {
-	log.Notice("Server has been told to stop.")
+	log.Info("Server has been told to stop.")
 	log.Info("Disconnection all clients...")
 	signals.CloseQuitChan()
 }

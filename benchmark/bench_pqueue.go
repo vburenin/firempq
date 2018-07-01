@@ -5,42 +5,49 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vburenin/firempq/apis"
+	"os"
+
+	"runtime/pprof"
+
+	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
-	"github.com/vburenin/firempq/mpqtesting"
+	"github.com/vburenin/firempq/mpqtesting/resp_writer"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/qmgr"
 )
 
 func BenchMassPush() {
-	f := qmgr.NewServiceManager()
-	resp := f.DropService("BenchTest")
+	conf.ParseConfigParameters()
+	ctx := fctx.Background("1")
+	f := qmgr.NewServiceManager(ctx)
+	resp := f.DropService(ctx, "BenchTest")
 	if !resp.IsError() {
 		log.Info("BenchTest Queue exists alredy! Dropping...")
 	}
 	log.Info("Creating new service")
-	resp = f.CreateService("pqueue", "BenchTest", []string{})
+	resp = f.CreateQueueFromParams(ctx, "BenchTest", []string{})
 	if resp.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	svc, ok := f.GetService("BenchTest")
-	if !ok {
+	svc := f.GetQueue("BenchTest")
+	if svc == nil {
 		log.Fatal("Could not get created service: BenchTest")
 	}
-	respWriter := mpqtesting.NewTestResponseWriter()
-	ctx := svc.NewContext(respWriter)
+	respWriter := resp_writer.NewTestResponseWriter()
+	cs := svc.ConnScope(respWriter)
 
-	ctx.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
+	cs.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
-	data := []string{pqueue.PrmPayload, "7777777777777777777777777777777777777777777777777777777777777777"}
+	data := []string{pqueue.PrmPayload, "7777777777"}
 
 	testFunc := func() {
 		for i := 0; i < 1000000; i++ {
-			ctx.Call(pqueue.PQ_CMD_PUSH, data)
+			cs.Call(pqueue.PQ_CMD_PUSH, data)
 		}
 		grp.Done()
 	}
@@ -55,10 +62,10 @@ func BenchMassPush() {
 	log.Info("Waiting for result")
 	grp.Wait()
 	finishTs := time.Now().UnixNano()
-	ctx.Finish()
+	cs.Finish()
 
-	log.Info("Test finished in: %d - %d", (finishTs - startTs), (finishTs-startTs)/1000000)
-	db.DatabaseInstance().FlushCache()
+	log.Info("Test finished in: %d - %d", finishTs-startTs, (finishTs-startTs)/1000000)
+	db.DatabaseInstance().Flush()
 	//println("waiting...")
 	//time.Sleep(time.Second * 1200)
 	//f.DropService("BenchTest")
@@ -67,58 +74,60 @@ func BenchMassPush() {
 }
 
 func BenchMassPushMultiQueue() {
-	f := qmgr.NewServiceManager()
-	resp1 := f.DropService("BenchTest1")
-	resp2 := f.DropService("BenchTest2")
-	resp3 := f.DropService("BenchTest3")
-	resp4 := f.DropService("BenchTest4")
+	conf.ParseConfigParameters()
+	ctx := fctx.Background("1")
+	f := qmgr.NewServiceManager(ctx)
+	resp1 := f.DropService(ctx, "BenchTest1")
+	resp2 := f.DropService(ctx, "BenchTest2")
+	resp3 := f.DropService(ctx, "BenchTest3")
+	resp4 := f.DropService(ctx, "BenchTest4")
 
-	resp1 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest1", []string{})
+	resp1 = f.CreateQueueFromParams(ctx, "BenchTest1", []string{})
 	if resp1.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp2 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest2", []string{})
+	resp2 = f.CreateQueueFromParams(ctx, "BenchTest2", []string{})
 	if resp2.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp3 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest3", []string{})
+	resp3 = f.CreateQueueFromParams(ctx, "BenchTest3", []string{})
 	if resp3.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	resp4 = f.CreateService(apis.ServiceTypePriorityQueue, "BenchTest4", []string{})
+	resp4 = f.CreateQueueFromParams(ctx, "BenchTest4", []string{})
 	if resp4.IsError() {
 		log.Fatal("Can not create BenchTest queue")
 	}
 
-	svc1, ok := f.GetService("BenchTest1")
-	if !ok {
+	svc1 := f.GetQueue("BenchTest1")
+	if svc1 == nil {
 		log.Fatal("Could not get created service: BenchTest1")
 	}
-	svc2, ok := f.GetService("BenchTest2")
-	if !ok {
+	svc2 := f.GetQueue("BenchTest2")
+	if svc2 == nil {
 		log.Fatal("Could not get created service: BenchTest2")
 	}
-	svc3, ok := f.GetService("BenchTest3")
-	if !ok {
+	svc3 := f.GetQueue("BenchTest3")
+	if svc3 == nil {
 		log.Fatal("Could not get created service: BenchTest3")
 	}
 
-	svc4, ok := f.GetService("BenchTest4")
-	if !ok {
+	svc4 := f.GetQueue("BenchTest4")
+	if svc4 == nil {
 		log.Fatal("Could not get created service: BenchTest4")
 	}
 
-	respWriter1 := mpqtesting.NewTestResponseWriter()
-	respWriter2 := mpqtesting.NewTestResponseWriter()
-	respWriter3 := mpqtesting.NewTestResponseWriter()
-	respWriter4 := mpqtesting.NewTestResponseWriter()
-	ctx1 := svc1.NewContext(respWriter1)
-	ctx2 := svc2.NewContext(respWriter2)
-	ctx3 := svc3.NewContext(respWriter3)
-	ctx4 := svc4.NewContext(respWriter4)
+	respWriter1 := resp_writer.NewTestResponseWriter()
+	respWriter2 := resp_writer.NewTestResponseWriter()
+	respWriter3 := resp_writer.NewTestResponseWriter()
+	respWriter4 := resp_writer.NewTestResponseWriter()
+	ctx1 := svc1.ConnScope(respWriter1)
+	ctx2 := svc2.ConnScope(respWriter2)
+	ctx3 := svc3.ConnScope(respWriter3)
+	ctx4 := svc4.ConnScope(respWriter4)
 
 	ctx1.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
 	ctx2.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
@@ -126,17 +135,17 @@ func BenchMassPushMultiQueue() {
 	ctx4.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
 
 	startTs := time.Now().UnixNano()
-	data := []string{pqueue.PrmPayload, "7777777777777777777777777777777777777777777777777777777777777777"}
+	data := []string{pqueue.PrmPayload, "777777777777"}
 
 	var grp sync.WaitGroup
-	testFunc := func(ctx apis.ServiceContext) {
+	testFunc := func(c *pqueue.ConnScope) {
 		for i := 0; i < 1000000; i++ {
-			ctx.Call(pqueue.PQ_CMD_PUSH, data)
+			c.Call(pqueue.PQ_CMD_PUSH, data)
 		}
 		grp.Done()
 	}
 	log.Info("Adding goroutines")
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10; i++ {
 		grp.Add(1)
 		go testFunc(ctx1)
 		grp.Add(1)
@@ -161,16 +170,16 @@ func BenchMassPushMultiQueue() {
 	finishTs := time.Now().UnixNano()
 	log.Info("Test finished in: %d - %d", (finishTs - startTs), (finishTs-startTs)/1000000)
 
-	db.DatabaseInstance().FlushCache()
+	db.DatabaseInstance().Flush()
 
 	log.Info("Deleting BenchTest1")
-	f.DropService("BenchTest1")
+	f.DropService(fctx.Background("1"), "BenchTest1")
 	log.Info("Deleting BenchTest2")
-	f.DropService("BenchTest2")
+	f.DropService(fctx.Background("1"), "BenchTest2")
 	log.Info("Deleting BenchTest3")
-	f.DropService("BenchTest3")
+	f.DropService(fctx.Background("1"), "BenchTest3")
 	log.Info("Deleting BenchTest4")
-	f.DropService("BenchTest4")
+	f.DropService(fctx.Background("1"), "BenchTest4")
 	log.Info("Closing facade...")
 	f.Close()
 	log.Info("Waiting flush...")
@@ -213,6 +222,12 @@ func MarshalTest() {
 }
 
 func main() {
+	f, err := os.Create("profile")
+	if err != nil {
+		log.Fatal("%s", err)
+	}
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
 	log.InitLogging()
 	BenchMassPush()
 	//BenchHeap()

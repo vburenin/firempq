@@ -14,7 +14,7 @@ import (
 )
 
 type SNSRequestHandler struct {
-	ServiceManager *qmgr.ServiceManager
+	ServiceManager *qmgr.QueueManager
 }
 
 func (self *SNSRequestHandler) dispatchSNSQuery(r *http.Request) sns_response.SNSResponse {

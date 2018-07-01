@@ -18,7 +18,7 @@ var Info = Logger.Infof
 var Debug = Logger.Debugf
 
 func InitLogging() {
-	l, _ := zap.NewProduction()
+	l, _ := zap.NewProduction(zap.AddCallerSkip(1))
 	Logger = l.Sugar()
 
 	Fatal = Logger.Fatalf

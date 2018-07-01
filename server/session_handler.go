@@ -9,10 +9,12 @@ import (
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
+	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
@@ -37,22 +39,24 @@ type SessionHandler struct {
 	connLock   sync.Mutex
 	conn       net.Conn
 	active     bool
-	ctx        apis.ServiceContext
+	scope      *pqueue.ConnScope
 	stopChan   chan struct{}
 	tokenizer  *mpqproto.Tokenizer
-	svcs       *qmgr.ServiceManager
+	qmgr       *qmgr.QueueManager
 	connWriter *bufio.Writer
+	ctx        *fctx.Context
 }
 
-func NewSessionHandler(conn net.Conn, services *qmgr.ServiceManager) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *qmgr.QueueManager) *SessionHandler {
 	sh := &SessionHandler{
 		conn:       conn,
 		tokenizer:  mpqproto.NewTokenizer(),
-		ctx:        nil,
+		scope:      nil,
 		active:     true,
-		svcs:       services,
+		qmgr:       services,
 		stopChan:   make(chan struct{}),
 		connWriter: bufio.NewWriter(conn),
+		ctx:        fctx.Background("proto-conn"),
 	}
 	sh.QuitListener()
 	return sh
@@ -64,8 +68,8 @@ func (s *SessionHandler) QuitListener() {
 		case <-signals.QuitChan:
 			s.Stop()
 			s.WriteResponse(mpqerr.ERR_CONN_CLOSING)
-			if s.ctx != nil {
-				s.ctx.Finish()
+			if s.scope != nil {
+				s.scope.Finish()
 			}
 			s.conn.Close()
 			return
@@ -91,8 +95,8 @@ func (s *SessionHandler) DispatchConn() {
 		}
 	}
 	close(s.stopChan)
-	if s.ctx != nil {
-		s.ctx.Finish()
+	if s.scope != nil {
+		s.scope.Finish()
 	}
 	s.conn.Close()
 	log.Debug("Client disconnected: %s", addr)
@@ -131,10 +135,10 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 	case CMD_DBSTATS:
 		return dbstatHandler(tokens)
 	default:
-		if s.ctx == nil {
+		if s.scope == nil {
 			return mpqerr.InvalidRequest("Unknown command: " + cmd)
 		} else {
-			return s.ctx.Call(cmd, tokens)
+			return s.scope.Call(cmd, tokens)
 		}
 	}
 }
@@ -168,12 +172,12 @@ func (s *SessionHandler) createServiceHandler(tokens []string) apis.IResponse {
 		return mpqerr.ERR_ID_IS_WRONG
 	}
 
-	_, exists := s.svcs.GetService(svcName)
-	if exists {
+	q := s.qmgr.GetQueue(svcName)
+	if q != nil {
 		return mpqerr.ConflictRequest("Service exists already")
 	}
 
-	return s.svcs.CreateQueueFromParams(svcName, tokens[1:])
+	return s.qmgr.CreateQueueFromParams(s.ctx, svcName, tokens[1:])
 }
 
 // Drop service.
@@ -185,7 +189,7 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) apis.IResponse {
 		return mpqerr.InvalidRequest("DROP accept service name only")
 	}
 	svcName := tokens[0]
-	res := s.svcs.DropService(svcName)
+	res := s.qmgr.DropService(s.ctx, svcName)
 	return res
 }
 
@@ -200,11 +204,11 @@ func (s *SessionHandler) ctxHandler(tokens []string) apis.IResponse {
 	}
 
 	svcName := tokens[0]
-	svc, exists := s.svcs.GetService(svcName)
-	if !exists {
+	queue := s.qmgr.GetQueue(svcName)
+	if queue == nil {
 		return mpqerr.ERR_NO_SVC
 	}
-	s.ctx = svc.NewContext(s)
+	s.scope = queue.ConnScope(s)
 	return resp.OK
 }
 
@@ -232,7 +236,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) apis.IResponse {
 		svcPrefix = tokens[0]
 	}
 
-	return s.svcs.ListServiceNames(svcPrefix)
+	return s.qmgr.ListServiceNames(svcPrefix)
 }
 
 // Ping responder.
