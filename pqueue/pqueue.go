@@ -227,18 +227,6 @@ func (pq *PQueue) GetCurrentStatus() apis.IResponse {
 	return resp.NewDictResponse("+STATUS", pq.GetStatus())
 }
 
-func (pq *PQueue) Info() apis.ServiceInfo {
-	pq.lock.Lock()
-	s := len(pq.id2msg)
-	pq.lock.Unlock()
-
-	return apis.ServiceInfo{
-		Size: s,
-		ID:   pq.desc.ServiceId,
-		Type: apis.ServiceTypePriorityQueue,
-	}
-}
-
 // Clear drops all locked and unlocked messages in the queue.
 func (pq *PQueue) Clear() {
 	total := 0

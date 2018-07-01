@@ -23,10 +23,3 @@ type IResponse interface {
 type ResponseWriter interface {
 	WriteResponse(IResponse) error
 }
-
-// ServiceInfo provide the most basic current information about service.
-type ServiceInfo struct {
-	Type string
-	Size int
-	ID   string
-}

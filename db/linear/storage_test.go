@@ -1,15 +1,12 @@
 package linear
 
 import (
-	"os"
-	"testing"
-
-	"io/ioutil"
-	"path/filepath"
-
 	"fmt"
-
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 )

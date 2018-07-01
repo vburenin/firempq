@@ -34,7 +34,7 @@ type ConnectionServer struct {
 
 func NewServer(ctx *fctx.Context) *ConnectionServer {
 	return &ConnectionServer{
-		serviceManager: qmgr.NewServiceManager(ctx),
+		serviceManager: qmgr.NewServiceManager(ctx, db.DatabaseInstance()),
 		signalChan:     make(chan os.Signal, 1),
 	}
 }

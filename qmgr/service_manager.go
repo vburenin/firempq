@@ -6,7 +6,6 @@ import (
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
@@ -19,12 +18,14 @@ type QueueManager struct {
 	allSvcs          map[string]*pqueue.PQueue
 	rwLock           sync.RWMutex
 	serviceIdCounter uint64
+	db               apis.DataStorage
 }
 
-func NewServiceManager(ctx *fctx.Context) *QueueManager {
+func NewServiceManager(ctx *fctx.Context, db apis.DataStorage) *QueueManager {
 	f := QueueManager{
 		allSvcs:          make(map[string]*pqueue.PQueue),
 		serviceIdCounter: 0,
+		db:               db,
 	}
 	f.loadAllServices(ctx)
 	return &f
@@ -72,7 +73,7 @@ func (s *QueueManager) loadService(ctx *fctx.Context, desc *queue_info.ServiceDe
 		ctx.Errorf("Didn't decode config: %s", err)
 		return nil, false
 	}
-	svcInstance := pqueue.NewPQueue(s.GetQueue, db.DatabaseInstance(), desc, cfg)
+	svcInstance := pqueue.NewPQueue(s.GetQueue, s.db, desc, cfg)
 	return svcInstance, true
 }
 
@@ -97,7 +98,7 @@ func (s *QueueManager) CreateQueue(ctx *fctx.Context, svcName string, config *co
 	}
 
 	desc := queue_info.NewServiceDescription(svcName, s.serviceIdCounter+1)
-	svc := pqueue.NewPQueue(s.GetQueue, db.DatabaseInstance(), desc, config)
+	svc := pqueue.NewPQueue(s.GetQueue, s.db, desc, config)
 
 	if err := queue_info.SaveServiceDescription(conf.CFG.DatabasePath, desc); err != nil {
 		ctx.Errorf("could not save service description: %s", err)
@@ -119,13 +120,13 @@ func (s *QueueManager) CreateQueue(ctx *fctx.Context, svcName string, config *co
 func (s *QueueManager) DropService(ctx *fctx.Context, svcName string) apis.IResponse {
 	s.rwLock.Lock()
 	defer s.rwLock.Unlock()
-	svc, ok := s.allSvcs[svcName]
-	if !ok {
+	queue := s.allSvcs[svcName]
+	if queue != nil {
 		return mpqerr.ERR_NO_SVC
 	}
-	svc.Close()
+	queue.Close()
 	delete(s.allSvcs, svcName)
-	svcID := svc.Info().ID
+	svcID := queue.Description().ServiceId
 	queue_info.DeleteServiceData(ctx, conf.CFG.DatabasePath, svcID)
 	ctx.Infof("Service '%s' has been removed: (id:%s)", svcName, svcID)
 	return resp.OK

@@ -15,7 +15,12 @@ import (
 	"github.com/vburenin/firempq/ferr"
 )
 
-const MaxPayloadSize = 1024*1024*1024*2 - 1
+const (
+	MaxPayloadFileSize = 1024*1024*1024*2 - 1
+	MetaFilePrefix     = "metadata"
+	PayloadFilePrefix  = "payload"
+	DBFileExt          = "ldb"
+)
 
 // OpenedFile is an object responsible for adding new data into the blob file and
 // retrieving it from the provided position.
@@ -107,9 +112,9 @@ func (of *OpenedFile) RetrieveData(pos int64) ([]byte, error) {
 	}
 
 	v := enc.DecodeBytesToUnit64(of.workBuf8bytes)
-	if v > MaxPayloadSize {
+	if v > MaxPayloadFileSize {
 		return nil, ferr.Errorf("too large payload data %d bytes (limit %d bytes)",
-			v, MaxPayloadSize)
+			v, MaxPayloadFileSize)
 	}
 
 	dataBuff := make([]byte, v)
@@ -150,6 +155,19 @@ var PayloadFileNotFound = fmt.Errorf("payload file not found")
 var NameMatchRE = regexp.MustCompile("^(payload|metadata)-(\\d+)\\.ldb$")
 
 func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*FlatStorage, error) {
+	pathStats, err := os.Stat(dbPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err := os.MkdirAll(dbPath, 0755)
+			if err != nil {
+				return nil, ferr.Wrapf(err, "can't use db path: %s", err)
+			}
+		}
+		return nil, ferr.Wrapf(err, "can't use db path: %s", err)
+	} else if !pathStats.IsDir() {
+		return nil, ferr.Wrapf(err, "db path is not a directory: %s", err)
+	}
+
 	files, err := ioutil.ReadDir(dbPath)
 	if err != nil {
 		return nil, ferr.Wrapf(err, "could not read database content: %s", dbPath)

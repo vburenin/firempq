@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"net/http"
 
-	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
@@ -24,9 +23,6 @@ func (r *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
 func GetQueueUrl(svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	queue := svcMgr.GetQueue(sqsQuery.QueueName)
 	if queue == nil {
-		return sqserr.QueueDoesNotExist()
-	}
-	if queue.Info().Type != apis.ServiceTypePriorityQueue {
 		return sqserr.QueueDoesNotExist()
 	}
 
