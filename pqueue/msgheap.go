@@ -3,19 +3,19 @@ package pqueue
 import "github.com/vburenin/firempq/pmsg"
 
 func geq(l *pmsg.MsgMeta, r *pmsg.MsgMeta) bool {
-	if l.UnlockTs == 0 {
-		if r.UnlockTs == 0 {
-			return l.ExpireTs >= r.ExpireTs
-		} else {
-			return l.ExpireTs >= r.UnlockTs
-		}
-	} else {
-		if r.UnlockTs == 0 {
-			return l.UnlockTs >= r.ExpireTs
-		} else {
-			return l.UnlockTs >= r.UnlockTs
-		}
+	lm, rm := l.UnlockTs, r.UnlockTs
+	if lm == 0 {
+		lm = l.ExpireTs
 	}
+	if rm == 0 {
+		rm = r.ExpireTs
+	}
+
+	if lm == rm {
+		return l.Serial >= r.Serial
+	}
+
+	return lm > rm
 }
 
 type TimeoutHeap struct {
