@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"sort"
-
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/enc"
@@ -308,7 +306,6 @@ const (
 	MSG_INFO_LOCKED    = "Locked"
 	MSG_INFO_UNLOCK_TS = "UnlockTs"
 	MSG_INFO_POP_COUNT = "PopCount"
-	MSG_INFO_PRIORITY  = "Priority"
 	MSG_INFO_EXPIRE_TS = "ExpireTs"
 )
 
@@ -636,7 +633,11 @@ func (pq *PQueue) returnToFront(msg *pmsg.MsgMeta) {
 		}
 	} else {
 		msg.UnlockTs = 0
-		pq.availMsgs.Return(msg)
+		if msg.PopCount == 0 {
+			pq.availMsgs.Add(msg)
+		} else {
+			pq.availMsgs.Return(msg)
+		}
 		pq.timeoutHeap.Push(msg)
 		pq.metadb.UpdateMetadata(msg)
 	}
@@ -682,55 +683,3 @@ type msgArray []*pmsg.MsgMeta
 func (m msgArray) Len() int           { return len(m) }
 func (m msgArray) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
 func (m msgArray) Less(i, j int) bool { return m[i].Serial < m[j].Serial }
-
-type PQLoader struct {
-	msgs map[uint64]*pmsg.MsgMeta
-}
-
-func NewPQLoader() *PQLoader {
-	return &PQLoader{
-		msgs: make(map[uint64]*pmsg.MsgMeta),
-	}
-}
-
-func (pql *PQLoader) Messages() msgArray {
-	output := make(msgArray, len(pql.msgs))
-	for _, m := range pql.msgs {
-		output = append(output, m)
-	}
-	pql.msgs = nil
-	sort.Sort(output)
-	return output
-}
-
-func (pql *PQLoader) Update(action byte, msg *pmsg.MsgMeta) {
-	switch action {
-	case DBActionAddMetadata, DBActionUpdateMetadata:
-		pql.msgs[msg.Serial] = msg
-	case DBActionDeleteMetadata:
-		delete(pql.msgs, msg.Serial)
-	case DBActionWipeAll:
-		pql.msgs = make(map[uint64]*pmsg.MsgMeta, 4096)
-	}
-}
-
-func (pq *PQueue) rebuildState(messages msgArray) {
-	nowTs := utils.Uts()
-	for _, msg := range messages {
-		// Ignore expired messages.
-		// TODO(vburenin): Move expired messages into fail queue.
-		if msg.ExpireTs >= nowTs || msg.UnlockTs > 0 {
-			pq.id2msg[msg.StrId] = msg
-			pq.timeoutHeap.Push(msg)
-			if msg.UnlockTs == 0 {
-				pq.availMsgs.Add(msg)
-			} else if msg.PopCount > 0 {
-				pq.lockedMsgCnt++
-			}
-		}
-	}
-
-	log.Debug("Total messages: %d", len(pq.id2msg))
-	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
-	log.Debug("Available messages: %d", pq.availMsgs.Size())
-}

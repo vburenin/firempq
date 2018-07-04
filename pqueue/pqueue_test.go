@@ -1,17 +1,18 @@
 package pqueue
 
 import (
-	"strconv"
+	"os"
 	"testing"
 	"time"
 
-	. "github.com/smartystreets/goconvey/convey"
+	"strconv"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/db"
+	"github.com/vburenin/firempq/db/linear"
 	"github.com/vburenin/firempq/log"
-	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto/resp"
-	. "github.com/vburenin/firempq/mpqtesting"
 	"github.com/vburenin/firempq/queue_info"
 	"github.com/vburenin/firempq/utils"
 )
@@ -41,28 +42,61 @@ func getDesc() *queue_info.ServiceDescription {
 	}
 }
 
-func queueGetter(name string) *PQueue {
-	return nil
+type QueueGetterForTest struct {
+	q map[string]*PQueue
 }
 
-func CreateTestQueue() *PQueue {
-	return NewPQueue(queueGetter, getDesc(), getConfig())
+func NewQueueGetterForTest() *QueueGetterForTest {
+	return &QueueGetterForTest{q: make(map[string]*PQueue)}
 }
+func (qgt *QueueGetterForTest) Add(q *PQueue)                   { qgt.q[q.desc.Name] = q }
+func (qgt *QueueGetterForTest) queueGetter(name string) *PQueue { return qgt.q[name] }
 
-func CreateTestQueueWithName(fsl *FakeSvcLoader, name string) *PQueue {
+func CreateTestQueueWithName(db apis.DataStorage, qg *QueueGetterForTest, name string) *PQueue {
 	d := getDesc()
 	c := getConfig()
 	d.Name = name
-	q := NewPQueue(fsl, d, c)
-	fsl.data[name] = q
+	q := NewPQueue(qg.queueGetter, db, d, c)
+	qg.Add(q)
 	return q
 }
 
-func CreateNewTestQueue() *PQueue {
+func WipeTestQueueData() {
+	err := os.RemoveAll("testdata/tempdb")
+	if err != nil {
+		panic("failed to remove db")
+	}
+}
+
+const PostOptionWipe = "wipe"
+const PreOptionWipe = "prewipe"
+
+func CreateSingleQueue(options ...string) (*PQueue, func()) {
 	log.InitLogging()
-	log.SetLevel(1)
-	db.SetDatabase(NewInMemDBService())
-	return CreateTestQueue()
+	conf.UseDefaultsOnly()
+
+	for _, v := range options {
+		if v == PreOptionWipe {
+			WipeTestQueueData()
+		}
+	}
+
+	db, err := linear.NewFlatStorage("testdata/tempdb", 1024*1024, 1024*1024)
+	if err != nil {
+		log.Fatal("could not create db: %s", err)
+	}
+	qg := NewQueueGetterForTest()
+	q := NewPQueue(qg.queueGetter, db, getDesc(), getConfig())
+	f := func() {
+		q.Close()
+		db.Close()
+		for _, v := range options {
+			if v == PostOptionWipe {
+				WipeTestQueueData()
+			}
+		}
+	}
+	return q, f
 }
 
 func cmp(t *testing.T, a, b string) {
@@ -72,186 +106,218 @@ func cmp(t *testing.T, a, b string) {
 }
 
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
-	Convey("Test push and pop messages", t, func() {
-		q.Push("data1", "p1", 10000, 0)
-		q.Push("data2", "p2", 10000, 0)
-		VerifyServiceSize(q, 2)
-		VerifyItems(q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
-		VerifyServiceSize(q, 2)
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
 
-		// Unlock item data1 it should become available again.
-		q.UpdateLockById("data1", 0)
-		q.checkTimeouts(utils.Uts() + 110)
-		VerifySingleItem(q.Pop(10000, 0, 1, true), "data1", "p1")
-		VerifyServiceSize(q, 2)
+	//defer WipeTestQueueData()
 
-		VerifyOkResponse(q.DeleteLockedById("data1"))
+	q.Push("data1", "p1", 10000, 0)
+	q.Push("data2", "p2", 10000, 0)
+	a.Equal(uint64(2), q.TotalMessages())
 
-		VerifyServiceSize(q, 1)
-		q.DeleteLockedById("data2")
-		VerifyServiceSize(q, 0)
-	})
+	items := q.Pop(10000, 0, 10, true)
+	VerifyItems(a, items, 2, "data1", "p1", "data2", "p2")
+	a.Equal(uint64(2), q.TotalMessages())
+
+	// Unlock item data1 it should become available again.
+	q.UpdateLockById("data1", 0)
+	a.Equal(int64(1), q.checkTimeouts(utils.Uts()+110))
+	item := q.Pop(10000, 0, 1, true)
+	VerifySingleItem(a, item, "data1", "p1")
+	a.Equal(uint64(2), q.TotalMessages())
+
+	VerifyOkResponse(a, q.DeleteLockedById("data1"))
+
+	a.Equal(uint64(1), q.TotalMessages())
+	q.DeleteLockedById("data2")
+	a.Equal(uint64(0), q.TotalMessages())
+
 }
 
 func TestAutoExpiration(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
-	Convey("Two messages should expire, one message should still be in the queue", t, func() {
-		q.Push("data1", "p1", 1000, 0)
-		q.Push("data2", "p2", 1000, 0)
-		q.Push("data3", "p3", 10000, 0)
-		VerifyServiceSize(q, 3)
-		q.checkTimeouts(utils.Uts() + 1300)
-		VerifyServiceSize(q, 1)
-	})
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
+	q.Push("data1", "p1", 1000, 0)
+	q.Push("data2", "p2", 1000, 0)
+	q.Push("data3", "p3", 10000, 0)
+	a.Equal(uint64(3), q.TotalMessages())
+	q.checkTimeouts(utils.Uts() + 1300)
+	a.Equal(uint64(1), q.TotalMessages())
+
 }
 
+// Locked message should become visible again after it gets unlocked
 func TestUnlockById(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
-	Convey("Locked message should become visible again after it gets unlocked", t, func() {
-		q.Push("data1", "p1", 1000, 0)
-		q.Push("data2", "p2", 1000, 0)
-		VerifyItems(q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
-		VerifyItems(q.Pop(10000, 0, 10, true), 0)
-		q.UnlockMessageById("data2")
-		VerifyItems(q.Pop(10000, 0, 10, true), 1, "data2", "p2")
-	})
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
+	q.Push("data1", "p1", 1000, 0)
+	q.Push("data2", "p2", 1000, 0)
+	VerifyItems(a, q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
+	VerifyItems(a, q.Pop(10000, 0, 10, true), 0)
+	VerifyOkResponse(a, q.UnlockMessageById("data2"))
+	VerifyItems(a, q.Pop(10000, 0, 10, true), 1, "data2", "p2")
+
 }
 
+// Delete not locked message
 func TestDeleteById(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
-	Convey("Delete not locked message", t, func() {
-		q.Push("data1", "p1", 1000, 0)
-		VerifyServiceSize(q, 1)
-		q.DeleteById("data1")
-		VerifyServiceSize(q, 0)
-		VerifyItems(q.Pop(10000, 0, 10, true), 0)
-	})
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
+	q.Push("data1", "p1", 1000, 0)
+	a.Equal(uint64(1), q.TotalMessages())
+	VerifyOkResponse(a, q.DeleteById("data1"))
+	a.Equal(uint64(0), q.TotalMessages())
+	items := q.Pop(10000, 0, 10, true)
+	VerifyItems(a, items, 0)
 }
 
+// Locked message should be removed
 func TestDeleteLockedById(t *testing.T) {
-	q := CreateNewTestQueue()
-	Convey("Locked message should be removed", t, func() {
-		q.Push("data1", "p1", 10000, 0)
-		q.Push("data2", "p2", 10000, 0)
-		VerifyItems(q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
-		q.DeleteLockedById("data1")
-		q.DeleteLockedById("data2")
-		VerifyServiceSize(q, 0)
-	})
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
+	q.Push("data1", "p1", 10000, 0)
+	q.Push("data2", "p2", 10000, 0)
+	items := q.Pop(10000, 0, 10, true)
+	VerifyItems(a, items, 2, "data1", "p1", "data2", "p2")
+	VerifyOkResponse(a, q.DeleteLockedById("data1"))
+	VerifyOkResponse(a, q.DeleteLockedById("data2"))
+	a.Equal(uint64(0), q.TotalMessages())
 }
 
+// Messages should be delivered after 0.1 seconds
+// TODO(vburenin): potentially not reliable test.
 func TestPopWaitBatch(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
 	go func() {
 		time.Sleep(time.Second / 10)
 		q.Push("d1", "1", 10000, 0)
 		q.Push("d2", "2", 10000, 0)
 		q.Push("d3", "3", 10000, 0)
 	}()
-	Convey("Messages should be delivered after 0.1 seconds", t, func() {
-		VerifyItems(q.Pop(10000, 1000, 10, true), 3, "d1", "1", "d2", "2", "d3", "3")
-	})
+	items := q.Pop(10000, 1000, 10, true)
+	VerifyItems(a, items, 3, "d1", "1", "d2", "2", "d3", "3")
 }
 
+// Messages should be delivered after 0.1 seconds
 func TestPopWaitTimeout(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
-	Convey("Messages should be delivered after 0.1 seconds", t, func() {
-		q.Push("d1", "1", 10000, 10000)
-		q.Push("d2", "2", 10000, 10000)
-		q.Push("d3", "3", 10000, 10000)
-		VerifyItems(q.Pop(0, 10, 10, true), 0)
-	})
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
+	q.Push("d1", "1", 100000, 1000)
+	q.Push("d2", "2", 100000, 1000)
+	q.Push("d3", "3", 100000, 1000)
+
+	items := q.Pop(0, 10, 10, true)
+	VerifyItems(a, items, 0)
+	a.Equal(uint64(3), q.TotalMessages())
+	q.checkTimeouts(utils.Uts() + 10001)
+	items = q.Pop(0, 0, 10, true)
+	VerifyItems(a, items, 3, "d1", "1", "d2", "2", "d3", "3")
 }
 
+// Message delivery delay should be delayed at least for 0.1 seconds
 func TestDeliveryDelay(t *testing.T) {
-	q := CreateNewTestQueue()
-	// Stop updates.
-	defer q.Close()
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
 	q.StartUpdate()
-	Convey("Message delivery delay should be delayed at least for 0.1 seconds", t, func() {
-		q.Push("data1", "p1", 10000, 120)
-		startTs := time.Now().UnixNano()
-		VerifyItems(q.Pop(10000, 1000, 10, true), 1, "data1", "p1")
-		finishTs := time.Now().UnixNano()
-		So(finishTs-startTs, ShouldBeGreaterThan, time.Second/10)
-	})
+
+	q.Push("data1", "p1", 10000, 120)
+	startTs := time.Now()
+	item := q.Pop(10000, 1000, 10, true)
+	VerifyItems(a, item, 1, "data1", "p1")
+	finishTs := time.Now()
+
+	a.True(finishTs.Sub(startTs) >= time.Second/10)
 }
 
+// 10k messages should be pushed and received. Messages are not locked.
 func TestPushLotsOfMessages(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
 	q.StartUpdate()
+
 	totalMsg := 10000
-	Convey("10k messages should be pushed and received being removed", t, func() {
-		for i := 0; i < totalMsg; i++ {
-			q.Push("id"+strconv.Itoa(i), " ", 100000, 0)
-		}
-		work := true
-		go func() {
-			time.Sleep(time.Second * 5)
-			work = false
-		}()
-		counter := 0
-		loops := 0
-		for counter < totalMsg && loops < totalMsg && work {
-			resp, ok := q.Pop(0, 10, 10, false).(*resp.MessagesResponse)
-			if !ok {
-				break
-			}
-			counter += len(resp.GetItems())
-		}
-		So(counter, ShouldEqual, totalMsg)
-		VerifyServiceSize(q, 0)
 
-	})
-	q.Close()
+	for i := 0; i < totalMsg; i++ {
+		q.Push("id"+strconv.Itoa(i), " ", 100000, 0)
+	}
+	work := true
+	go func() {
+		time.Sleep(time.Second * 5)
+		work = false
+	}()
+	counter := 0
+	for counter < totalMsg && work {
+		resp, ok := q.Pop(0, 10, 10, false).(*resp.MessagesResponse)
+		if !ok {
+			break
+		}
+		counter += len(resp.GetItems())
+	}
+	a.Equal(totalMsg, counter)
+	a.Equal(uint64(0), q.TotalMessages())
 }
 
+/*
+// Push some messages and load them
 func TestMessageLoad(t *testing.T) {
-	q := CreateNewTestQueue()
-	defer q.Close()
-	Convey("Push some messages and load them", t, func() {
-		q.Push("d1", "p", 100000, 0)
-		q.Push("d2", "p", 100000, 0)
-		q.Push("d3", "p", 100000, 0)
-		q.Push("d4", "p", 100000, 0)
-		q.Push("d5", "p", 100000, 0)
-		q.Push("d6", "p", 100000, 0)
-		q.Push("d0", "p", 100000, 0)
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
 
-		// This messages should be removed as expired during reload.
-		VerifyOkResponse(q.Push("dd", "dd", 0, 0))
-		VerifyServiceSize(q, 8)
-		// Queue size should be the same since message is just locked.
-		VerifySingleItem(q.Pop(1000, 0, 1, true), "d0", "p")
-		VerifyServiceSize(q, 8)
+	q.StartUpdate()
 
-		q.Close()
+	q.Push("d1", "p", 100000, 0)
+	q.Push("d2", "p", 100000, 0)
+	q.Push("d3", "p", 100000, 0)
+	q.Push("d4", "p", 100000, 0)
+	q.Push("d5", "p", 100000, 0)
+	q.Push("d6", "p", 100000, 0)
+	q.Push("d0", "p", 100000, 0)
 
-		So(q.IsClosed(), ShouldBeTrue)
+	// This messages should be removed as expired during reload.
+	VerifyOkResponse(a, q.Push("dd", "dd", 0, 0))
+	a.Equal(uint64(8), q.TotalMessages())
+	// Queue size should be the same since message is just locked.
+	VerifySingleItem(a, q.Pop(1000, 0, 1, true), "d0", "p")
+	a.Equal(uint64(8), q.TotalMessages())
 
-		q := CreateTestQueue()
-		// 7 messages because one of them has expired during reload.
-		VerifyServiceSize(q, 7)
-		VerifySingleItem(q.Pop(0, 0, 1, false), "d1", "p")
-		VerifySingleItem(q.Pop(0, 0, 1, false), "d2", "p")
-		VerifySingleItem(q.Pop(0, 0, 1, false), "d3", "p")
-		VerifySingleItem(q.Pop(0, 0, 1, false), "d4", "p")
-		VerifySingleItem(q.Pop(0, 0, 1, false), "d5", "p")
-		VerifySingleItem(q.Pop(0, 0, 1, false), "d6", "p")
-		VerifyServiceSize(q, 1)
-		VerifyOkResponse(q.DeleteLockedById("d0"))
-		VerifyServiceSize(q, 0)
-		q.Clear()
-	})
+	q.Close()
+
+	So(q.IsClosed(), ShouldBeTrue)
+
+	q := CreateTestQueue()
+	// 7 messages because one of them has expired during reload.
+	VerifyServiceSize(q, 7)
+	VerifySingleItem(q.Pop(0, 0, 1, false), "d1", "p")
+	VerifySingleItem(q.Pop(0, 0, 1, false), "d2", "p")
+	VerifySingleItem(q.Pop(0, 0, 1, false), "d3", "p")
+	VerifySingleItem(q.Pop(0, 0, 1, false), "d4", "p")
+	VerifySingleItem(q.Pop(0, 0, 1, false), "d5", "p")
+	VerifySingleItem(q.Pop(0, 0, 1, false), "d6", "p")
+	VerifyServiceSize(q, 1)
+	VerifyOkResponse(q.DeleteLockedById("d0"))
+	VerifyServiceSize(q, 0)
+	q.Clear()
+
 }
+
 
 func TestStatus(t *testing.T) {
 	Convey("Queue status should be correct", t, func() {
@@ -585,4 +651,43 @@ func TestMessagesMovedToAnotherQueue(t *testing.T) {
 		})
 
 	})
+}
+*/
+
+func VerifyItemsRespSize(a *assert.Assertions, r apis.IResponse, size int) ([]apis.IResponseItem, bool) {
+	ir, ok := r.(*resp.MessagesResponse)
+	a.True(ok)
+	if ok {
+		items := ir.GetItems()
+		a.Equal(size, len(items))
+		return items, len(items) == size
+	}
+	return nil, false
+}
+
+func VerifySingleItem(a *assert.Assertions, r apis.IResponse, itemId, payload string) bool {
+	if items, ok := VerifyItemsRespSize(a, r, 1); ok {
+		return a.Equal(itemId, items[0].ID()) && a.Equal(payload, string(items[0].Payload()))
+	}
+	return false
+}
+
+func VerifyOkResponse(a *assert.Assertions, r apis.IResponse) bool {
+	return a.Equal(resp.OK, r)
+}
+
+func VerifyItems(a *assert.Assertions, r apis.IResponse, size int, itemSpecs ...string) bool {
+	a.Equal(size*2, len(itemSpecs))
+	items, ok := VerifyItemsRespSize(a, r, size)
+	if size*2 == len(itemSpecs) && ok {
+		for i := 0; i < len(itemSpecs); i += 2 {
+			itemPos := i / 2
+			itemId := itemSpecs[i]
+			itemPayload := itemSpecs[i+1]
+			a.Equal(itemId, items[itemPos].ID())
+			a.Equal(itemPayload, string(items[itemPos].Payload()))
+		}
+		return true
+	}
+	return false
 }
