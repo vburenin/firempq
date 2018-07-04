@@ -38,9 +38,17 @@ func (mq *MessageQueue) Empty() bool {
 }
 
 func (mq *MessageQueue) Pop() *pmsg.MsgMeta {
-	m := mq.frontLine.Pop()
-	if m != nil {
-		return m
+	for mq.frontLine.Size() > 0 {
+		m := mq.frontLine.Pop()
+		if m != nil && m.Serial > 0 {
+			return m
+		}
 	}
-	return mq.mainLine.Pop()
+	for mq.mainLine.Size() > 0 {
+		m := mq.mainLine.Pop()
+		if m != nil && m.Serial > 0 {
+			return m
+		}
+	}
+	return nil
 }
