@@ -54,8 +54,18 @@ type Config struct {
 	LogLevel     logging.Level
 }
 
-var CFG *Config
-var CFG_PQ *PQueueConfigData
+var CFG = &Config{}
+var CFG_PQ = &PQueueConfigData{}
+
+// Initialize
+func UseDefaultsOnly() {
+	cfg := &Config{}
+	p := flags.NewParser(cfg, flags.Default)
+	p.ParseArgs(nil)
+
+	CFG = cfg
+	CFG_PQ = &cfg.PQueueConfig
+}
 
 func ParseConfigParameters() *Config {
 	cfg := Config{}
