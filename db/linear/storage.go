@@ -162,8 +162,9 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 			if err != nil {
 				return nil, ferr.Wrapf(err, "can't use db path: %s", err)
 			}
+		} else {
+			return nil, ferr.Wrapf(err, "can't use db path: %s", err)
 		}
-		return nil, ferr.Wrapf(err, "can't use db path: %s", err)
 	} else if !pathStats.IsDir() {
 		return nil, ferr.Wrapf(err, "db path is not a directory: %s", err)
 	}
@@ -300,6 +301,13 @@ func (fstg *FlatStorage) RetrievePayload(fileID, pos int64) ([]byte, error) {
 	var payloadFile *OpenedFile
 	var err error
 
+	fstg.mu.Lock()
+	data := fstg.payloadCache.Payload(fileID, pos)
+	fstg.mu.Unlock()
+	if data != nil {
+		return data, nil
+	}
+
 	fstg.muPayloads.Lock()
 	payloadFile = fstg.activePayloads[fileID]
 
@@ -309,7 +317,7 @@ func (fstg *FlatStorage) RetrievePayload(fileID, pos int64) ([]byte, error) {
 	fstg.muPayloads.Unlock()
 
 	payloadFile.Lock()
-	data, err := payloadFile.RetrieveData(pos)
+	data, err = payloadFile.RetrieveData(pos)
 	payloadFile.Unlock()
 	return data, err
 }
