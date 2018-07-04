@@ -1,10 +1,12 @@
 package pqueue
 
+/*
 import (
 	"math"
 	"strconv"
 	"testing"
 	"time"
+	"sync"
 
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/vburenin/firempq/apis"
@@ -13,7 +15,6 @@ import (
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto/resp"
-	. "github.com/vburenin/firempq/mpqtesting"
 	"github.com/vburenin/firempq/queue_info"
 )
 
@@ -496,3 +497,26 @@ func TestCtxFinish(t *testing.T) {
 		So(q.Call("CMD", []string{}), ShouldEqual, mpqerr.ERR_CONN_CLOSING)
 	})
 }
+
+type TestResponseWriter struct {
+	mutex     sync.Mutex
+	responses []apis.IResponse
+}
+
+func (rw *TestResponseWriter) WriteResponse(resp apis.IResponse) error {
+	rw.mutex.Lock()
+	rw.responses = append(rw.responses, resp)
+	rw.mutex.Unlock()
+	return nil
+}
+
+func (rw *TestResponseWriter) GetResponses() []apis.IResponse {
+	return rw.responses
+}
+
+func NewTestResponseWriter() *TestResponseWriter {
+	return &TestResponseWriter{
+		responses: make([]apis.IResponse, 0, 1000),
+	}
+}
+*/
