@@ -13,7 +13,6 @@ const (
 	StatusQueueTotalMsgs      = "TotalMessages"
 	StatusQueueInFlightMsgs   = "InFlightMessages"
 	StatusQueueAvailableMsgs  = "AvailableMessages"
-	PQ_STATUS_DELAYED         = "DelayedMessages"
 	StatusQueueDeadMsgQueue   = "FailQueue"
 	StatusQueueMaxMsgSize     = "MaxMsgSize"
 )
