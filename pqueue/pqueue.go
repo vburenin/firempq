@@ -222,19 +222,6 @@ func (pq *PQueue) TimeoutItems(cutOffTs int64) apis.IResponse {
 	return resp.NewIntResponse(total)
 }
 
-func (pq *PQueue) ReleaseInFlight(cutOffTs int64) apis.IResponse {
-	var total int64
-	pq.lock.Lock()
-
-	for value := pq.checkTimeouts(cutOffTs); value > 0; value = pq.checkTimeouts(cutOffTs) {
-		total += value
-	}
-
-	pq.lock.Unlock()
-
-	return resp.NewIntResponse(total)
-}
-
 // PopWaitItems pops 'limit' messages within 'timeout'(milliseconds) time interval.
 func (pq *PQueue) Pop(lockTimeout, popWaitTimeout, limit int64, lock bool) apis.IResponse {
 	// Try to pop items first time and return them if number of popped items is greater than 0.
@@ -614,16 +601,12 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	var cntRet int64 = 0
 	for h.NotEmpty() && cntDel+cntRet < conf.CFG_PQ.TimeoutCheckBatchSize {
 		msg := h.MinMsg()
-		if msg.UnlockTs > 0 {
-			if msg.UnlockTs < ts {
-				cntRet++
-				pq.returnToFront(msg)
-			} else {
-				break
-			}
-		} else if msg.ExpireTs < ts {
+		if msg.ExpireTs < ts {
 			cntDel++
 			pq.deleteMessage(msg)
+		} else if msg.UnlockTs > 0 && msg.UnlockTs < ts {
+			cntRet++
+			pq.returnToFront(msg)
 		} else {
 			break
 		}
