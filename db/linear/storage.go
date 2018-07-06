@@ -313,6 +313,10 @@ func (fstg *FlatStorage) RetrievePayload(fileID, pos int64) ([]byte, error) {
 
 	if payloadFile == nil {
 		fstg.openPayloadFile(fileID, true)
+		payloadFile = fstg.activePayloads[fileID]
+		if payloadFile == nil {
+			return nil, ferr.Errorf("no payload file with %d id", fileID)
+		}
 	}
 	fstg.muPayloads.Unlock()
 

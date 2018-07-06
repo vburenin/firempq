@@ -6,6 +6,7 @@ import (
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db/linear"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 )
 
@@ -18,6 +19,14 @@ func DatabaseInstance() apis.DataStorage {
 
 func SetDatabase(ds apis.DataStorage) {
 	database = ds
+}
+
+func NewIterator(ctx *fctx.Context, dbPath string) apis.ItemIterator {
+	iter, err := linear.NewIterator(dbPath)
+	if err != nil {
+		ctx.Fatalf("Failed to create data iteration object: %s", err)
+	}
+	return iter
 }
 
 func getDatabase() apis.DataStorage {

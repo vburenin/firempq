@@ -236,7 +236,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) apis.IResponse {
 		svcPrefix = tokens[0]
 	}
 
-	return s.qmgr.ListServiceNames(svcPrefix)
+	return resp.NewStrArrayResponse("+SVCLIST", s.qmgr.BuildServiceNameList(svcPrefix))
 }
 
 // Ping responder.

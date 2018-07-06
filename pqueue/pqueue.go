@@ -17,65 +17,60 @@ import (
 	"github.com/vburenin/firempq/queue_info"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
-	"github.com/vburenin/nsync"
 )
 
 type PQueue struct {
-	// A wrapper on top of common database operations.
-	db     apis.DataStorage
-	metadb *MetaActionDB
-	// Payload access should be protected separately.
-	payloadLock sync.Mutex
-	// For messages jumping around all their jumps should be protected.
-	lock sync.Mutex
-	// Currently available messages to be popped.
-	availMsgs *MessageQueue
-	// All messages with the ticking counters except those which are inFlight.
-	timeoutHeap *TimeoutHeap
-	id2msg      map[string]*pmsg.MsgMeta
-	// All locked messages
-	sn2locked map[uint64]*pmsg.MsgMeta
-	// Set as True if the service is closed.
-	closed nsync.SyncFlag
-	// Instance of the database.
-	config *conf.PQConfig
-
-	queueGetter func(queueName string) *PQueue
-
-	// This queue will be used to push messages exceeded pop limit attempts. All errors are ignored.
-	popLimitMoveChan chan *pmsg.MsgMeta
-
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *queue_info.ServiceDescription
-	// Shorter version of service name to identify this service.
+	// Configuration setting on a queue level.
+	config *conf.PQConfig
+
+	// Database storage
+	db apis.DataStorage
+	// A wrapper on top of common database operations.
+	metadb *MetaActionDB
+
+	// For messages jumping around all their jumps should be protected.
+	lock sync.Mutex
+
+	// Currently available messages to be popped.
+	availMsgs *MessageQueue
+
+	// A heap of messages sorted by their expiration or unlock timestamp.
+	timeoutHeap *TimeoutHeap
+
+	// map of messages accessible by their string id. one of the uses is for deduplication purposes.
+	id2msg map[string]*pmsg.MsgMeta
+
+	// This queue will be used to push messages exceeded pop limit attempts. All errors are ignored.
+	deadMsgChan chan DeadMessage
+
+	// Channel that used to notify about new messages added to the queue.
 	newMsgNotification chan struct{}
 
-	// Serial number assigned to new messages.
+	// Serial number counter use to assign one for each new message.
 	msgSerialNumber uint64
 
-	// Number of message which are locked
+	// Number of locked messages
 	lockedMsgCnt uint64
 }
 
 func NewPQueue(
-	queueGetter func(queueName string) *PQueue,
 	db apis.DataStorage,
 	desc *queue_info.ServiceDescription,
+	deadMsgChan chan DeadMessage,
 	config *conf.PQConfig) *PQueue {
 
 	return &PQueue{
 		desc:               desc,
 		config:             config,
-		queueGetter:        queueGetter,
+		db:                 db,
+		metadb:             NewDBFunctor(desc.ExportId, db),
 		id2msg:             make(map[string]*pmsg.MsgMeta),
 		availMsgs:          NewMsgQueue(),
 		timeoutHeap:        NewTimeoutHeap(),
 		newMsgNotification: make(chan struct{}),
-		msgSerialNumber:    0,
-		lockedMsgCnt:       0,
-		popLimitMoveChan:   make(chan *pmsg.MsgMeta, 16384),
-		db:                 db,
-		metadb:             NewDBFunctor(desc.ExportId, db),
+		deadMsgChan:        deadMsgChan,
 	}
 }
 
@@ -84,30 +79,11 @@ func (pq *PQueue) ConnScope(rw apis.ResponseWriter) *ConnScope {
 }
 
 // StartUpdate runs a loop of periodic data updates.
-func (pq *PQueue) StartUpdate() {
-	// Run a goroutine to move failed pops.
-	go pq.moveToPopLimitedQueue()
-	// Run timeout/unlock goroutine.
-	go func() {
-		var cnt int64
-		for {
-			pq.closed.Lock()
-			if pq.closed.IsUnset() {
-				pq.lock.Lock()
-				cnt = pq.checkTimeouts(utils.Uts())
-				pq.lock.Unlock()
-			} else {
-				pq.closed.Unlock()
-				break
-			}
-			pq.closed.Unlock()
-			if cnt >= conf.CFG_PQ.TimeoutCheckBatchSize {
-				time.Sleep(time.Millisecond)
-			} else {
-				time.Sleep(time.Duration(conf.CFG.UpdateInterval) * time.Millisecond)
-			}
-		}
-	}()
+func (pq *PQueue) Update() int64 {
+	pq.lock.Lock()
+	cnt := pq.checkTimeouts(utils.Uts())
+	pq.lock.Unlock()
+	return cnt
 }
 
 // ServiceConfig returns service config as an empty interface type.
@@ -155,24 +131,24 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	totalMsg := pq.TotalMessages()
 	lockedCount := pq.LockedCount()
 	res := make(map[string]interface{})
-	res[PQ_STATUS_MAX_QUEUE_SIZE] = pq.config.MaxMsgsInQueue
-	res[PQ_STATUS_POP_WAIT_TIMEOUT] = pq.config.PopWaitTimeout
-	res[PQ_STATUS_MSG_TTL] = pq.config.MsgTtl
-	res[PQ_STATUS_MAX_MSG_SIZE] = pq.config.MaxMsgSize
-	res[PQ_STATUS_DELIVERY_DELAY] = pq.config.DeliveryDelay
-	res[PQ_STATUS_POP_LOCK_TIMEOUT] = pq.config.PopLockTimeout
-	res[PQ_STATUS_POP_COUNT_LIMIT] = pq.config.PopCountLimit
-	res[PQ_STATUS_CREATE_TS] = pq.desc.CreateTs
-	res[PQ_STATUS_LAST_PUSH_TS] = atomic.LoadInt64(&pq.config.LastPushTs)
-	res[PQ_STATUS_LAST_POP_TS] = atomic.LoadInt64(&pq.config.LastPopTs)
-	res[PQ_STATUS_TOTAL_MSGS] = totalMsg
-	res[PQ_STATUS_IN_FLIGHT_MSG] = lockedCount
-	res[PQ_STATUS_AVAILABLE_MSGS] = totalMsg - lockedCount
-	res[PQ_STATUS_FAIL_QUEUE] = pq.config.PopLimitQueueName
+	res[StatusQueueMaxSize] = pq.config.MaxMsgsInQueue
+	res[StatusQueuePopWaitTimeout] = pq.config.PopWaitTimeout
+	res[StatusQueueMsgTTL] = pq.config.MsgTtl
+	res[StatusQueueMaxMsgSize] = pq.config.MaxMsgSize
+	res[StatusQueueDeliveryDelay] = pq.config.DeliveryDelay
+	res[StatusQueuePopLockTimeout] = pq.config.PopLockTimeout
+	res[StatusQueuePopCountLimit] = pq.config.PopCountLimit
+	res[StatusQueueCreateTs] = pq.desc.CreateTs
+	res[StatusQueueLastPushTs] = atomic.LoadInt64(&pq.config.LastPushTs)
+	res[StatusQueueLastPopTs] = atomic.LoadInt64(&pq.config.LastPopTs)
+	res[StatusQueueTotalMsgs] = totalMsg
+	res[StatusQueueInFlightMsgs] = lockedCount
+	res[StatusQueueAvailableMsgs] = totalMsg - lockedCount
+	res[StatusQueueDeadMsgQueue] = pq.config.PopLimitQueueName
 	return res
 }
 
-type PQueueParams struct {
+type QueueParams struct {
 	MsgTTL         *int64
 	MaxMsgSize     *int64
 	MaxMsgsInQueue *int64
@@ -180,19 +156,16 @@ type PQueueParams struct {
 	PopCountLimit  *int64
 	PopLockTimeout *int64
 	PopWaitTimeout *int64
-	FailQueue      string
+	FailQueue      *string
 }
 
-func (pq *PQueue) SetParams(params *PQueueParams) apis.IResponse {
+func (pq *PQueue) SetParams(params *QueueParams) apis.IResponse {
+	pq.lock.Lock()
 
-	if params.FailQueue != "" {
-		if fq := pq.queueGetter(params.FailQueue); fq == nil {
-			return mpqerr.InvalidRequest("PQueue doesn't exist: " + params.FailQueue)
-		}
-		pq.config.PopLimitQueueName = params.FailQueue
+	if params.FailQueue != nil {
+		pq.config.PopLimitQueueName = *params.FailQueue
 	}
 
-	pq.lock.Lock()
 	pq.config.LastUpdateTs = utils.Uts()
 
 	if params.MsgTTL != nil {
@@ -235,19 +208,6 @@ func (pq *PQueue) Clear() {
 	pq.lock.Unlock()
 	log.Debug("Removed %d messages.", total)
 }
-
-func (pq *PQueue) Close() {
-	log.Debug("Closing PQueue service: %s", pq.desc.Name)
-	pq.lock.Lock()
-	if !pq.IsClosed() {
-		pq.closed.Set()
-		// This should break a goroutine loop.
-		close(pq.popLimitMoveChan)
-	}
-	pq.lock.Unlock()
-}
-
-func (pq *PQueue) IsClosed() bool { return pq.closed.IsSet() }
 
 func (pq *PQueue) TimeoutItems(cutOffTs int64) apis.IResponse {
 	var total int64
@@ -302,11 +262,11 @@ func (pq *PQueue) Pop(lockTimeout, popWaitTimeout, limit int64, lock bool) apis.
 }
 
 const (
-	MSG_INFO_ID        = "Id"
-	MSG_INFO_LOCKED    = "Locked"
-	MSG_INFO_UNLOCK_TS = "UnlockTs"
-	MSG_INFO_POP_COUNT = "PopCount"
-	MSG_INFO_EXPIRE_TS = "ExpireTs"
+	MsgInfoID       = "Id"
+	MsgInfoLocked   = "Locked"
+	MsgInfoUnlockTs = "UnlockTs"
+	MsgInfoPopCount = "PopCount"
+	MsgInfoExpireTs = "ExpireTs"
 )
 
 func (pq *PQueue) GetMessageInfo(msgId string) apis.IResponse {
@@ -317,11 +277,11 @@ func (pq *PQueue) GetMessageInfo(msgId string) apis.IResponse {
 		return mpqerr.ERR_MSG_NOT_FOUND
 	}
 	data := map[string]interface{}{
-		MSG_INFO_ID:        msgId,
-		MSG_INFO_LOCKED:    msg.UnlockTs > 0,
-		MSG_INFO_UNLOCK_TS: msg.UnlockTs,
-		MSG_INFO_POP_COUNT: msg.PopCount,
-		MSG_INFO_EXPIRE_TS: msg.ExpireTs,
+		MsgInfoID:       msgId,
+		MsgInfoLocked:   msg.UnlockTs > 0,
+		MsgInfoUnlockTs: msg.UnlockTs,
+		MsgInfoPopCount: msg.PopCount,
+		MsgInfoExpireTs: msg.ExpireTs,
 	}
 	pq.lock.Unlock()
 	return resp.NewDictResponse("+MSGINFO", data)
@@ -340,7 +300,7 @@ func (pq *PQueue) DeleteLockedById(msgId string) apis.IResponse {
 		return mpqerr.ERR_MSG_NOT_LOCKED
 	}
 
-	pq.deleteMessage(msg.Serial)
+	pq.deleteMessage(msg)
 	pq.lockedMsgCnt--
 
 	return resp.OK
@@ -356,8 +316,40 @@ func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
 	if msg.UnlockTs > 0 {
 		return mpqerr.ERR_MSG_IS_LOCKED
 	}
-	pq.deleteMessage(msg.Serial)
+	pq.deleteMessage(msg)
 	return resp.OK
+}
+
+func (pq *PQueue) AddExistingMessage(msg *pmsg.MsgMeta) error {
+	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2msg)) >= pq.config.MaxMsgsInQueue {
+		return mpqerr.ERR_SIZE_EXCEEDED
+	}
+	nowTs := utils.Uts()
+	atomic.StoreInt64(&pq.config.LastPushTs, nowTs)
+
+	msg = &pmsg.MsgMeta{
+		StrId:         msg.StrId,
+		PayloadOffset: msg.PayloadOffset,
+		PayloadFileId: msg.PayloadFileId,
+
+		ExpireTs: nowTs + pq.config.MsgTtl,
+		UnlockTs: 0,
+	}
+
+	pq.lock.Lock()
+	pq.msgSerialNumber++
+	msg.Serial = pq.msgSerialNumber
+	pq.id2msg[msg.StrId] = msg
+	pq.lock.Unlock()
+	pq.metadb.AddMetadata(msg)
+
+	pq.lock.Lock()
+	pq.timeoutHeap.Push(msg)
+	pq.availMsgs.Add(msg)
+	pq.lock.Unlock()
+	signals.NewMessageNotify(pq.newMsgNotification)
+
+	return nil
 }
 
 func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.IResponse {
@@ -552,7 +544,7 @@ func (pq *PQueue) DeleteByReceipt(rcpt string) apis.IResponse {
 		return err
 	}
 	pq.lockedMsgCnt--
-	pq.deleteMessage(msg.Serial)
+	pq.deleteMessage(msg)
 	pq.lock.Unlock()
 	return resp.OK
 }
@@ -570,50 +562,11 @@ func (pq *PQueue) UnlockByReceipt(rcpt string) apis.IResponse {
 	return resp.OK
 }
 
-func (pq *PQueue) deleteMessage(sn uint64) bool {
-	if msg := pq.timeoutHeap.Remove(sn); msg != nil {
-		// Message marked with serial number 0 is considered no longer active.
-		msg.Serial = 0
-		delete(pq.id2msg, msg.StrId)
-		pq.metadb.DeleteMetadata(sn)
-		return true
-	}
-	return false
-}
-
-func (pq *PQueue) moveToPopLimitedQueue() {
-	log.Debug("%s: Starting pop limit loop", pq.desc.Name)
-	defer log.Debug("%s: Finishing pop limit loop", pq.desc.Name)
-
-	var msg *pmsg.MsgMeta
-	var ok bool
-
-	for pq.closed.IsUnset() {
-		select {
-		case msg, ok = <-pq.popLimitMoveChan:
-			if !ok {
-				return
-			}
-		case <-signals.QuitChan:
-			return
-		}
-
-		popLimitPq := pq.queueGetter(pq.config.PopLimitQueueName)
-		if popLimitPq == nil {
-			pq.config.PopLimitQueueName = ""
-			queue_info.SaveServiceConfig(pq.desc.ServiceId, pq.config)
-			break
-		}
-
-		// Make sure service is not closed while we are pushing messages into it.
-		popLimitPq.closed.Lock()
-		msgPayload, _ := pq.db.RetrievePayload(msg.PayloadFileId, msg.PayloadOffset)
-		popLimitPq.Push(msg.StrId,
-			string(msgPayload),
-			popLimitPq.config.MsgTtl,
-			popLimitPq.config.DeliveryDelay)
-		popLimitPq.closed.Unlock()
-	}
+func (pq *PQueue) deleteMessage(msg *pmsg.MsgMeta) {
+	pq.timeoutHeap.Remove(msg.Serial)
+	delete(pq.id2msg, msg.StrId)
+	pq.metadb.DeleteMetadata(msg.Serial)
+	msg.Serial = 0
 }
 
 // Attempts to return a message into the front of the queue.
@@ -624,12 +577,16 @@ func (pq *PQueue) returnToFront(msg *pmsg.MsgMeta) {
 	}
 	popLimit := pq.config.PopCountLimit
 	if popLimit > 0 && msg.PopCount >= popLimit {
-		if pq.config.PopLimitQueueName == "" {
-			pq.deleteMessage(msg.Serial)
-		} else {
-			pq.timeoutHeap.Remove(msg.Serial)
-			delete(pq.id2msg, msg.StrId)
-			pq.popLimitMoveChan <- msg
+		pq.timeoutHeap.Remove(msg.Serial)
+		delete(pq.id2msg, msg.StrId)
+		pq.metadb.DeleteMetadata(msg.Serial)
+
+		msg.Serial = 0
+		if pq.config.PopLimitQueueName != "" {
+			pq.deadMsgChan <- DeadMessage{
+				msg:    msg,
+				target: pq.config.PopLimitQueueName,
+			}
 		}
 	} else {
 		msg.UnlockTs = 0
@@ -644,7 +601,10 @@ func (pq *PQueue) returnToFront(msg *pmsg.MsgMeta) {
 }
 
 func (pq *PQueue) CheckTimeouts(ts int64) apis.IResponse {
-	return resp.NewIntResponse(pq.checkTimeouts(ts))
+	pq.lock.Lock()
+	r := resp.NewIntResponse(pq.checkTimeouts(ts))
+	pq.lock.Unlock()
+	return r
 }
 
 // Unlocks all items which exceeded their lock time.
@@ -663,7 +623,7 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 			}
 		} else if msg.ExpireTs < ts {
 			cntDel++
-			pq.deleteMessage(msg.Serial)
+			pq.deleteMessage(msg)
 		} else {
 			break
 		}
@@ -678,8 +638,37 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	return cntDel + cntRet
 }
 
-type msgArray []*pmsg.MsgMeta
+func (pq *PQueue) LoadMessages(msgs []*pmsg.MsgMeta) {
+	ts := utils.Uts()
+	log.Debug("Initializing queue: %s", pq.desc.Name)
+	pq.msgSerialNumber = 0
+	if len(msgs) > 0 {
+		pq.msgSerialNumber = msgs[len(msgs)-1].Serial
+	}
+	expired := uint64(0)
+	for _, msg := range msgs {
+		if msg.ExpireTs < ts {
+			expired++
+			continue
+		}
 
-func (m msgArray) Len() int           { return len(m) }
-func (m msgArray) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
-func (m msgArray) Less(i, j int) bool { return m[i].Serial < m[j].Serial }
+		// Message can get unlocked by this time, so check if it unlocked and place it to the right queue.
+		if msg.UnlockTs > 0 && msg.UnlockTs <= ts {
+			msg.UnlockTs = 0
+		}
+
+		pq.id2msg[msg.StrId] = msg
+		pq.timeoutHeap.Push(msg)
+
+		if msg.UnlockTs == 0 {
+			pq.availMsgs.Add(msg)
+		} else if msg.PopCount > 0 {
+			pq.lockedMsgCnt++
+		}
+
+	}
+
+	log.Debug("Total messages: %d", len(pq.id2msg))
+	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
+	log.Debug("Available messages: %d", pq.availMsgs.Size())
+}

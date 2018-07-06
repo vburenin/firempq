@@ -48,7 +48,7 @@ func SetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 
 	attrsLen := len(attrs)
 
-	params := &pqueue.PQueueParams{}
+	params := &pqueue.QueueParams{}
 
 	for i := 1; i < attrsLen; i++ {
 		a, ok := attrs[i]

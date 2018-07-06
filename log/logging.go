@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var Logger *zap.SugaredLogger
@@ -18,7 +19,26 @@ var Info = Logger.Infof
 var Debug = Logger.Debugf
 
 func InitLogging() {
-	l, _ := zap.NewProduction(zap.AddCallerSkip(1))
+	cfg := zap.Config{
+		Encoding:         "json",
+		Level:            zap.NewAtomicLevelAt(zapcore.DebugLevel),
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+		EncoderConfig: zapcore.EncoderConfig{
+			MessageKey: "message",
+
+			LevelKey:    "level",
+			EncodeLevel: zapcore.CapitalLevelEncoder,
+
+			TimeKey:    "time",
+			EncodeTime: zapcore.ISO8601TimeEncoder,
+
+			CallerKey:    "caller",
+			EncodeCaller: zapcore.ShortCallerEncoder,
+		},
+	}
+	l, _ := cfg.Build(zap.AddCallerSkip(1))
+
 	Logger = l.Sugar()
 
 	Fatal = Logger.Fatalf

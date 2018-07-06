@@ -22,7 +22,7 @@ import (
 func BenchMassPush() {
 	conf.ParseConfigParameters()
 	ctx := fctx.Background("1")
-	f := qmgr.NewServiceManager(ctx)
+	f := qmgr.NewQueueManager(ctx)
 	resp := f.DropService(ctx, "BenchTest")
 	if !resp.IsError() {
 		log.Info("BenchTest Queue exists alredy! Dropping...")
@@ -76,7 +76,7 @@ func BenchMassPush() {
 func BenchMassPushMultiQueue() {
 	conf.ParseConfigParameters()
 	ctx := fctx.Background("1")
-	f := qmgr.NewServiceManager(ctx)
+	f := qmgr.NewQueueManager(ctx)
 	resp1 := f.DropService(ctx, "BenchTest1")
 	resp2 := f.DropService(ctx, "BenchTest2")
 	resp3 := f.DropService(ctx, "BenchTest3")

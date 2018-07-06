@@ -1,16 +1,19 @@
 package pqueue
 
 import (
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
-
-	"strconv"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db/linear"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/queue_info"
@@ -52,15 +55,6 @@ func NewQueueGetterForTest() *QueueGetterForTest {
 func (qgt *QueueGetterForTest) Add(q *PQueue)                   { qgt.q[q.desc.Name] = q }
 func (qgt *QueueGetterForTest) queueGetter(name string) *PQueue { return qgt.q[name] }
 
-func CreateTestQueueWithName(db apis.DataStorage, qg *QueueGetterForTest, name string) *PQueue {
-	d := getDesc()
-	c := getConfig()
-	d.Name = name
-	q := NewPQueue(qg.queueGetter, db, d, c)
-	qg.Add(q)
-	return q
-}
-
 func WipeTestQueueData() {
 	err := os.RemoveAll("testdata/tempdb")
 	if err != nil {
@@ -85,10 +79,9 @@ func CreateSingleQueue(options ...string) (*PQueue, func()) {
 	if err != nil {
 		log.Fatal("could not create db: %s", err)
 	}
-	qg := NewQueueGetterForTest()
-	q := NewPQueue(qg.queueGetter, db, getDesc(), getConfig())
+	deadMsgs := make(chan DeadMessage, 16)
+	q := NewPQueue(db, getDesc(), deadMsgs, getConfig())
 	f := func() {
-		q.Close()
 		db.Close()
 		for _, v := range options {
 			if v == PostOptionWipe {
@@ -97,6 +90,36 @@ func CreateSingleQueue(options ...string) (*PQueue, func()) {
 		}
 	}
 	return q, f
+}
+
+func CreateQueueManager(options ...string) (*QueueManager, func()) {
+	ctx := fctx.Background("test")
+	log.InitLogging()
+	conf.UseDefaultsOnly()
+
+	for _, v := range options {
+		if v == PreOptionWipe {
+			WipeTestQueueData()
+		}
+	}
+
+	db, err := linear.NewFlatStorage("testdata/tempdb", 1024*1024, 1024*1024)
+	if err != nil {
+		log.Fatal("could not create db: %s", err)
+	}
+	conf.CFG.DatabasePath = "testdata/tempdb"
+	qm := NewQueueManager(ctx, db, conf.CFG)
+
+	f := func() {
+		qm.Close()
+		db.Close()
+		for _, v := range options {
+			if v == PostOptionWipe {
+				WipeTestQueueData()
+			}
+		}
+	}
+	return qm, f
 }
 
 func cmp(t *testing.T, a, b string) {
@@ -228,12 +251,37 @@ func TestPopWaitTimeout(t *testing.T) {
 	VerifyItems(a, items, 3, "d1", "1", "d2", "2", "d3", "3")
 }
 
+func updateCaller(q *PQueue) func() {
+	c := make(chan struct{})
+	var block sync.WaitGroup
+	block.Add(1)
+	go func() {
+		defer block.Done()
+		for {
+			q.Update()
+			time.Sleep(10 * time.Millisecond)
+			select {
+			case <-c:
+				return
+			default:
+
+			}
+		}
+	}()
+	return func() {
+		close(c)
+		block.Wait()
+	}
+}
+
 // Message delivery delay should be delayed at least for 0.1 seconds
 func TestDeliveryDelay(t *testing.T) {
 	a := assert.New(t)
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
-	q.StartUpdate()
+
+	updater := updateCaller(q)
+	defer updater()
 
 	q.Push("data1", "p1", 10000, 120)
 	startTs := time.Now()
@@ -249,8 +297,6 @@ func TestPushLotsOfMessages(t *testing.T) {
 	a := assert.New(t)
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
-
-	q.StartUpdate()
 
 	totalMsg := 10000
 
@@ -274,22 +320,30 @@ func TestPushLotsOfMessages(t *testing.T) {
 	a.Equal(uint64(0), q.TotalMessages())
 }
 
-/*
 // Push some messages and load them
 func TestMessageLoad(t *testing.T) {
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	a := assert.New(t)
-	q, closer := CreateSingleQueue(PostOptionWipe)
-	defer closer()
+	qm, closer := CreateQueueManager(PreOptionWipe)
 
-	q.StartUpdate()
+	ctx := fctx.Background("test")
+	qm.CreateQueue(ctx, "test-msg-load", getConfig())
 
+	q := qm.GetQueue("test-msg-load")
+	if !a.NotNil(q) {
+		return
+	}
+
+	q.Push("d0", "p", 100000, 0)
 	q.Push("d1", "p", 100000, 0)
 	q.Push("d2", "p", 100000, 0)
 	q.Push("d3", "p", 100000, 0)
 	q.Push("d4", "p", 100000, 0)
 	q.Push("d5", "p", 100000, 0)
 	q.Push("d6", "p", 100000, 0)
-	q.Push("d0", "p", 100000, 0)
 
 	// This messages should be removed as expired during reload.
 	VerifyOkResponse(a, q.Push("dd", "dd", 0, 0))
@@ -298,27 +352,80 @@ func TestMessageLoad(t *testing.T) {
 	VerifySingleItem(a, q.Pop(1000, 0, 1, true), "d0", "p")
 	a.Equal(uint64(8), q.TotalMessages())
 
-	q.Close()
+	closer()
 
-	So(q.IsClosed(), ShouldBeTrue)
+	qm, closer = CreateQueueManager(PostOptionWipe)
+	defer closer()
+	q = qm.GetQueue("test-msg-load")
+	if !a.NotNil(q) {
+		return
+	}
 
-	q := CreateTestQueue()
 	// 7 messages because one of them has expired during reload.
-	VerifyServiceSize(q, 7)
-	VerifySingleItem(q.Pop(0, 0, 1, false), "d1", "p")
-	VerifySingleItem(q.Pop(0, 0, 1, false), "d2", "p")
-	VerifySingleItem(q.Pop(0, 0, 1, false), "d3", "p")
-	VerifySingleItem(q.Pop(0, 0, 1, false), "d4", "p")
-	VerifySingleItem(q.Pop(0, 0, 1, false), "d5", "p")
-	VerifySingleItem(q.Pop(0, 0, 1, false), "d6", "p")
-	VerifyServiceSize(q, 1)
-	VerifyOkResponse(q.DeleteLockedById("d0"))
-	VerifyServiceSize(q, 0)
-	q.Clear()
+	a.Equal(uint64(7), q.TotalMessages())
 
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d1", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d2", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d3", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d4", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d5", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d6", "p")
+
+	a.Equal(uint64(1), q.TotalMessages())
+	VerifyOkResponse(a, q.DeleteLockedById("d0"))
+	a.Equal(uint64(0), q.TotalMessages())
 }
 
+// Queue status should be correct
+func TestStatus(t *testing.T) {
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
 
+	s, _ := q.GetCurrentStatus().(*resp.DictResponse)
+	status := s.GetDict()
+	a.EqualValues(100001, status[StatusQueueMaxSize])
+	a.EqualValues(100000, status[StatusQueueMsgTTL])
+	a.EqualValues(1, status[StatusQueueDeliveryDelay])
+	a.EqualValues(10000, status[StatusQueuePopLockTimeout])
+	a.EqualValues(4, status[StatusQueuePopCountLimit])
+	a.EqualValues(123, status[StatusQueueCreateTs])
+	a.EqualValues(12, status[StatusQueueLastPushTs])
+	a.EqualValues(13, status[StatusQueueLastPopTs])
+	a.EqualValues(0, status[StatusQueueTotalMsgs])
+	a.EqualValues(0, status[StatusQueueInFlightMsgs])
+	a.EqualValues(0, status[StatusQueueAvailableMsgs])
+}
+
+// Status for several messages in flight
+func TestStatusWithMessages(t *testing.T) {
+	a := assert.New(t)
+	q, closer := CreateSingleQueue(PostOptionWipe)
+	defer closer()
+
+	q.Push("d1", "p", 10000, 0)
+	q.Push("d2", "p", 10000, 0)
+	q.Push("d3", "p", 10000, 0)
+
+	VerifySingleItem(a, q.Pop(100000, 0, 1, true), "d1", "p")
+
+	s, _ := q.GetCurrentStatus().(*resp.DictResponse)
+	status := s.GetDict()
+	a.EqualValues(100001, status[StatusQueueMaxSize])
+	a.EqualValues(100000, status[StatusQueueMsgTTL])
+	a.EqualValues(1, status[StatusQueueDeliveryDelay])
+	a.EqualValues(10000, status[StatusQueuePopLockTimeout])
+	a.EqualValues(4, status[StatusQueuePopCountLimit])
+	a.EqualValues(123, status[StatusQueueCreateTs])
+	a.InDelta(utils.Uts(), status[StatusQueueLastPushTs], 100)
+	a.InDelta(utils.Uts(), status[StatusQueueLastPopTs], 100)
+
+	a.EqualValues(3, status[StatusQueueTotalMsgs])
+	a.EqualValues(1, status[StatusQueueInFlightMsgs])
+	a.EqualValues(2, status[StatusQueueAvailableMsgs])
+}
+
+/*
 func TestStatus(t *testing.T) {
 	Convey("Queue status should be correct", t, func() {
 		q := CreateNewTestQueue()
@@ -326,17 +433,17 @@ func TestStatus(t *testing.T) {
 		Convey("Empty status should be default", func() {
 			s, _ := q.GetCurrentStatus().(*resp.DictResponse)
 			status := s.GetDict()
-			So(status[PQ_STATUS_MAX_QUEUE_SIZE], ShouldEqual, 100001)
-			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
-			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
-			So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 10000)
-			So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 4)
-			So(status[PQ_STATUS_CREATE_TS], ShouldEqual, 123)
-			So(status[PQ_STATUS_LAST_PUSH_TS], ShouldEqual, 12)
-			So(status[PQ_STATUS_LAST_POP_TS], ShouldEqual, 13)
-			So(status[PQ_STATUS_TOTAL_MSGS], ShouldEqual, 0)
-			So(status[PQ_STATUS_IN_FLIGHT_MSG], ShouldEqual, 0)
-			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 0)
+			So(status[StatusQueueMaxSize], ShouldEqual, 100001)
+			So(status[StatusQueueMsgTTL], ShouldEqual, 100000)
+			So(status[StatusQueueDeliveryDelay], ShouldEqual, 1)
+			So(status[StatusQueuePopLockTimeout], ShouldEqual, 10000)
+			So(status[StatusQueuePopCountLimit], ShouldEqual, 4)
+			So(status[StatusQueueCreateTs], ShouldEqual, 123)
+			So(status[StatusQueueLastPushTs], ShouldEqual, 12)
+			So(status[StatusQueueLastPopTs], ShouldEqual, 13)
+			So(status[StatusQueueTotalMsgs], ShouldEqual, 0)
+			So(status[StatusQueueInFlightMsgs], ShouldEqual, 0)
+			So(status[StatusQueueAvailableMsgs], ShouldEqual, 0)
 
 			So(q.Info().ID, ShouldEqual, "1")
 		})
@@ -350,17 +457,17 @@ func TestStatus(t *testing.T) {
 
 			s, _ := q.GetCurrentStatus().(*resp.DictResponse)
 			status := s.GetDict()
-			So(status[PQ_STATUS_MAX_QUEUE_SIZE], ShouldEqual, 100001)
-			So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 100000)
-			So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 1)
-			So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 10000)
-			So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 4)
-			So(status[PQ_STATUS_CREATE_TS], ShouldBeLessThanOrEqualTo, utils.Uts())
-			So(status[PQ_STATUS_LAST_PUSH_TS], ShouldBeLessThanOrEqualTo, utils.Uts())
-			So(status[PQ_STATUS_LAST_POP_TS], ShouldBeLessThanOrEqualTo, utils.Uts())
-			So(status[PQ_STATUS_TOTAL_MSGS], ShouldEqual, 3)
-			So(status[PQ_STATUS_IN_FLIGHT_MSG], ShouldEqual, 1)
-			So(status[PQ_STATUS_AVAILABLE_MSGS], ShouldEqual, 2)
+			So(status[StatusQueueMaxSize], ShouldEqual, 100001)
+			So(status[StatusQueueMsgTTL], ShouldEqual, 100000)
+			So(status[StatusQueueDeliveryDelay], ShouldEqual, 1)
+			So(status[StatusQueuePopLockTimeout], ShouldEqual, 10000)
+			So(status[StatusQueuePopCountLimit], ShouldEqual, 4)
+			So(status[StatusQueueCreateTs], ShouldBeLessThanOrEqualTo, utils.Uts())
+			So(status[StatusQueueLastPushTs], ShouldBeLessThanOrEqualTo, utils.Uts())
+			So(status[StatusQueueLastPopTs], ShouldBeLessThanOrEqualTo, utils.Uts())
+			So(status[StatusQueueTotalMsgs], ShouldEqual, 3)
+			So(status[StatusQueueInFlightMsgs], ShouldEqual, 1)
+			So(status[StatusQueueAvailableMsgs], ShouldEqual, 2)
 		})
 
 	})
@@ -375,7 +482,7 @@ func TestSetParams(t *testing.T) {
 		q := CreateNewTestQueue()
 		defer q.Close()
 
-		p := &PQueueParams{
+		p := &QueueParams{
 			MsgTTL:         int64Ptr(10000),
 			MaxMsgSize:     int64Ptr(256000),
 			MaxMsgsInQueue: int64Ptr(20000),
@@ -388,13 +495,13 @@ func TestSetParams(t *testing.T) {
 
 		s, _ := q.GetCurrentStatus().(*resp.DictResponse)
 		status := s.GetDict()
-		So(status[PQ_STATUS_MSG_TTL], ShouldEqual, 10000)
-		So(status[PQ_STATUS_MAX_MSG_SIZE], ShouldEqual, 256000)
-		So(status[PQ_STATUS_MAX_QUEUE_SIZE], ShouldEqual, 20000)
-		So(status[PQ_STATUS_DELIVERY_DELAY], ShouldEqual, 30000)
-		So(status[PQ_STATUS_POP_COUNT_LIMIT], ShouldEqual, 40000)
-		So(status[PQ_STATUS_POP_LOCK_TIMEOUT], ShouldEqual, 50000)
-		So(status[PQ_STATUS_FAIL_QUEUE], ShouldEqual, "")
+		So(status[StatusQueueMsgTTL], ShouldEqual, 10000)
+		So(status[StatusQueueMaxMsgSize], ShouldEqual, 256000)
+		So(status[StatusQueueMaxSize], ShouldEqual, 20000)
+		So(status[StatusQueueDeliveryDelay], ShouldEqual, 30000)
+		So(status[StatusQueuePopCountLimit], ShouldEqual, 40000)
+		So(status[StatusQueuePopLockTimeout], ShouldEqual, 50000)
+		So(status[StatusQueueDeadMsgQueue], ShouldEqual, "")
 	})
 }
 
@@ -413,19 +520,19 @@ func TestGetMessageInfo(t *testing.T) {
 		msgInfo1 := m1.GetDict()
 		msgInfo2 := m2.GetDict()
 
-		So(msgInfo1[MSG_INFO_ID], ShouldEqual, "d1")
-		So(msgInfo1[MSG_INFO_LOCKED], ShouldEqual, true)
-		So(msgInfo1[MSG_INFO_UNLOCK_TS], ShouldBeGreaterThan, utils.Uts())
-		So(msgInfo1[MSG_INFO_POP_COUNT], ShouldEqual, 0)
+		So(msgInfo1[MsgInfoID], ShouldEqual, "d1")
+		So(msgInfo1[MsgInfoLocked], ShouldEqual, true)
+		So(msgInfo1[MsgInfoUnlockTs], ShouldBeGreaterThan, utils.Uts())
+		So(msgInfo1[MsgInfoPopCount], ShouldEqual, 0)
 		So(msgInfo1[MSG_INFO_PRIORITY], ShouldEqual, 9)
-		So(msgInfo1[MSG_INFO_EXPIRE_TS], ShouldBeGreaterThan, utils.Uts())
+		So(msgInfo1[MsgInfoExpireTs], ShouldBeGreaterThan, utils.Uts())
 
-		So(msgInfo2[MSG_INFO_ID], ShouldEqual, "d2")
-		So(msgInfo2[MSG_INFO_LOCKED], ShouldEqual, false)
-		So(msgInfo2[MSG_INFO_UNLOCK_TS], ShouldBeLessThanOrEqualTo, utils.Uts())
-		So(msgInfo2[MSG_INFO_POP_COUNT], ShouldEqual, 0)
+		So(msgInfo2[MsgInfoID], ShouldEqual, "d2")
+		So(msgInfo2[MsgInfoLocked], ShouldEqual, false)
+		So(msgInfo2[MsgInfoUnlockTs], ShouldBeLessThanOrEqualTo, utils.Uts())
+		So(msgInfo2[MsgInfoPopCount], ShouldEqual, 0)
 		So(msgInfo2[MSG_INFO_PRIORITY], ShouldEqual, 11)
-		So(msgInfo2[MSG_INFO_EXPIRE_TS], ShouldBeGreaterThan, utils.Uts())
+		So(msgInfo2[MsgInfoExpireTs], ShouldBeGreaterThan, utils.Uts())
 
 	})
 }
@@ -582,7 +689,7 @@ func TestSizeLimit(t *testing.T) {
 	Convey("Fourth element should fail with size limit error", t, func() {
 		q := CreateNewTestQueue()
 		defer q.Close()
-		p := &PQueueParams{
+		p := &QueueParams{
 			MsgTTL:         int64Ptr(10000),
 			MaxMsgSize:     int64Ptr(256000),
 			MaxMsgsInQueue: int64Ptr(3),
@@ -610,7 +717,7 @@ func TestMessagesMovedToAnotherQueue(t *testing.T) {
 		fsl := NewFakeSvcLoader()
 		q1 := CreateTestQueueWithName(fsl, "q1")
 		failQueue := CreateTestQueueWithName(fsl, "fq")
-		p := &PQueueParams{
+		p := &QueueParams{
 			MsgTTL:         int64Ptr(10000),
 			MaxMsgSize:     int64Ptr(256000),
 			MaxMsgsInQueue: int64Ptr(100000),

@@ -504,7 +504,7 @@ func (ctx *ConnScope) SetParamValue(params []string) apis.IResponse {
 		return mpqerr.ERR_CMD_PARAM_NOT_PROVIDED
 	}
 
-	pqParams := &PQueueParams{}
+	pqParams := &QueueParams{}
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -527,8 +527,8 @@ func (ctx *ConnScope) SetParamValue(params []string) apis.IResponse {
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
 			pqParams.PopLockTimeout = &lockTimeout
 		case CPRM_FAIL_QUEUE:
-			params, pqParams.FailQueue, err = mpqproto.ParseItemId(params)
-			pqParams.FailQueue = failQueue
+			params, *pqParams.FailQueue, err = mpqproto.ParseItemId(params)
+			pqParams.FailQueue = &failQueue
 		default:
 			return mpqerr.UnknownParam(params[0])
 		}
