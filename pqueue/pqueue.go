@@ -9,6 +9,7 @@ import (
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
@@ -621,14 +622,20 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	return cntDel + cntRet
 }
 
-func (pq *PQueue) LoadMessages(msgs []*pmsg.MsgMeta) {
+func (pq *PQueue) LoadMessages(ctx *fctx.Context, msgs []*pmsg.MsgMeta) {
+	ctx = fctx.WithParent(ctx, pq.desc.Name)
 	ts := utils.Uts()
-	log.Debug("Initializing queue: %s", pq.desc.Name)
+	ctx.Debug("initializing queue...")
 	pq.msgSerialNumber = 0
 	if len(msgs) > 0 {
 		pq.msgSerialNumber = msgs[len(msgs)-1].Serial
 	}
 	expired := uint64(0)
+
+	preallocateSize := int(float64(len(msgs)) * 1.3)
+	pq.id2msg = make(map[string]*pmsg.MsgMeta, preallocateSize)
+	pq.timeoutHeap = SizedTimeoutHeap(preallocateSize)
+
 	for _, msg := range msgs {
 		if msg.ExpireTs < ts {
 			expired++
@@ -651,7 +658,7 @@ func (pq *PQueue) LoadMessages(msgs []*pmsg.MsgMeta) {
 
 	}
 
-	log.Debug("Total messages: %d", len(pq.id2msg))
-	log.Debug("Locked messages: %d", pq.lockedMsgCnt)
-	log.Debug("Available messages: %d", pq.availMsgs.Size())
+	ctx.Debugf("total messages: %d", len(pq.id2msg))
+	ctx.Debugf("locked messages: %d", pq.lockedMsgCnt)
+	ctx.Debugf("available messages: %d", pq.availMsgs.Size())
 }

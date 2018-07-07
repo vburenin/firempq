@@ -23,6 +23,13 @@ type TimeoutHeap struct {
 	index map[uint64]int
 }
 
+func SizedTimeoutHeap(size int) *TimeoutHeap {
+	return &TimeoutHeap{
+		data:  make([]*pmsg.MsgMeta, 0, size),
+		index: make(map[uint64]int, size),
+	}
+}
+
 func NewTimeoutHeap() *TimeoutHeap {
 	return &TimeoutHeap{
 		data:  make([]*pmsg.MsgMeta, 0, 4096),

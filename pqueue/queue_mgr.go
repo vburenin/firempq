@@ -15,6 +15,7 @@ import (
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pmsg"
 	"github.com/vburenin/firempq/queue_info"
+	"github.com/vburenin/nsync"
 )
 
 type DeadMessage struct {
@@ -135,14 +136,16 @@ func (qm *QueueManager) loadAllServices(ctx *fctx.Context) {
 	if err != nil {
 		ctx.Fatalf("Failed to restore queues state: %s", err)
 	}
-
+	cwg := nsync.NewControlWaitGroup(8)
 	for _, queue := range qm.queues {
+		q := queue
 		data := queuesData[queue.Description().ExportId]
 		if data == nil {
-			ctx.Fatalf("queue has disappeared: %s", queue.Description().Name)
+			ctx.Fatalf("queue has disappeared: %s", q.Description().Name)
 		}
-		queue.LoadMessages(data.Messages())
+		cwg.Do(func() { q.LoadMessages(ctx, data.Messages()) })
 	}
+	cwg.Wait()
 }
 
 // CreateService creates a service of the specified type.
