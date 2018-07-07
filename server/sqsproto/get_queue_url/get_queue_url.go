@@ -4,7 +4,7 @@ import (
 	"encoding/xml"
 	"net/http"
 
-	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
@@ -20,7 +20,7 @@ func (r *GetQueueUrlResult) XmlDocument() string                  { return sqs_r
 func (r *GetQueueUrlResult) HttpCode() int                        { return http.StatusOK }
 func (r *GetQueueUrlResult) BatchResult(docId string) interface{} { return nil }
 
-func GetQueueUrl(svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func GetQueueUrl(svcMgr *pqueue.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	queue := svcMgr.GetQueue(sqsQuery.QueueName)
 	if queue == nil {
 		return sqserr.QueueDoesNotExist()

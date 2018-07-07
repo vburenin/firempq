@@ -412,9 +412,10 @@ func findLatestIds(files []os.FileInfo) (metaID, payloadID int64) {
 func sortMetaFileIds(files []os.FileInfo) []int64 {
 	var metafileIDs []int64
 	for _, f := range files {
-		if f.IsDir() {
+		if f.IsDir() || f.Size() == 0 {
 			continue
 		}
+
 		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
 		if len(data) > 0 && len(data[0]) == 3 {
 			db := data[0][1]

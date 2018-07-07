@@ -222,4 +222,5 @@ func (qm *QueueManager) GetQueue(name string) *PQueue {
 func (qm *QueueManager) Close() {
 	close(qm.expireLoopBreaker)
 	close(qm.deadMsgs)
+	qm.wg.Wait()
 }

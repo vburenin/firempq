@@ -13,29 +13,25 @@ import (
 	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
-	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/snsproto"
 	"github.com/vburenin/firempq/server/sqsproto"
 	"github.com/vburenin/firempq/signals"
 	"gopkg.in/tylerb/graceful.v1"
 )
 
-const (
-	SimpleServerType = "simple"
-)
-
 type QueueOpFunc func(req []string) error
 
 type ConnectionServer struct {
-	serviceManager *qmgr.QueueManager
-	signalChan     chan os.Signal
-	waitGroup      sync.WaitGroup
+	qmgr       *pqueue.QueueManager
+	signalChan chan os.Signal
+	waitGroup  sync.WaitGroup
 }
 
 func NewServer(ctx *fctx.Context) *ConnectionServer {
 	return &ConnectionServer{
-		serviceManager: qmgr.NewQueueManager(ctx, db.DatabaseInstance()),
-		signalChan:     make(chan os.Signal, 1),
+		qmgr:       pqueue.NewQueueManager(ctx, db.DatabaseInstance(), conf.CFG),
+		signalChan: make(chan os.Signal, 1),
 	}
 }
 
@@ -48,7 +44,7 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 
 			mux := http.NewServeMux()
 			mux.Handle("/", &sqsproto.SQSRequestHandler{
-				ServiceManager: cs.serviceManager,
+				ServiceManager: cs.qmgr,
 			})
 			graceful.Run(conf.CFG.SQSServerInterface, time.Second*10, mux)
 
@@ -66,7 +62,7 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 			mux := http.NewServeMux()
 
 			mux.Handle("/", &snsproto.SNSRequestHandler{
-				ServiceManager: cs.serviceManager,
+				ServiceManager: cs.qmgr,
 			})
 			graceful.Run(conf.CFG.SNSServerInterface, time.Second*10, mux)
 		}()
@@ -128,9 +124,10 @@ func (cs *ConnectionServer) Start() {
 
 func (cs *ConnectionServer) Shutdown() {
 	log.Info("Closing queues...")
-	cs.serviceManager.Close()
+	cs.qmgr.Close()
+	log.Info("Saving not saved data...")
 	db.DatabaseInstance().Close()
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(time.Second)
 	log.Info("Server stopped.")
 }
 
@@ -151,8 +148,8 @@ func (cs *ConnectionServer) Stop() {
 
 func (cs *ConnectionServer) handleConnection(conn net.Conn) {
 	cs.waitGroup.Add(1)
-	session_handler := NewSessionHandler(conn, cs.serviceManager)
-	session_handler.DispatchConn()
+	sh := NewSessionHandler(conn, cs.qmgr)
+	sh.DispatchConn()
 	cs.waitGroup.Done()
 	conn.Close()
 }

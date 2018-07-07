@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/snsproto/create_topic"
 	"github.com/vburenin/firempq/server/snsproto/list_topics"
 	"github.com/vburenin/firempq/server/snsproto/sns_query"
@@ -14,10 +14,10 @@ import (
 )
 
 type SNSRequestHandler struct {
-	ServiceManager *qmgr.QueueManager
+	ServiceManager *pqueue.QueueManager
 }
 
-func (self *SNSRequestHandler) dispatchSNSQuery(r *http.Request) sns_response.SNSResponse {
+func (rh *SNSRequestHandler) dispatchSNSQuery(r *http.Request) sns_response.SNSResponse {
 	q, err := sns_query.ParseSNSQuery(r)
 	if err != nil {
 		return snserr.MalformedRequestError()
@@ -32,9 +32,9 @@ func (self *SNSRequestHandler) dispatchSNSQuery(r *http.Request) sns_response.SN
 	return nil
 }
 
-func (self *SNSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (rh *SNSRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	resp := self.dispatchSNSQuery(r)
+	resp := rh.dispatchSNSQuery(r)
 	if resp == nil {
 		return
 	}

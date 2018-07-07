@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 )
@@ -16,11 +16,11 @@ type ListQueuesResponse struct {
 	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *ListQueuesResponse) HttpCode() int                        { return http.StatusOK }
-func (self *ListQueuesResponse) XmlDocument() string                  { return sqs_response.EncodeXml(self) }
-func (self *ListQueuesResponse) BatchResult(docId string) interface{} { return nil }
+func (lqr *ListQueuesResponse) HttpCode() int                        { return http.StatusOK }
+func (lqr *ListQueuesResponse) XmlDocument() string                  { return sqs_response.EncodeXml(lqr) }
+func (lqr *ListQueuesResponse) BatchResult(docId string) interface{} { return nil }
 
-func ListQueues(svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func ListQueues(svcMgr *pqueue.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	nameList := svcMgr.BuildServiceNameList(sqsQuery.QueueNamePrefix)
 	sort.Strings(nameList)
 

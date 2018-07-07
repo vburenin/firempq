@@ -8,6 +8,7 @@ import (
 
 	"path/filepath"
 
+	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/ferr"
 )
 
@@ -18,17 +19,18 @@ type MetadataIterator struct {
 	reader      *bufio.Reader
 	data        []byte
 	valid       bool
+	ctx         *fctx.Context
 }
 
-func NewIterator(dbPath string) (*MetadataIterator, error) {
+func NewIterator(ctx *fctx.Context, dbPath string) (*MetadataIterator, error) {
 	files, err := ioutil.ReadDir(dbPath)
 	if err != nil {
 		return nil, ferr.Wrapf(err, "could not get database content")
 	}
-	return NewMetadataIterator(dbPath, sortMetaFileIds(files))
+	return NewMetadataIterator(ctx, dbPath, sortMetaFileIds(files))
 }
 
-func NewMetadataIterator(dbPath string, metaFileIDs []int64) (*MetadataIterator, error) {
+func NewMetadataIterator(ctx *fctx.Context, dbPath string, metaFileIDs []int64) (*MetadataIterator, error) {
 	it := &MetadataIterator{
 		metafileIDs: metaFileIDs,
 		dbPath:      dbPath,
@@ -36,6 +38,7 @@ func NewMetadataIterator(dbPath string, metaFileIDs []int64) (*MetadataIterator,
 		reader:      nil,
 		data:        nil,
 		valid:       true,
+		ctx:         ctx,
 	}
 	err := it.nextReader()
 	if err != nil {
@@ -55,22 +58,24 @@ func (it *MetadataIterator) next() error {
 	if it.reader == nil {
 		return io.EOF
 	}
+
+loop:
 	sb, err := it.reader.ReadByte()
 	if err == io.EOF {
 		if err := it.nextReader(); err != nil {
 			return err
 		}
-		sb, err = it.reader.ReadByte()
+		goto loop
 	}
 	if err != nil {
-		return err
+		return ferr.Wrapf(err, "could not read element header")
 	}
 	size := int(sb)
 
 	it.data = make([]byte, size)
 
 	if _, err := io.ReadAtLeast(it.reader, it.data, size); err != nil {
-		return err
+		return ferr.Wrapf(err, "could not read metadata body")
 	}
 	return nil
 }
@@ -98,9 +103,11 @@ func (it *MetadataIterator) nextReader() error {
 	}
 
 	fn := filepath.Join(it.dbPath, MakeMetaFileName(it.metafileIDs[0]))
+	it.ctx.Debugf("reading metadata from: %s", fn)
+
 	f, err := os.Open(fn)
 	if err != nil {
-		return ferr.Wrapf(err, "Failed to open database file: %s", fn)
+		return ferr.Wrapf(err, "failed to open database file: %s", fn)
 	}
 
 	if it.openedFile != nil {

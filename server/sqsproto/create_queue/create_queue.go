@@ -8,7 +8,6 @@ import (
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/pqueue"
-	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
@@ -163,7 +162,7 @@ const (
 )
 
 func CheckAvailableQueues(
-	svcMgr *qmgr.QueueManager,
+	svcMgr *pqueue.QueueManager,
 	attr *QueueAttributes,
 	sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 
@@ -193,7 +192,7 @@ func CheckAvailableQueues(
 	return nil
 }
 
-func CreateQueue(ctx *fctx.Context, svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func CreateQueue(ctx *fctx.Context, svcMgr *pqueue.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	queueAttributes, parseErr := ParseCreateQueueAttributes(sqsQuery)
 	if parseErr != nil {
 		return parseErr

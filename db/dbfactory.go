@@ -22,7 +22,7 @@ func SetDatabase(ds apis.DataStorage) {
 }
 
 func NewIterator(ctx *fctx.Context, dbPath string) apis.ItemIterator {
-	iter, err := linear.NewIterator(dbPath)
+	iter, err := linear.NewIterator(ctx, dbPath)
 	if err != nil {
 		ctx.Fatalf("Failed to create data iteration object: %s", err)
 	}

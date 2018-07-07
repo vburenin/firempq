@@ -8,7 +8,6 @@ import (
 
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/pqueue"
-	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/server/sqsproto/add_permission"
 	"github.com/vburenin/firempq/server/sqsproto/change_message_visibility"
 	"github.com/vburenin/firempq/server/sqsproto/change_message_visibility_batch"
@@ -31,7 +30,7 @@ import (
 )
 
 type SQSRequestHandler struct {
-	ServiceManager *qmgr.QueueManager
+	ServiceManager *pqueue.QueueManager
 }
 
 func ParseQueueName(urlPath string) (string, error) {
