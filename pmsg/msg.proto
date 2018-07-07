@@ -5,8 +5,8 @@ message MsgMeta {
     uint64 serial = 1;
     string str_id = 2;
     int64 pop_count = 3;
-	int64 expire_ts = 4;
-	int64 unlock_ts = 5;
+    int64 expire_ts = 4;
+    int64 unlock_ts = 5;
 
     int64 payload_file_id = 6;
     int64 payload_offset = 7;
