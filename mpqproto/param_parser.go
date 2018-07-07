@@ -49,10 +49,10 @@ func ParseUserItemId(params []string) ([]string, string, *mpqerr.ErrorResponse) 
 		if ValidateUserItemId(params[1]) {
 			return params[2:], params[1], nil
 		} else {
-			return nil, "", mpqerr.ERR_USER_ID_IS_WRONG
+			return nil, "", mpqerr.ErrInvalidUserID
 		}
 	}
-	return nil, "", mpqerr.ERR_USER_ID_IS_WRONG
+	return nil, "", mpqerr.ErrInvalidUserID
 }
 
 // ParseItemId parses item id that can use all characters.
@@ -61,10 +61,10 @@ func ParseItemId(params []string) ([]string, string, *mpqerr.ErrorResponse) {
 		if ValidateItemId(params[1]) {
 			return params[2:], params[1], nil
 		} else {
-			return nil, "", mpqerr.ERR_ID_IS_WRONG
+			return nil, "", mpqerr.ErrInvalidID
 		}
 	}
-	return nil, "", mpqerr.ERR_ID_IS_WRONG
+	return nil, "", mpqerr.ErrInvalidID
 }
 
 func ParseServiceType(params []string) ([]string, string, *mpqerr.ErrorResponse) {

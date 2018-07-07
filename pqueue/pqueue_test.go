@@ -484,7 +484,7 @@ func TestGetMessageInfo(t *testing.T) {
 	q.Push("d1", "p", 10000, 1000)
 	q.Push("d2", "p", 10000, 0)
 
-	a.Equal(mpqerr.ERR_MSG_NOT_FOUND, q.GetMessageInfo("d3"))
+	a.Equal(mpqerr.ErrMsgNotFound, q.GetMessageInfo("d3"))
 
 	m1, _ := q.GetMessageInfo("d1").(*resp.DictResponse)
 	m2, _ := q.GetMessageInfo("d2").(*resp.DictResponse)
@@ -512,8 +512,8 @@ func TestUnlockErrors(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 	q.Push("d1", "p", 10000, 0)
-	a.Equal(mpqerr.ERR_MSG_NOT_LOCKED, q.UnlockMessageById("d1"))
-	a.Equal(mpqerr.ERR_MSG_NOT_FOUND, q.UnlockMessageById("d2"))
+	a.Equal(mpqerr.ErrMsgNotLocked, q.UnlockMessageById("d1"))
+	a.Equal(mpqerr.ErrMsgNotFound, q.UnlockMessageById("d2"))
 
 }
 
@@ -524,8 +524,8 @@ func TestDeleteMessageErrors(t *testing.T) {
 	defer closer()
 
 	q.Push("d1", "p", 10000, 100)
-	a.Equal(mpqerr.ERR_MSG_IS_LOCKED, q.DeleteById("d1"))
-	a.Equal(mpqerr.ERR_MSG_NOT_FOUND, q.DeleteById("d2"))
+	a.Equal(mpqerr.ErrMsgLocked, q.DeleteById("d1"))
+	a.Equal(mpqerr.ErrMsgNotFound, q.DeleteById("d2"))
 
 }
 
@@ -534,7 +534,7 @@ func TestPushError(t *testing.T) {
 	defer closer()
 	q.Push("d1", "p", 10000, 100)
 
-	assert.Equal(t, mpqerr.ERR_ITEM_ALREADY_EXISTS, q.Push("d1", "p", 10000, 100))
+	assert.Equal(t, mpqerr.ErrMsgAlreadyExists, q.Push("d1", "p", 10000, 100))
 }
 
 // One item should expire
@@ -619,7 +619,7 @@ func TestUnlockByReceipt(t *testing.T) {
 	// Unlocking message using the same receipt should succeed.
 	a.Equal(resp.OK, q.UnlockByReceipt(rcpt))
 	q.Pop(100000, 0, 2, true)
-	a.Equal(mpqerr.ERR_RECEIPT_EXPIRED, q.UnlockByReceipt(rcpt))
+	a.Equal(mpqerr.ErrExpiredRcpt, q.UnlockByReceipt(rcpt))
 }
 
 // Delete message by its receipt.
@@ -637,7 +637,7 @@ func TestDeleteByReceipt(t *testing.T) {
 	a.True(len(rcpt) > 2)
 	VerifyOkResponse(a, q.DeleteByReceipt(rcpt))
 	a.EqualValues(0, q.TotalMessages())
-	a.Equal(mpqerr.ERR_RECEIPT_EXPIRED, q.UnlockByReceipt(rcpt))
+	a.Equal(mpqerr.ErrExpiredRcpt, q.UnlockByReceipt(rcpt))
 
 }
 
@@ -675,7 +675,7 @@ func TestSizeLimit(t *testing.T) {
 	VerifyOkResponse(a, q.Push("1", "p", 10000, 0))
 	VerifyOkResponse(a, q.Push("2", "p", 10000, 0))
 	VerifyOkResponse(a, q.Push("3", "p", 10000, 0))
-	a.Equal(mpqerr.ERR_SIZE_EXCEEDED, q.Push("4", "p", 10000, 0))
+	a.Equal(mpqerr.ErrSizeExceeded, q.Push("4", "p", 10000, 0))
 	a.EqualValues(3, q.TotalMessages())
 }
 

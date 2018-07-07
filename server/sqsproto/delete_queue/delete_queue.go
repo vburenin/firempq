@@ -6,7 +6,7 @@ import (
 
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/mpqerr"
-	"github.com/vburenin/firempq/qmgr"
+	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
@@ -23,9 +23,9 @@ func (dqr *DeleteQueueResponse) XmlDocument() string {
 }
 func (dqr *DeleteQueueResponse) BatchResult(docId string) interface{} { return nil }
 
-func DeleteQueue(ctx *fctx.Context, svcMgr *qmgr.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
+func DeleteQueue(ctx *fctx.Context, svcMgr *pqueue.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
 	resp := svcMgr.DropService(ctx, sqsQuery.QueueName)
-	if resp == mpqerr.ERR_NO_SVC {
+	if resp == mpqerr.ErrNoQueue {
 		return sqserr.QueueDoesNotExist()
 	}
 	return &DeleteQueueResponse{

@@ -15,7 +15,6 @@ import (
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pqueue"
-	"github.com/vburenin/firempq/qmgr"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
 )
@@ -42,12 +41,12 @@ type SessionHandler struct {
 	scope      *pqueue.ConnScope
 	stopChan   chan struct{}
 	tokenizer  *mpqproto.Tokenizer
-	qmgr       *qmgr.QueueManager
+	qmgr       *pqueue.QueueManager
 	connWriter *bufio.Writer
 	ctx        *fctx.Context
 }
 
-func NewSessionHandler(conn net.Conn, services *qmgr.QueueManager) *SessionHandler {
+func NewSessionHandler(conn net.Conn, services *pqueue.QueueManager) *SessionHandler {
 	sh := &SessionHandler{
 		conn:       conn,
 		tokenizer:  mpqproto.NewTokenizer(),
@@ -67,7 +66,7 @@ func (s *SessionHandler) QuitListener() {
 		select {
 		case <-signals.QuitChan:
 			s.Stop()
-			s.WriteResponse(mpqerr.ERR_CONN_CLOSING)
+			s.WriteResponse(mpqerr.ErrConnClosing)
 			if s.scope != nil {
 				s.scope.Finish()
 			}
@@ -169,7 +168,7 @@ func (s *SessionHandler) createServiceHandler(tokens []string) apis.IResponse {
 	}
 
 	if !mpqproto.ValidateItemId(svcName) {
-		return mpqerr.ERR_ID_IS_WRONG
+		return mpqerr.ErrInvalidID
 	}
 
 	q := s.qmgr.GetQueue(svcName)
@@ -206,7 +205,7 @@ func (s *SessionHandler) ctxHandler(tokens []string) apis.IResponse {
 	svcName := tokens[0]
 	queue := s.qmgr.GetQueue(svcName)
 	if queue == nil {
-		return mpqerr.ERR_NO_SVC
+		return mpqerr.ErrNoQueue
 	}
 	s.scope = queue.ConnScope(s)
 	return resp.OK
@@ -220,7 +219,7 @@ func (s *SessionHandler) Stop() {
 // Stops the main loop on QUIT.
 func (s *SessionHandler) quitHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return mpqerr.ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ErrCmdNoParamsAllowed
 	}
 	s.Stop()
 	return resp.OK
@@ -242,7 +241,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) apis.IResponse {
 // Ping responder.
 func pingHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return mpqerr.ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ErrCmdNoParamsAllowed
 	}
 	return resp.PONG
 }
@@ -250,7 +249,7 @@ func pingHandler(tokens []string) apis.IResponse {
 // Returns current server unix time stamp in milliseconds.
 func tsHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return mpqerr.ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ErrCmdNoParamsAllowed
 	}
 	return resp.NewIntResponse(utils.Uts())
 }
@@ -270,7 +269,7 @@ func logLevelHandler(tokens []string) apis.IResponse {
 
 func panicHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return mpqerr.ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ErrCmdNoParamsAllowed
 	}
 
 	log.Critical("Panic requested!")
@@ -280,7 +279,7 @@ func panicHandler(tokens []string) apis.IResponse {
 
 func dbstatHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
-		return mpqerr.ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ErrCmdNoParamsAllowed
 	}
 	db := db.DatabaseInstance()
 	return resp.NewDictResponse("+DBSTATS", db.GetStats())

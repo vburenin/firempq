@@ -76,7 +76,7 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 				state = STATE_PARSE_TEXT_TOKEN
 				result = append(result, enc.UnsafeBytesToString(token))
 				if len(result) > MAX_TOKENS_PER_MSG {
-					return nil, mpqerr.ERR_TOK_TOO_MANY_TOKENS
+					return nil, mpqerr.ErrTokTooManyTokens
 				}
 				token = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
 			}
@@ -92,14 +92,14 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 			if token[0] == '$' {
 				binTokenLen, err = strconv.Atoi(enc.UnsafeBytesToString(token[1:]))
 				if err == nil && (binTokenLen < 1 || binTokenLen > MAX_BINARY_TOKEN_LEN) {
-					return nil, mpqerr.ERR_TOK_PARSING_ERROR
+					return nil, mpqerr.ErrTokInvalid
 				}
 				state = STATE_PARSE_BINARY_PAYLOAD
 				token = make([]byte, 0, binTokenLen)
 			} else {
 				result = append(result, enc.UnsafeBytesToString(token))
 				if len(result) > MAX_TOKENS_PER_MSG {
-					return nil, mpqerr.ERR_TOK_TOO_MANY_TOKENS
+					return nil, mpqerr.ErrTokTooManyTokens
 				}
 				if val == SYMBOL_CR {
 					return result, nil
@@ -112,7 +112,7 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 			}
 		}
 		if len(token) > MAX_TEXT_TOKEN_LEN {
-			return nil, mpqerr.ERR_TOK_TOKEN_TOO_LONG
+			return nil, mpqerr.ErrTokTooLong
 		}
 	}
 }

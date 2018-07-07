@@ -261,7 +261,7 @@ func (pq *PQueue) GetMessageInfo(msgId string) apis.IResponse {
 	msg, ok := pq.id2msg[msgId]
 	if !ok {
 		pq.lock.Unlock()
-		return mpqerr.ERR_MSG_NOT_FOUND
+		return mpqerr.ErrMsgNotFound
 	}
 	data := map[string]interface{}{
 		MsgInfoID:       msgId,
@@ -280,11 +280,11 @@ func (pq *PQueue) DeleteLockedById(msgId string) apis.IResponse {
 	msg, ok := pq.id2msg[msgId]
 
 	if !ok {
-		return mpqerr.ERR_MSG_NOT_FOUND
+		return mpqerr.ErrMsgNotFound
 	}
 
 	if msg.UnlockTs == 0 {
-		return mpqerr.ERR_MSG_NOT_LOCKED
+		return mpqerr.ErrMsgNotLocked
 	}
 
 	pq.deleteMessage(msg)
@@ -298,10 +298,10 @@ func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
 	defer pq.lock.Unlock()
 	msg, ok := pq.id2msg[msgId]
 	if !ok {
-		return mpqerr.ERR_MSG_NOT_FOUND
+		return mpqerr.ErrMsgNotFound
 	}
 	if msg.UnlockTs > 0 {
-		return mpqerr.ERR_MSG_IS_LOCKED
+		return mpqerr.ErrMsgLocked
 	}
 	pq.deleteMessage(msg)
 	return resp.OK
@@ -309,7 +309,7 @@ func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
 
 func (pq *PQueue) AddExistingMessage(msg *pmsg.MsgMeta) error {
 	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2msg)) >= pq.config.MaxMsgsInQueue {
-		return mpqerr.ERR_SIZE_EXCEEDED
+		return mpqerr.ErrSizeExceeded
 	}
 	nowTs := utils.Uts()
 	atomic.StoreInt64(&pq.config.LastPushTs, nowTs)
@@ -342,7 +342,7 @@ func (pq *PQueue) AddExistingMessage(msg *pmsg.MsgMeta) error {
 func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.IResponse {
 	var err error
 	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2msg)) >= pq.config.MaxMsgsInQueue {
-		return mpqerr.ERR_SIZE_EXCEEDED
+		return mpqerr.ErrSizeExceeded
 	}
 
 	nowTs := utils.Uts()
@@ -362,7 +362,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.I
 	_, ok := pq.id2msg[msgId]
 	if ok {
 		pq.lock.Unlock()
-		return mpqerr.ERR_ITEM_ALREADY_EXISTS
+		return mpqerr.ErrMsgAlreadyExists
 	}
 
 	pq.msgSerialNumber++
@@ -376,7 +376,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.I
 	if err != nil {
 		delete(pq.id2msg, msgId)
 		pq.lock.Unlock()
-		return mpqerr.ERR_DB_PROBLEM
+		return mpqerr.ErrDbProblem
 	}
 
 	if delay == 0 {
@@ -436,9 +436,9 @@ func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) (r apis.IRespo
 
 	msg := pq.id2msg[msgId]
 	if msg == nil {
-		r = mpqerr.ERR_MSG_NOT_FOUND
+		r = mpqerr.ErrMsgNotFound
 	} else if msg.UnlockTs == 0 {
-		r = mpqerr.ERR_MSG_NOT_LOCKED
+		r = mpqerr.ErrMsgNotLocked
 	} else {
 		msg.UnlockTs = utils.Uts() + lockTimeout
 		pq.timeoutHeap.Push(msg)
@@ -457,10 +457,10 @@ func (pq *PQueue) UnlockMessageById(msgId string) apis.IResponse {
 	// Make sure message exists.
 	msg := pq.id2msg[msgId]
 	if msg == nil {
-		return mpqerr.ERR_MSG_NOT_FOUND
+		return mpqerr.ErrMsgNotFound
 	}
 	if msg.UnlockTs == 0 {
-		return mpqerr.ERR_MSG_NOT_LOCKED
+		return mpqerr.ErrMsgNotLocked
 	}
 	// Message exists, push it into the front of the queue.
 	pq.returnToFront(msg)
@@ -472,16 +472,16 @@ func (pq *PQueue) getMessageByRcpt(rcpt string) (*pmsg.MsgMeta, *mpqerr.ErrorRes
 	parts := strings.SplitN(rcpt, "-", 2)
 
 	if len(parts) != 2 {
-		return nil, mpqerr.ERR_INVALID_RECEIPT
+		return nil, mpqerr.ErrInvalidRcpt
 	}
 	sn, err := mpqproto.Parse36BaseUIntValue(parts[0])
 	if err != nil {
-		return nil, mpqerr.ERR_INVALID_RECEIPT
+		return nil, mpqerr.ErrInvalidRcpt
 	}
 
 	popCount, err := mpqproto.Parse36BaseIntValue(parts[1])
 	if err != nil {
-		return nil, mpqerr.ERR_INVALID_RECEIPT
+		return nil, mpqerr.ErrInvalidRcpt
 	}
 
 	// To improve performance the lock is acquired here. The caller must unlock it.
@@ -493,7 +493,7 @@ func (pq *PQueue) getMessageByRcpt(rcpt string) (*pmsg.MsgMeta, *mpqerr.ErrorRes
 	}
 
 	pq.lock.Unlock()
-	return nil, mpqerr.ERR_RECEIPT_EXPIRED
+	return nil, mpqerr.ErrExpiredRcpt
 }
 
 // UpdateLockByRcpt sets a user defined message lock timeout to the message that matches a receipt.
@@ -507,7 +507,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 		if lockTimeout == 0 {
 			return resp.OK
 		}
-		return mpqerr.ERR_INVALID_RECEIPT
+		return mpqerr.ErrInvalidRcpt
 	}
 
 	if lockTimeout == 0 {

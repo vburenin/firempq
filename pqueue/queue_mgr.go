@@ -159,10 +159,10 @@ func (qm *QueueManager) CreateQueue(ctx *fctx.Context, queueName string, config 
 	qm.rwLock.Lock()
 	defer qm.rwLock.Unlock()
 	if !mpqproto.ValidateServiceName(queueName) {
-		return mpqerr.ERR_WRONG_SVC_NAME
+		return mpqerr.ErrInvalidQueueName
 	}
 	if _, ok := qm.queues[queueName]; ok {
-		return mpqerr.ERR_SVC_ALREADY_EXISTS
+		return mpqerr.ErrSvcAlreadyExists
 	}
 
 	desc := queue_info.NewServiceDescription(queueName, qm.queueIDsn+1)
@@ -189,7 +189,7 @@ func (qm *QueueManager) DropService(ctx *fctx.Context, svcName string) apis.IRes
 	defer qm.rwLock.Unlock()
 	queue := qm.queues[svcName]
 	if queue != nil {
-		return mpqerr.ERR_NO_SVC
+		return mpqerr.ErrNoQueue
 	}
 	delete(qm.queues, svcName)
 	svcID := queue.Description().ServiceId

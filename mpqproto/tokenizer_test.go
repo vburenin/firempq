@@ -77,7 +77,7 @@ func TestTooMuchData(t *testing.T) {
 			d += d
 			d += "\n"
 			_, err := tok.ReadTokens(NewTestDataReader(d))
-			So(err, ShouldEqual, mpqerr.ERR_TOK_TOO_MANY_TOKENS)
+			So(err, ShouldEqual, mpqerr.ErrTokTooManyTokens)
 		})
 		Convey("Token is too large", func() {
 			data := make([]byte, 129*1024)
@@ -85,7 +85,7 @@ func TestTooMuchData(t *testing.T) {
 				data[i] = 'a'
 			}
 			_, err := tok.ReadTokens(NewTestDataReader(string(data)))
-			So(err, ShouldEqual, mpqerr.ERR_TOK_TOKEN_TOO_LONG)
+			So(err, ShouldEqual, mpqerr.ErrTokTooLong)
 		})
 	})
 }

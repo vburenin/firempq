@@ -85,7 +85,7 @@ func ChangeMessageVisibilityBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery
 
 	for _, batchItem := range attrList {
 		resp := pq.UpdateLockByRcpt(batchItem.ReceiptHandle, batchItem.VisibilityTimeout)
-		if resp == mpqerr.ERR_INVALID_RECEIPT {
+		if resp == mpqerr.ErrInvalidRcpt {
 			e := sqserr.InvalidReceiptHandleError("The input receipt handle is not a valid receipt handle.")
 			output.ErrorEntry = append(output.ErrorEntry, e.BatchResult(batchItem.Id))
 		} else {

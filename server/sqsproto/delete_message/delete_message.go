@@ -35,7 +35,7 @@ func DeleteMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response.
 	}
 
 	resp := pq.DeleteByReceipt(receipt)
-	if resp == mpqerr.ERR_INVALID_RECEIPT {
+	if resp == mpqerr.ErrInvalidRcpt {
 		return sqserr.InvalidReceiptHandleError("The input receipt handle is not a valid receipt handle.")
 	}
 

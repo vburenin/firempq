@@ -76,7 +76,7 @@ func DeleteMessageBatch(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 
 	for _, batchItem := range attrList {
 		resp := pq.DeleteByReceipt(batchItem.ReceiptHandle)
-		if resp == mpqerr.ERR_INVALID_RECEIPT {
+		if resp == mpqerr.ErrInvalidRcpt {
 			e := sqserr.InvalidReceiptHandleError("The input receipt handle is not a valid receipt handle.")
 			output.ErrorEntry = append(output.ErrorEntry, e.BatchResult(batchItem.Id))
 		} else {

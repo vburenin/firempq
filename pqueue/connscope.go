@@ -137,7 +137,7 @@ func ParsePQConfig(params []string) (*conf.PQConfig, apis.IResponse) {
 // Call dispatches to the command handler to process necessary parameters.
 func (ctx *ConnScope) Call(cmd string, params []string) apis.IResponse {
 	if ctx.finishFlag {
-		return mpqerr.ERR_CONN_CLOSING
+		return mpqerr.ErrConnClosing
 	}
 	ctx.callsCount += 1
 	switch cmd {
@@ -182,12 +182,12 @@ func parseMessageIdOnly(params []string) (string, *mpqerr.ErrorResponse) {
 		if mpqproto.ValidateItemId(params[0]) {
 			return params[0], nil
 		} else {
-			return "", mpqerr.ERR_ID_IS_WRONG
+			return "", mpqerr.ErrInvalidID
 		}
 	} else if len(params) == 0 {
-		return "", mpqerr.ERR_MSG_ID_NOT_DEFINED
+		return "", mpqerr.ErrMsgIdNotDefined
 	}
-	return "", mpqerr.ERR_ONE_ID_ONLY
+	return "", mpqerr.ErrOneIdOnly
 }
 
 // parseReceiptOnly is looking for message receipt only.
@@ -195,9 +195,9 @@ func parseReceiptOnly(params []string) (string, *mpqerr.ErrorResponse) {
 	if len(params) == 1 {
 		return params[0], nil
 	} else if len(params) > 1 {
-		return "", mpqerr.ERR_ONE_RECEIPT_ONLY
+		return "", mpqerr.ErrOneRcptOnly
 	}
-	return "", mpqerr.ERR_NO_RECEIPT
+	return "", mpqerr.ErrNoRcpt
 }
 
 // PopLock gets message from the queue setting lock timeout.
@@ -265,7 +265,7 @@ func (ctx *ConnScope) Pop(params []string) apis.IResponse {
 
 func (ctx *ConnScope) asyncPop(asyncId string, lockTimeout, popWaitTimeout, limit int64, lock bool) apis.IResponse {
 	if len(asyncId) != 0 && popWaitTimeout == 0 {
-		return resp.NewAsyncResponse(asyncId, mpqerr.ERR_ASYNC_WAIT)
+		return resp.NewAsyncResponse(asyncId, mpqerr.ErrAsyncWait)
 	}
 	go func() {
 		ctx.asyncGroup.Add(1)
@@ -388,7 +388,7 @@ func (ctx *ConnScope) Push(params []string) apis.IResponse {
 		}
 	}
 	if len(asyncId) > 0 {
-		return resp.NewAsyncResponse(asyncId, mpqerr.ERR_ASYNC_PUSH)
+		return resp.NewAsyncResponse(asyncId, mpqerr.ErrAsyncPush)
 	}
 	return ctx.pq.Push(msgId, payload, msgTtl, delay)
 }
@@ -414,11 +414,11 @@ func (ctx *ConnScope) UpdateLockByRcpt(params []string) apis.IResponse {
 	}
 
 	if len(rcpt) == 0 {
-		return mpqerr.ERR_NO_RECEIPT
+		return mpqerr.ErrNoRcpt
 	}
 
 	if lockTimeout < 0 {
-		return mpqerr.ERR_MSG_TIMEOUT_NOT_DEFINED
+		return mpqerr.ErrMsgTimeoutNotDefined
 	}
 	return ctx.pq.UpdateLockByRcpt(rcpt, lockTimeout)
 }
@@ -445,11 +445,11 @@ func (ctx *ConnScope) UpdateLockById(params []string) apis.IResponse {
 	}
 
 	if len(msgId) == 0 {
-		return mpqerr.ERR_MSG_ID_NOT_DEFINED
+		return mpqerr.ErrMsgIdNotDefined
 	}
 
 	if lockTimeout < 0 {
-		return mpqerr.ERR_MSG_TIMEOUT_NOT_DEFINED
+		return mpqerr.ErrMsgTimeoutNotDefined
 	}
 	return ctx.pq.UpdateLockById(msgId, lockTimeout)
 }
@@ -464,7 +464,7 @@ func (ctx *ConnScope) UnlockMessageById(params []string) apis.IResponse {
 
 func (ctx *ConnScope) GetCurrentStatus(params []string) apis.IResponse {
 	if len(params) > 0 {
-		return mpqerr.ERR_CMD_WITH_NO_PARAMS
+		return mpqerr.ErrCmdNoParamsAllowed
 	}
 	return ctx.pq.GetCurrentStatus()
 }
@@ -484,7 +484,7 @@ func (ctx *ConnScope) CheckTimeouts(params []string) apis.IResponse {
 		}
 	}
 	if ts < 0 {
-		return mpqerr.ERR_TS_PARAMETER_NEEDED
+		return mpqerr.ErrNoTsParam
 	}
 	return ctx.pq.CheckTimeouts(ts)
 }
@@ -501,7 +501,7 @@ func (ctx *ConnScope) SetParamValue(params []string) apis.IResponse {
 	failQueue := ""
 
 	if len(params) == 0 {
-		return mpqerr.ERR_CMD_PARAM_NOT_PROVIDED
+		return mpqerr.ErrCmdNoParams
 	}
 
 	pqParams := &QueueParams{}
