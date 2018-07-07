@@ -55,6 +55,9 @@ func TODO(traceID string) *Context {
 }
 
 func WithParent(parent context.Context, traceID string) *Context {
+	if p, ok := parent.(*Context); ok {
+		traceID = p.traceID + ":" + traceID
+	}
 	return &Context{
 		ctx:     parent,
 		traceID: traceID,
@@ -79,53 +82,53 @@ func (c *Context) Value(key interface{}) interface{} {
 }
 
 func (c *Context) Trace(msg string, args ...interface{}) {
-	c.Logger.Debugf(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Debugf(msg, args...)
 }
 
 func (c *Context) Debug(msg string) {
-	c.Logger.Debug(msg)
+	c.Logger.With(zap.String("id", c.traceID)).Debug(msg)
 }
 
 func (c *Context) Debugf(msg string, args ...interface{}) {
-	c.Logger.Debugf(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Debugf(msg, args...)
 }
 
 func (c *Context) Info(msg string) {
-	c.Logger.Info(msg)
+	c.Logger.With(zap.String("id", c.traceID)).Info(msg)
 }
 
 func (c *Context) Infof(msg string, args ...interface{}) {
-	c.Logger.Infof(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Infof(msg, args...)
 }
 
 func (c *Context) Warn(msg string) {
-	c.Logger.Warn(msg)
+	c.Logger.With(zap.String("id", c.traceID)).Warn(msg)
 }
 
 func (c *Context) Warnf(msg string, args ...interface{}) {
-	c.Logger.Warnf(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Warnf(msg, args...)
 }
 
 func (c *Context) Error(msg string) {
-	c.Logger.Error(msg)
+	c.Logger.With(zap.String("id", c.traceID)).Error(msg)
 }
 
 func (c *Context) Errorf(msg string, args ...interface{}) {
-	c.Logger.Errorf(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Errorf(msg, args...)
 }
 
 func (c *Context) Panic(msg string) {
-	c.Logger.Panic(msg)
+	c.Logger.With(zap.String("id", c.traceID)).Panic(msg)
 }
 
 func (c *Context) Criticalf(msg string, args ...interface{}) {
-	c.Logger.Panicf(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Panicf(msg, args...)
 }
 
 func (c *Context) Fatal(msg string) {
-	c.Logger.Fatal(msg)
+	c.Logger.With(zap.String("id", c.traceID)).Fatal(msg)
 }
 
 func (c *Context) Fatalf(msg string, args ...interface{}) {
-	c.Logger.Fatalf(msg, args...)
+	c.Logger.With(zap.String("id", c.traceID)).Fatalf(msg, args...)
 }
