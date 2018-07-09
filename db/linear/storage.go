@@ -183,7 +183,7 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 		curMetaFileID:    metaID,
 		metaEncBuf:       make([]byte, 8),
 		activePayloads:   make(map[int64]*OpenedFile, 64),
-		payloadCache:     NewPayloadCache(1024),
+		payloadCache:     NewPayloadCache(16384),
 	}
 	if err := fs.metaRollover(); err != nil {
 		return nil, err
