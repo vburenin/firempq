@@ -20,16 +20,16 @@ import (
 )
 
 const (
-	CMD_PING       = "PING"
-	CMD_CREATE_SVC = "CRT"
-	CMD_DROP_SVC   = "DROP"
-	CMD_QUIT       = "QUIT"
-	CMD_UNIX_TS    = "TS"
-	CMD_LIST       = "LIST"
-	CMD_CTX        = "CTX"
-	CMD_LOGLEVEL   = "LOGLEVEL"
-	CMD_PANIC      = "PANIC"
-	CMD_DBSTATS    = "DBSTATS"
+	CmdPing       = "PING"
+	CmdCreateQueu = "CRT"
+	CmdDropQueue  = "DROP"
+	CmdQuit       = "QUIT"
+	CmdUnitTs     = "TS"
+	CmdList       = "LIST"
+	CmdCtx        = "CTX"
+	CmdLogLevel   = "LOGLEVEL"
+	CmdPanic      = "PANIC"
+	CmdDBStats    = "DBSTATS"
 )
 
 type FuncHandler func([]string) apis.IResponse
@@ -46,23 +46,26 @@ type SessionHandler struct {
 	ctx        *fctx.Context
 }
 
-func NewSessionHandler(conn net.Conn, services *pqueue.QueueManager) *SessionHandler {
+func NewSessionHandler(wg *sync.WaitGroup, conn net.Conn, qmgr *pqueue.QueueManager) *SessionHandler {
+
 	sh := &SessionHandler{
 		conn:       conn,
 		tokenizer:  mpqproto.NewTokenizer(),
 		scope:      nil,
 		active:     true,
-		qmgr:       services,
+		qmgr:       qmgr,
 		stopChan:   make(chan struct{}),
 		connWriter: bufio.NewWriter(conn),
-		ctx:        fctx.Background("proto-conn"),
+		ctx:        fctx.Background("sess-" + conn.RemoteAddr().String()),
 	}
-	sh.QuitListener()
+	sh.QuitListener(wg)
 	return sh
 }
 
-func (s *SessionHandler) QuitListener() {
+func (s *SessionHandler) QuitListener(wg *sync.WaitGroup) {
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		select {
 		case <-signals.QuitChan:
 			s.Stop()
@@ -80,7 +83,7 @@ func (s *SessionHandler) QuitListener() {
 // DispatchConn dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
 	addr := s.conn.RemoteAddr().String()
-	log.Debug("Client connected: %s", addr)
+	s.ctx.Debugf("Client connected: %s", addr)
 	s.WriteResponse(resp.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
@@ -89,7 +92,7 @@ func (s *SessionHandler) DispatchConn() {
 			err = s.WriteResponse(resp)
 		}
 		if err != nil {
-			log.LogConnError(err)
+			s.ctx.Warnf("connection error: %s", err)
 			break
 		}
 	}
@@ -98,7 +101,7 @@ func (s *SessionHandler) DispatchConn() {
 		s.scope.Finish()
 	}
 	s.conn.Close()
-	log.Debug("Client disconnected: %s", addr)
+	s.ctx.Debugf("Client disconnected: %s", addr)
 }
 
 // Basic token processing that looks for global commands,
@@ -112,33 +115,35 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 	cmd := cmdTokens[0]
 	tokens := cmdTokens[1:]
 
+	if s.scope != nil {
+		r := s.scope.Call(cmd, tokens)
+		if r != nil {
+			return r
+		}
+	}
 	switch cmd {
-	case CMD_QUIT:
+	case CmdQuit:
 		return s.quitHandler(tokens)
-	case CMD_CTX:
+	case CmdCtx:
 		return s.ctxHandler(tokens)
-	case CMD_CREATE_SVC:
-		return s.createServiceHandler(tokens)
-	case CMD_DROP_SVC:
-		return s.dropServiceHandler(tokens)
-	case CMD_LIST:
+	case CmdCreateQueu:
+		return s.createQueueHandler(tokens)
+	case CmdDropQueue:
+		return s.dropQueueHandler(tokens)
+	case CmdList:
 		return s.listServicesHandler(tokens)
-	case CMD_LOGLEVEL:
+	case CmdLogLevel:
 		return logLevelHandler(tokens)
-	case CMD_PING:
+	case CmdPing:
 		return pingHandler(tokens)
-	case CMD_UNIX_TS:
+	case CmdUnitTs:
 		return tsHandler(tokens)
-	case CMD_PANIC:
+	case CmdPanic:
 		return panicHandler(tokens)
-	case CMD_DBSTATS:
+	case CmdDBStats:
 		return dbstatHandler(tokens)
 	default:
-		if s.scope == nil {
-			return mpqerr.InvalidRequest("Unknown command: " + cmd)
-		} else {
-			return s.scope.Call(cmd, tokens)
-		}
+		return mpqerr.InvalidRequest("unknown command: " + cmd)
 	}
 }
 
@@ -154,38 +159,38 @@ func (s *SessionHandler) WriteResponse(resp apis.IResponse) error {
 }
 
 // Handler that creates a service.
-func (s *SessionHandler) createServiceHandler(tokens []string) apis.IResponse {
+func (s *SessionHandler) createQueueHandler(tokens []string) apis.IResponse {
 	if len(tokens) < 1 {
-		return mpqerr.InvalidRequest("Service name should be provided")
+		return mpqerr.InvalidRequest("queue name should be provided")
 	}
 	if len(tokens) > 1 {
-		return mpqerr.InvalidRequest("At least service name should be provided")
+		return mpqerr.InvalidRequest("at least queue name should be provided")
 	}
 
-	svcName := tokens[0]
-	if len(svcName) > 256 {
-		return mpqerr.InvalidRequest("Service name can not be longer than 256 characters")
+	queueName := tokens[0]
+	if len(queueName) > 80 {
+		return mpqerr.ErrInvalidQueueName
 	}
 
-	if !mpqproto.ValidateItemId(svcName) {
+	if !mpqproto.ValidateItemId(queueName) {
 		return mpqerr.ErrInvalidID
 	}
 
-	q := s.qmgr.GetQueue(svcName)
+	q := s.qmgr.GetQueue(queueName)
 	if q != nil {
-		return mpqerr.ConflictRequest("Service exists already")
+		return mpqerr.ErrQueueAlreadyExists
 	}
 
-	return s.qmgr.CreateQueueFromParams(s.ctx, svcName, tokens[1:])
+	return s.qmgr.CreateQueueFromParams(s.ctx, queueName, tokens[1:])
 }
 
 // Drop service.
-func (s *SessionHandler) dropServiceHandler(tokens []string) apis.IResponse {
+func (s *SessionHandler) dropQueueHandler(tokens []string) apis.IResponse {
 	if len(tokens) == 0 {
-		return mpqerr.InvalidRequest("Service name must be provided")
+		return mpqerr.InvalidRequest("queue name must be provided")
 	}
 	if len(tokens) > 1 {
-		return mpqerr.InvalidRequest("DROP accept service name only")
+		return mpqerr.InvalidRequest("DROP accept queue name only")
 	}
 	svcName := tokens[0]
 	res := s.qmgr.DropService(s.ctx, svcName)
@@ -195,11 +200,11 @@ func (s *SessionHandler) dropServiceHandler(tokens []string) apis.IResponse {
 // Context changer.
 func (s *SessionHandler) ctxHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 1 {
-		return mpqerr.InvalidRequest("CTX accept service name only")
+		return mpqerr.InvalidRequest("CTX accepts queue name only")
 	}
 
 	if len(tokens) == 0 {
-		return mpqerr.InvalidRequest("Service name must be provided")
+		return mpqerr.InvalidRequest("queue name must be provided")
 	}
 
 	svcName := tokens[0]
@@ -229,7 +234,7 @@ func (s *SessionHandler) quitHandler(tokens []string) apis.IResponse {
 func (s *SessionHandler) listServicesHandler(tokens []string) apis.IResponse {
 	svcPrefix := ""
 	if len(tokens) > 1 {
-		return mpqerr.InvalidRequest("LIST accept service name prefix only")
+		return mpqerr.InvalidRequest("LIST accepts queue name prefix only")
 	}
 	if len(tokens) == 1 {
 		svcPrefix = tokens[0]

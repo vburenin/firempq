@@ -4,6 +4,9 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
+	"os"
+	"runtime/pprof"
+
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
@@ -14,7 +17,14 @@ func main() {
 	// Initialize logging to a default INFO level to be able to log config error.
 	log.InitLogging()
 	conf.ParseConfigParameters()
+	f, _ := os.Create("fmpq.profile")
+	defer f.Close()
+
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+
 	if len(conf.CFG.Profiler) > 0 {
+		log.Info("Initializing profiler")
 		go func() {
 			if err := http.ListenAndServe(conf.CFG.Profiler, nil); err != nil {
 				log.Error("Could not initialize profiler: %v", err)

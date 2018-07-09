@@ -20,6 +20,7 @@ type MetadataIterator struct {
 	data        []byte
 	valid       bool
 	ctx         *fctx.Context
+	buf         []byte
 }
 
 func NewIterator(ctx *fctx.Context, dbPath string) (*MetadataIterator, error) {
@@ -39,8 +40,12 @@ func NewMetadataIterator(ctx *fctx.Context, dbPath string, metaFileIDs []int64) 
 		data:        nil,
 		valid:       true,
 		ctx:         ctx,
+		buf:         make([]byte, 512),
 	}
 	err := it.nextReader()
+	if err == io.EOF {
+		return it, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +77,7 @@ loop:
 	}
 	size := int(sb)
 
-	it.data = make([]byte, size)
+	it.data = it.buf[:size]
 
 	if _, err := io.ReadAtLeast(it.reader, it.data, size); err != nil {
 		return ferr.Wrapf(err, "could not read metadata body")

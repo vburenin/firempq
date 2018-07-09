@@ -340,7 +340,7 @@ func (pq *PQueue) AddExistingMessage(msg *pmsg.MsgMeta) error {
 	return nil
 }
 
-func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.IResponse {
+func (pq *PQueue) Push(msgId, payload string, msgTtl, delay int64) apis.IResponse {
 	var err error
 	if pq.config.MaxMsgsInQueue > 0 && int64(len(pq.id2msg)) >= pq.config.MaxMsgsInQueue {
 		return mpqerr.ErrSizeExceeded
@@ -389,7 +389,7 @@ func (pq *PQueue) Push(msgId string, payload string, msgTtl, delay int64) apis.I
 
 	signals.NewMessageNotify(pq.newMsgNotification)
 
-	return resp.OK
+	return resp.NewMsgResponse(msgId)
 }
 
 func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.IResponseItem {

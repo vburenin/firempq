@@ -148,7 +148,7 @@ func (cs *ConnectionServer) Stop() {
 
 func (cs *ConnectionServer) handleConnection(conn net.Conn) {
 	cs.waitGroup.Add(1)
-	sh := NewSessionHandler(conn, cs.qmgr)
+	sh := NewSessionHandler(&cs.waitGroup, conn, cs.qmgr)
 	sh.DispatchConn()
 	cs.waitGroup.Done()
 	conn.Close()

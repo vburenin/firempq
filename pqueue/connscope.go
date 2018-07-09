@@ -36,24 +36,26 @@ func NewConnScope(pq *PQueue, r apis.ResponseWriter) *ConnScope {
 	}
 }
 
-const PAYLOAD_LIMIT = 512 * 1024
+const PayloadSizeLimit = 512 * 1024
 
 const (
-	PQ_CMD_DELETE_LOCKED_BY_ID = "DELLCK"
-	PQ_CMD_DELETE_BY_ID        = "DEL"
-	PQ_CMD_DELETE_BY_RCPT      = "RDEL"
-	PQ_CMD_UNLOCK_BY_RCPT      = "RUNLCK"
-	PQ_CMD_UNLOCK_BY_ID        = "UNLCK"
-	PQ_CMD_UPD_LOCK_BY_ID      = "UPDLCK"
-	PQ_CMD_UPD_LOCK_BY_RCPT    = "RUPDLCK"
-	PQ_CMD_PUSH                = "PUSH"
-	PQ_CMD_POP                 = "POP"
-	PQ_CMD_POPLOCK             = "POPLCK"
-	PQ_CMD_MSG_INFO            = "MSGINFO"
-	PQ_CMD_STATUS              = "STATUS"
-	PQ_CMD_CHECK_TIMEOUTS      = "CHKTS"
-	PQ_CMD_SET_CFG             = "SETCFG"
-	PQ_CMD_PURGE               = "PURGE"
+	CmdDeleteLockedByID = "DELLCK"
+	CmdDeleteByID       = "DEL"
+	CmdDeleteByRcpt     = "RDEL"
+	CmdUpdateLock       = "RUNLCK"
+	CmdUnlockByID       = "UNLCK"
+	CmdUpdateLockByID   = "UPDLCK"
+	CmdUpdateLockByRcpt = "RUPDLCK"
+	CmdPush             = "PUSH"
+	CmdPushBatch        = "PUSHB"
+	CmdBatchNext        = "NXT"
+	CmdPop              = "POP"
+	CmdPopLock          = "POPLCK"
+	CmdMsgInfo          = "MSGINFO"
+	CmdStats            = "STATUS"
+	CmdCheckTimeouts    = "CHKTS"
+	CmdSetConfig        = "SETCFG"
+	CmdPurge            = "PURGE"
 )
 
 const (
@@ -135,45 +137,47 @@ func ParsePQConfig(params []string) (*conf.PQConfig, apis.IResponse) {
 }
 
 // Call dispatches to the command handler to process necessary parameters.
-func (ctx *ConnScope) Call(cmd string, params []string) apis.IResponse {
-	if ctx.finishFlag {
+func (cs *ConnScope) Call(cmd string, params []string) apis.IResponse {
+	if cs.finishFlag {
 		return mpqerr.ErrConnClosing
 	}
-	ctx.callsCount += 1
+	cs.callsCount += 1
 	switch cmd {
-	case PQ_CMD_POPLOCK:
-		return ctx.PopLock(params)
-	case PQ_CMD_POP:
-		return ctx.Pop(params)
-	case PQ_CMD_MSG_INFO:
-		return ctx.GetMessageInfo(params)
-	case PQ_CMD_DELETE_BY_RCPT:
-		return ctx.DeleteByReceipt(params)
-	case PQ_CMD_UNLOCK_BY_RCPT:
-		return ctx.UnlockByReceipt(params)
-	case PQ_CMD_DELETE_LOCKED_BY_ID:
-		return ctx.DeleteLockedById(params)
-	case PQ_CMD_DELETE_BY_ID:
-		return ctx.DeleteById(params)
-	case PQ_CMD_PUSH:
-		return ctx.Push(params)
-	case PQ_CMD_UPD_LOCK_BY_ID:
-		return ctx.UpdateLockById(params)
-	case PQ_CMD_UPD_LOCK_BY_RCPT:
-		return ctx.UpdateLockByRcpt(params)
-	case PQ_CMD_UNLOCK_BY_ID:
-		return ctx.UnlockMessageById(params)
-	case PQ_CMD_STATUS:
-		return ctx.GetCurrentStatus(params)
-	case PQ_CMD_SET_CFG:
-		return ctx.SetParamValue(params)
-	case PQ_CMD_CHECK_TIMEOUTS:
-		return ctx.CheckTimeouts(params)
-	case PQ_CMD_PURGE:
-		ctx.pq.Clear()
+	case CmdPopLock:
+		return cs.PopLock(params)
+	case CmdPop:
+		return cs.Pop(params)
+	case CmdMsgInfo:
+		return cs.GetMessageInfo(params)
+	case CmdDeleteByRcpt:
+		return cs.DeleteByReceipt(params)
+	case CmdUpdateLock:
+		return cs.UnlockByReceipt(params)
+	case CmdDeleteLockedByID:
+		return cs.DeleteLockedById(params)
+	case CmdDeleteByID:
+		return cs.DeleteById(params)
+	case CmdPush:
+		return cs.Push(params)
+	case CmdPushBatch:
+		return cs.PushBatch(params)
+	case CmdUpdateLockByID:
+		return cs.UpdateLockById(params)
+	case CmdUpdateLockByRcpt:
+		return cs.UpdateLockByRcpt(params)
+	case CmdUnlockByID:
+		return cs.UnlockMessageById(params)
+	case CmdStats:
+		return cs.GetCurrentStatus(params)
+	case CmdSetConfig:
+		return cs.SetParamValue(params)
+	case CmdCheckTimeouts:
+		return cs.CheckTimeouts(params)
+	case CmdPurge:
+		cs.pq.Clear()
 		return resp.OK
 	}
-	return mpqerr.InvalidRequest("Unknown command: " + cmd)
+	return nil
 }
 
 // parseMessageIdOnly is looking for message id only.
@@ -201,13 +205,13 @@ func parseReceiptOnly(params []string) (string, *mpqerr.ErrorResponse) {
 }
 
 // PopLock gets message from the queue setting lock timeout.
-func (ctx *ConnScope) PopLock(params []string) apis.IResponse {
+func (cs *ConnScope) PopLock(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var limit int64 = 1
 	var asyncId string
 
-	popWaitTimeout := ctx.pq.config.PopWaitTimeout
-	lockTimeout := ctx.pq.config.PopLockTimeout
+	popWaitTimeout := cs.pq.config.PopWaitTimeout
+	lockTimeout := cs.pq.config.PopLockTimeout
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -227,19 +231,19 @@ func (ctx *ConnScope) PopLock(params []string) apis.IResponse {
 		}
 	}
 	if len(asyncId) > 0 {
-		return ctx.asyncPop(asyncId, lockTimeout, popWaitTimeout, limit, true)
+		return cs.asyncPop(asyncId, lockTimeout, popWaitTimeout, limit, true)
 	} else {
-		return ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, true)
+		return cs.pq.Pop(lockTimeout, popWaitTimeout, limit, true)
 	}
 }
 
 // Pop message from queue completely removing it.
-func (ctx *ConnScope) Pop(params []string) apis.IResponse {
+func (cs *ConnScope) Pop(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var limit int64 = 1
 	var asyncId string
 
-	popWaitTimeout := ctx.pq.config.PopWaitTimeout
+	popWaitTimeout := cs.pq.config.PopWaitTimeout
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -257,85 +261,85 @@ func (ctx *ConnScope) Pop(params []string) apis.IResponse {
 		}
 	}
 	if len(asyncId) > 0 {
-		return ctx.asyncPop(asyncId, 0, popWaitTimeout, limit, false)
+		return cs.asyncPop(asyncId, 0, popWaitTimeout, limit, false)
 	} else {
-		return ctx.pq.Pop(0, popWaitTimeout, limit, false)
+		return cs.pq.Pop(0, popWaitTimeout, limit, false)
 	}
 }
 
-func (ctx *ConnScope) asyncPop(asyncId string, lockTimeout, popWaitTimeout, limit int64, lock bool) apis.IResponse {
+func (cs *ConnScope) asyncPop(asyncId string, lockTimeout, popWaitTimeout, limit int64, lock bool) apis.IResponse {
 	if len(asyncId) != 0 && popWaitTimeout == 0 {
 		return resp.NewAsyncResponse(asyncId, mpqerr.ErrAsyncWait)
 	}
 	go func() {
-		ctx.asyncGroup.Add(1)
-		res := ctx.pq.Pop(lockTimeout, popWaitTimeout, limit, lock)
+		cs.asyncGroup.Add(1)
+		res := cs.pq.Pop(lockTimeout, popWaitTimeout, limit, lock)
 		r := resp.NewAsyncResponse(asyncId, res)
-		if err := ctx.responseWriter.WriteResponse(r); err != nil {
+		if err := cs.responseWriter.WriteResponse(r); err != nil {
 			log.LogConnError(err)
 		}
-		ctx.asyncGroup.Done()
+		cs.asyncGroup.Done()
 	}()
 	return resp.NewAsyncAccept(asyncId)
 }
 
-func (ctx *ConnScope) GetMessageInfo(params []string) apis.IResponse {
+func (cs *ConnScope) GetMessageInfo(params []string) apis.IResponse {
 	msgId, retData := parseMessageIdOnly(params)
 	if retData != nil {
 		return retData
 	}
-	return ctx.pq.GetMessageInfo(msgId)
+	return cs.pq.GetMessageInfo(msgId)
 }
 
-func (ctx *ConnScope) DeleteLockedById(params []string) apis.IResponse {
+func (cs *ConnScope) DeleteLockedById(params []string) apis.IResponse {
 	msgId, retData := parseMessageIdOnly(params)
 	if retData != nil {
 		return retData
 	}
-	return ctx.pq.DeleteLockedById(msgId)
+	return cs.pq.DeleteLockedById(msgId)
 }
 
-func (ctx *ConnScope) DeleteById(params []string) apis.IResponse {
+func (cs *ConnScope) DeleteById(params []string) apis.IResponse {
 	msgId, retData := parseMessageIdOnly(params)
 	if retData != nil {
 		return retData
 	}
-	return ctx.pq.DeleteById(msgId)
+	return cs.pq.DeleteById(msgId)
 }
 
 // DeleteByReceipt deletes locked message using provided receipt.
 // This is a preferable method to unlock messages. It helps to avoid
 // race condition in case if when message lock has timed out and was
 // picked up by other consumer.
-func (ctx *ConnScope) DeleteByReceipt(params []string) apis.IResponse {
+func (cs *ConnScope) DeleteByReceipt(params []string) apis.IResponse {
 	rcpt, err := parseReceiptOnly(params)
 	if err != nil {
 		return err
 	}
-	return ctx.pq.DeleteByReceipt(rcpt)
+	return cs.pq.DeleteByReceipt(rcpt)
 }
 
 // UnlockByReceipt unlocks locked message using provided receipt.
 // Unlocking by receipt is making sure message was not relocked
 // by something else.
-func (ctx *ConnScope) UnlockByReceipt(params []string) apis.IResponse {
+func (cs *ConnScope) UnlockByReceipt(params []string) apis.IResponse {
 	rcpt, err := parseReceiptOnly(params)
 	if err != nil {
 		return err
 	}
-	return ctx.pq.UnlockByReceipt(rcpt)
+	return cs.pq.UnlockByReceipt(rcpt)
 }
 
 // Push message to the queue.
 // Pushing message automatically enables auto expiration.
-func (ctx *ConnScope) Push(params []string) apis.IResponse {
+func (cs *ConnScope) Push(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var msgId string
 	var syncWait bool
 	var asyncId string
 	var payload string
 
-	cfg := ctx.pq.config
+	cfg := cs.pq.config
 	delay := cfg.DeliveryDelay
 	msgTtl := cfg.MsgTtl
 
@@ -344,7 +348,7 @@ func (ctx *ConnScope) Push(params []string) apis.IResponse {
 		case PrmID:
 			params, msgId, err = mpqproto.ParseUserItemId(params)
 		case PrmPayload:
-			params, payload, err = mpqproto.ParseStringParam(params, 1, PAYLOAD_LIMIT)
+			params, payload, err = mpqproto.ParseStringParam(params, 1, PayloadSizeLimit)
 		case PrmDelay:
 			params, delay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
 		case PrmMsgTTL:
@@ -362,12 +366,12 @@ func (ctx *ConnScope) Push(params []string) apis.IResponse {
 		}
 	}
 	if len(msgId) == 0 {
-		msgId = ctx.idGen.RandId()
+		msgId = cs.idGen.RandId()
 	}
 
 	if syncWait {
 		if len(asyncId) == 0 {
-			res := ctx.pq.Push(msgId, payload, msgTtl, delay)
+			res := cs.pq.Push(msgId, payload, msgTtl, delay)
 			if !res.IsError() {
 				// TODO(vburenin): Add flush wait.
 				// ctx.pq.WaitFlush()
@@ -375,14 +379,14 @@ func (ctx *ConnScope) Push(params []string) apis.IResponse {
 			return res
 		} else {
 			go func() {
-				ctx.asyncGroup.Add(1)
-				res := ctx.pq.Push(msgId, payload, msgTtl, delay)
+				cs.asyncGroup.Add(1)
+				res := cs.pq.Push(msgId, payload, msgTtl, delay)
 				if !res.IsError() {
 					// TODO(vburenin): Add flush wait.
 					// ctx.pq.WaitFlush()
 				}
-				ctx.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
-				ctx.asyncGroup.Done()
+				cs.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
+				cs.asyncGroup.Done()
 			}()
 			return resp.NewAsyncAccept(asyncId)
 		}
@@ -390,11 +394,122 @@ func (ctx *ConnScope) Push(params []string) apis.IResponse {
 	if len(asyncId) > 0 {
 		return resp.NewAsyncResponse(asyncId, mpqerr.ErrAsyncPush)
 	}
-	return ctx.pq.Push(msgId, payload, msgTtl, delay)
+	return cs.pq.Push(msgId, payload, msgTtl, delay)
+}
+
+type pushParams struct {
+	msgId   string
+	payload string
+	msgTtl  int64
+	delay   int64
+}
+
+// Push message to the queue.
+// Pushing message automatically enables auto expiration.
+func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
+	var err *mpqerr.ErrorResponse
+	var msgId string
+	var syncWait bool
+	var asyncId string
+	var payload string
+
+	var calls [10]pushParams
+	var callPos int
+
+	cfg := cs.pq.config
+	delay := cfg.DeliveryDelay
+	msgTtl := cfg.MsgTtl
+
+	for len(params) > 0 {
+		if callPos == len(calls) {
+			return mpqerr.InvalidRequest("too many messages in one batch. 10 is the limit.")
+		}
+		switch params[0] {
+		case PrmID:
+			params, msgId, err = mpqproto.ParseUserItemId(params)
+		case PrmPayload:
+			params, payload, err = mpqproto.ParseStringParam(params, 1, PayloadSizeLimit)
+		case PrmDelay:
+			params, delay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
+		case PrmMsgTTL:
+			params, msgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
+		case PrmSyncWait:
+			params = params[1:]
+			syncWait = true
+		case PrmAsync:
+			params, asyncId, err = mpqproto.ParseItemId(params)
+		case CmdBatchNext:
+			params = params[1:]
+			if len(msgId) == 0 {
+				msgId = cs.idGen.RandId()
+			}
+			calls[callPos] = pushParams{
+				msgId:   msgId,
+				payload: payload,
+				msgTtl:  msgTtl,
+				delay:   delay,
+			}
+			callPos++
+			delay = cfg.DeliveryDelay
+			msgTtl = cfg.MsgTtl
+			payload = ""
+			msgId = ""
+		default:
+			return mpqerr.UnknownParam(params[0])
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(msgId) == 0 {
+		msgId = cs.idGen.RandId()
+	}
+
+	calls[callPos] = pushParams{
+		msgId:   msgId,
+		payload: payload,
+		msgTtl:  msgTtl,
+		delay:   delay,
+	}
+	callPos++
+	responses := make([]apis.IResponse, callPos)
+	if !syncWait {
+		for i := 0; i < callPos; i++ {
+			v := calls[i]
+			responses[i] = cs.pq.Push(v.msgId, v.payload, v.msgTtl, v.msgTtl)
+		}
+	}
+
+	if asyncId != "" {
+
+	}
+
+	/*if syncWait {
+		if len(asyncId) == 0 {
+			return res
+		} else {
+			go func() {
+				cs.asyncGroup.Add(1)
+				res := cs.pq.Push(msgId, payload, msgTtl, delay)
+				if !res.IsError() {
+					// TODO(vburenin): Add flush wait.
+					// cs.pq.WaitFlush()
+				}
+				cs.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
+				cs.asyncGroup.Done()
+			}()
+			return resp.NewAsyncAccept(asyncId)
+		}
+	}*/
+	/*if len(asyncId) > 0 {
+		return resp.NewAsyncResponse(asyncId, mpqerr.ErrAsyncPush)
+	}*/
+	return resp.NewBatchResponse(responses)
 }
 
 // UpdateLockByRcpt updates message lock according to provided receipt.
-func (ctx *ConnScope) UpdateLockByRcpt(params []string) apis.IResponse {
+func (cs *ConnScope) UpdateLockByRcpt(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var rcpt string
 	var lockTimeout int64 = -1
@@ -420,12 +535,12 @@ func (ctx *ConnScope) UpdateLockByRcpt(params []string) apis.IResponse {
 	if lockTimeout < 0 {
 		return mpqerr.ErrMsgTimeoutNotDefined
 	}
-	return ctx.pq.UpdateLockByRcpt(rcpt, lockTimeout)
+	return cs.pq.UpdateLockByRcpt(rcpt, lockTimeout)
 }
 
 // UpdateLockById sets a user defined message lock timeout.
 // It works only for locked messages.
-func (ctx *ConnScope) UpdateLockById(params []string) apis.IResponse {
+func (cs *ConnScope) UpdateLockById(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var msgId string
 	var lockTimeout int64 = -1
@@ -451,25 +566,25 @@ func (ctx *ConnScope) UpdateLockById(params []string) apis.IResponse {
 	if lockTimeout < 0 {
 		return mpqerr.ErrMsgTimeoutNotDefined
 	}
-	return ctx.pq.UpdateLockById(msgId, lockTimeout)
+	return cs.pq.UpdateLockById(msgId, lockTimeout)
 }
 
-func (ctx *ConnScope) UnlockMessageById(params []string) apis.IResponse {
+func (cs *ConnScope) UnlockMessageById(params []string) apis.IResponse {
 	msgId, retData := parseMessageIdOnly(params)
 	if retData != nil {
 		return retData
 	}
-	return ctx.pq.UnlockMessageById(msgId)
+	return cs.pq.UnlockMessageById(msgId)
 }
 
-func (ctx *ConnScope) GetCurrentStatus(params []string) apis.IResponse {
+func (cs *ConnScope) GetCurrentStatus(params []string) apis.IResponse {
 	if len(params) > 0 {
 		return mpqerr.ErrCmdNoParamsAllowed
 	}
-	return ctx.pq.GetCurrentStatus()
+	return cs.pq.GetCurrentStatus()
 }
 
-func (ctx *ConnScope) CheckTimeouts(params []string) apis.IResponse {
+func (cs *ConnScope) CheckTimeouts(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
 	var ts int64 = -1
 	for len(params) > 0 {
@@ -486,12 +601,12 @@ func (ctx *ConnScope) CheckTimeouts(params []string) apis.IResponse {
 	if ts < 0 {
 		return mpqerr.ErrNoTsParam
 	}
-	return ctx.pq.CheckTimeouts(ts)
+	return cs.pq.CheckTimeouts(ts)
 }
 
-func (ctx *ConnScope) SetParamValue(params []string) apis.IResponse {
+func (cs *ConnScope) SetParamValue(params []string) apis.IResponse {
 	var err *mpqerr.ErrorResponse
-	cfg := ctx.pq.config
+	cfg := cs.pq.config
 	msgTtl := cfg.MsgTtl
 	maxMsgsInQueue := cfg.MaxMsgsInQueue
 	maxMsgSize := cfg.MaxMsgSize
@@ -536,12 +651,12 @@ func (ctx *ConnScope) SetParamValue(params []string) apis.IResponse {
 			return err
 		}
 	}
-	return ctx.pq.SetParams(pqParams)
+	return cs.pq.SetParams(pqParams)
 }
 
-func (ctx *ConnScope) Finish() {
-	if !ctx.finishFlag {
-		ctx.finishFlag = true
-		ctx.asyncGroup.Wait()
+func (cs *ConnScope) Finish() {
+	if !cs.finishFlag {
+		cs.finishFlag = true
+		cs.asyncGroup.Wait()
 	}
 }

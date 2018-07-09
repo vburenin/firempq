@@ -17,12 +17,12 @@ var CodeTemporaryError int64 = 412
 
 // ErrorResponse is an error response.
 type ErrorResponse struct {
-	ErrorText string
-	ErrorCode int64
+	Text string
+	Code int64 // code length must always be 3 digits.
 }
 
 func (e *ErrorResponse) Error() string {
-	return e.ErrorText
+	return e.Text
 }
 
 func (e *ErrorResponse) StringResponse() string {
@@ -34,7 +34,7 @@ func (e *ErrorResponse) StringResponse() string {
 }
 
 func (e *ErrorResponse) WriteResponse(buf *bufio.Writer) error {
-	return enc.WriteError(buf, e.ErrorCode, e.ErrorText)
+	return enc.WriteError(buf, e.Code, e.Text)
 }
 
 func (e *ErrorResponse) IsError() bool {
@@ -71,7 +71,7 @@ func ServerError(errorText string) *ErrorResponse {
 
 var ErrNoQueue = InvalidRequest("queue is not created")
 var ErrInvalidQueueName = InvalidRequest("name can only include alphanumeric characters, hyphens, or underscores. 1 to 80 in length")
-var ErrSvcAlreadyExists = ConflictRequest("queue exists already")
+var ErrQueueAlreadyExists = ConflictRequest("queue exists already")
 var ErrMsgAlreadyExists = ConflictRequest("message exists already")
 var ErrMsgNotLocked = InvalidRequest("message is not locked")
 var ErrMsgNotFound = NotFoundRequest("message not found")

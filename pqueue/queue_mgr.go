@@ -165,7 +165,7 @@ func (qm *QueueManager) CreateQueue(ctx *fctx.Context, queueName string, config 
 		return mpqerr.ErrInvalidQueueName
 	}
 	if _, ok := qm.queues[queueName]; ok {
-		return mpqerr.ErrSvcAlreadyExists
+		return mpqerr.ErrQueueAlreadyExists
 	}
 
 	desc := queue_info.NewServiceDescription(queueName, qm.queueIDsn+1)

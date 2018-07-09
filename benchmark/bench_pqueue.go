@@ -40,14 +40,14 @@ func BenchMassPush() {
 	respWriter := resp_writer.NewTestResponseWriter()
 	cs := svc.ConnScope(respWriter)
 
-	cs.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
+	cs.Call(pqueue.CmdSetConfig, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
 
 	var grp sync.WaitGroup
 	data := []string{pqueue.PrmPayload, "7777777777"}
 
 	testFunc := func() {
 		for i := 0; i < 1000000; i++ {
-			cs.Call(pqueue.PQ_CMD_PUSH, data)
+			cs.Call(pqueue.CmdPush, data)
 		}
 		grp.Done()
 	}
@@ -129,10 +129,10 @@ func BenchMassPushMultiQueue() {
 	ctx3 := svc3.ConnScope(respWriter3)
 	ctx4 := svc4.ConnScope(respWriter4)
 
-	ctx1.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
-	ctx2.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
-	ctx3.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
-	ctx4.Call(pqueue.PQ_CMD_SET_CFG, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx1.Call(pqueue.CmdSetConfig, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx2.Call(pqueue.CmdSetConfig, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx3.Call(pqueue.CmdSetConfig, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
+	ctx4.Call(pqueue.CmdSetConfig, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "100000", pqueue.CPRM_DELIVERY_DELAY, "0"})
 
 	startTs := time.Now().UnixNano()
 	data := []string{pqueue.PrmPayload, "777777777777"}
@@ -140,7 +140,7 @@ func BenchMassPushMultiQueue() {
 	var grp sync.WaitGroup
 	testFunc := func(c *pqueue.ConnScope) {
 		for i := 0; i < 1000000; i++ {
-			c.Call(pqueue.PQ_CMD_PUSH, data)
+			c.Call(pqueue.CmdPush, data)
 		}
 		grp.Done()
 	}
