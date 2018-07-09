@@ -477,7 +477,7 @@ func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
 	if !syncWait {
 		for i := 0; i < callPos; i++ {
 			v := calls[i]
-			responses[i] = cs.pq.Push(v.msgId, v.payload, v.msgTtl, v.msgTtl)
+			responses[i] = cs.pq.Push(v.msgId, v.payload, v.msgTtl, v.delay)
 		}
 	}
 
