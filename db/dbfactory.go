@@ -41,3 +41,7 @@ func getDatabase() apis.DataStorage {
 	}
 	return database
 }
+
+func GetDatabase(path string) {
+
+}

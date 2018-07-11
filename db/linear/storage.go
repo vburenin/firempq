@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/ferr"
@@ -153,8 +152,6 @@ type FlatStorage struct {
 
 	muPayloads     sync.RWMutex
 	activePayloads map[int64]*OpenedFile
-
-	closed bool
 }
 
 var PayloadFileNotFound = fmt.Errorf("payload file not found")
@@ -191,7 +188,6 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 		activePayloads:   make(map[int64]*OpenedFile, 64),
 		payloadCache:     NewPayloadCache(16384),
 		flushSync:        make(chan struct{}),
-		closed:           false,
 	}
 	if err := fs.metaRollover(); err != nil {
 		return nil, err
@@ -201,21 +197,6 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 		return nil, err
 	}
 	return fs, nil
-}
-
-func (fstg *FlatStorage) syncLoop(waitInterval time.Duration) {
-	go func() {
-		for {
-			<-time.After(waitInterval)
-			fstg.mu.Lock()
-			if fstg.closed {
-				fstg.mu.Unlock()
-				return
-			}
-			fstg.flush()
-			fstg.mu.Unlock()
-		}
-	}()
 }
 
 func (fstg *FlatStorage) SyncWait() {
@@ -262,7 +243,6 @@ func (fstg *FlatStorage) Close() error {
 		}
 	}
 	close(fstg.flushSync)
-	fstg.closed = true
 	if err1 != nil {
 		return err1
 	}
@@ -397,7 +377,7 @@ func (fstg *FlatStorage) payloadRollover() error {
 	fpath := filepath.Join(fstg.dbPath, MakePayloadFileName(newFileID))
 	newBlob, err := NewOpenedFile(fpath, false)
 	if err != nil {
-		return ferr.Wrap(err, "failed to payloadRollover to the next payload blob")
+		return ferr.Wrap(err, "failed to rollover to the next payload blob")
 	}
 
 	fstg.muPayloads.Lock()

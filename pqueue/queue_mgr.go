@@ -14,7 +14,7 @@ import (
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pmsg"
-	"github.com/vburenin/firempq/queue_info"
+	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/nsync"
 )
 
@@ -31,6 +31,7 @@ type QueueManager struct {
 	cfg               *conf.Config
 	deadMsgs          chan DeadMessage
 	expireLoopBreaker chan struct{}
+	configMgr         *qconf.ConfigManager
 
 	wg sync.WaitGroup
 }
@@ -43,6 +44,7 @@ func NewQueueManager(ctx *fctx.Context, db apis.DataStorage, config *conf.Config
 		cfg:               config,
 		deadMsgs:          make(chan DeadMessage, 128),
 		expireLoopBreaker: make(chan struct{}),
+		configMgr:         qconf.NewConfigManager(config.DatabasePath),
 	}
 	f.loadAllServices(ctx)
 	f.wg.Add(2)
@@ -97,7 +99,7 @@ func (qm *QueueManager) expireLoop(ctx *fctx.Context) {
 }
 
 func (qm *QueueManager) loadAllServices(ctx *fctx.Context) {
-	descList, err := queue_info.GetServiceDescriptions(qm.cfg.DatabasePath)
+	descList, err := qm.configMgr.LoadDescriptions()
 	if err != nil {
 		ctx.Fatalf("Failed to init: %s", err)
 	}
@@ -113,19 +115,17 @@ func (qm *QueueManager) loadAllServices(ctx *fctx.Context) {
 			ctx.Warnf("Service with the same name detected: %s", desc.Name)
 		}
 		if desc.ToDelete {
-			queue_info.DeleteServiceData(ctx, qm.cfg.DatabasePath, desc.Name)
+			qm.configMgr.DeleteQueueData(ctx, desc.Name)
 		} else if desc.Disabled {
 			ctx.Errorf("Service is disabled. Skipping: %s", desc.Name)
 		} else {
 			ctx.Debugf("Loading service data for: %s", desc.Name)
-			cfgPath := queue_info.ConfigFilePath(qm.cfg.DatabasePath, desc.ServiceId)
-			cfg := &conf.PQConfig{}
-			err := queue_info.LoadServiceConfig(cfgPath, cfg)
+			cfg, err := qm.configMgr.LoadConfig(desc.ServiceId)
 			if err != nil {
-				ctx.Errorf("Didn't decode config: %s", err)
+				ctx.Errorf("Didn't load config: %s", err)
 				continue
 			}
-			qm.queues[desc.Name] = NewPQueue(qm.db, desc, qm.deadMsgs, cfg)
+			qm.queues[desc.Name] = NewPQueue(qm.db, desc, qm.deadMsgs, cfg, qm.makeConfigUpdater(desc.ServiceId))
 			queuesData[desc.ExportId] = NewQueueLoader()
 		}
 	}
@@ -158,7 +158,13 @@ func (qm *QueueManager) CreateQueueFromParams(ctx *fctx.Context, name string, pa
 	return qm.CreateQueue(ctx, name, pqConf)
 }
 
-func (qm *QueueManager) CreateQueue(ctx *fctx.Context, queueName string, config *conf.PQConfig) apis.IResponse {
+func (qm *QueueManager) makeConfigUpdater(queueID string) func(*qconf.QueueParams) (*qconf.QueueConfig, error) {
+	return func(config *qconf.QueueParams) (*qconf.QueueConfig, error) {
+		return qm.configMgr.UpdateQueueConfig(queueID, config)
+	}
+}
+
+func (qm *QueueManager) CreateQueue(ctx *fctx.Context, queueName string, config *qconf.QueueConfig) apis.IResponse {
 	qm.rwLock.Lock()
 	defer qm.rwLock.Unlock()
 	if !mpqproto.ValidateServiceName(queueName) {
@@ -168,16 +174,19 @@ func (qm *QueueManager) CreateQueue(ctx *fctx.Context, queueName string, config 
 		return mpqerr.ErrQueueAlreadyExists
 	}
 
-	desc := queue_info.NewServiceDescription(queueName, qm.queueIDsn+1)
-	svc := NewPQueue(qm.db, desc, qm.deadMsgs, config)
+	desc, err := qm.configMgr.NewDescription(queueName, qm.queueIDsn+1)
+	if err != nil {
+		ctx.Errorf("could not create queue: %s", err)
+		return mpqerr.ErrDbProblem
+	}
 
-	if err := queue_info.SaveServiceDescription(qm.cfg.DatabasePath, desc); err != nil {
-		ctx.Errorf("could not save service description: %s", err)
-	}
-	confPath := queue_info.ConfigFilePath(qm.cfg.DatabasePath, desc.ServiceId)
-	if err := queue_info.SaveServiceConfig(confPath, config); err != nil {
+	if err := qm.configMgr.SaveConfig(desc.ServiceId, config); err != nil {
 		ctx.Errorf("could not save service config: %s", err)
+		qm.configMgr.DeleteQueueData(ctx, desc.ServiceId)
+		return mpqerr.ErrDbProblem
 	}
+
+	svc := NewPQueue(qm.db, desc, qm.deadMsgs, config, qm.makeConfigUpdater(desc.ServiceId))
 
 	qm.queueIDsn++
 	qm.queues[queueName] = svc
@@ -196,7 +205,7 @@ func (qm *QueueManager) DropService(ctx *fctx.Context, svcName string) apis.IRes
 	}
 	delete(qm.queues, svcName)
 	svcID := queue.Description().ServiceId
-	queue_info.DeleteServiceData(ctx, qm.cfg.DatabasePath, svcID)
+	qm.configMgr.DeleteQueueData(ctx, svcID)
 	ctx.Infof("Service '%s' has been removed: (id:%s)", svcName, svcID)
 	return resp.OK
 }

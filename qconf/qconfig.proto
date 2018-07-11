@@ -1,7 +1,7 @@
 syntax = "proto3";
-package conf;
+package qconf;
 
-message PQConfig {
+message QueueConfig {
 	// Default message TTL.
 	int64 msg_ttl = 1;
 	// Default delivery delay.

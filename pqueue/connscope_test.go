@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/queue_info"
+	"github.com/vburenin/firempq/qconf"
 )
 
-func getCtxConfig() *conf.PQConfig {
-	return &conf.PQConfig{
+func getCtxConfig() *qconf.QueueConfig {
+	return &qconf.QueueConfig{
 		MaxMsgsInQueue: 100001,
 		MaxMsgSize:     256000,
 		MsgTtl:         100000,
@@ -23,8 +23,8 @@ func getCtxConfig() *conf.PQConfig {
 	}
 }
 
-func getCtxDesc() *queue_info.ServiceDescription {
-	return &queue_info.ServiceDescription{
+func getCtxDesc() *qconf.QueueDescription {
+	return &qconf.QueueDescription{
 		ExportId:  10,
 		SType:     "PQueue",
 		Name:      "name",

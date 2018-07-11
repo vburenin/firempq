@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
@@ -80,7 +80,7 @@ func (r *QueueAttributes) HandleAttribute(paramName, value string) *sqserr.SQSEr
 	return nil
 }
 
-func (r *QueueAttributes) MakePQConfig() *conf.PQConfig {
+func (r *QueueAttributes) MakePQConfig() *qconf.QueueConfig {
 	cfg := pqueue.DefaultPQConfig()
 	if r.DelaySeconds >= 0 {
 		cfg.DeliveryDelay = r.DelaySeconds

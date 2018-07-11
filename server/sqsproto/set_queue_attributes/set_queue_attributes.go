@@ -7,6 +7,7 @@ import (
 
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/pqueue"
+	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
@@ -17,11 +18,11 @@ type SetQueueAttributesResponse struct {
 	RequestId string   `xml:"ResponseMetadata>RequestId"`
 }
 
-func (self *SetQueueAttributesResponse) HttpCode() int { return http.StatusOK }
-func (self *SetQueueAttributesResponse) XmlDocument() string {
-	return sqs_response.EncodeXml(self)
+func (sr *SetQueueAttributesResponse) HttpCode() int { return http.StatusOK }
+func (sr *SetQueueAttributesResponse) XmlDocument() string {
+	return sqs_response.EncodeXml(sr)
 }
-func (self *SetQueueAttributesResponse) BatchResult(docId string) interface{} { return nil }
+func (sr *SetQueueAttributesResponse) BatchResult(docId string) interface{} { return nil }
 
 type Attribute struct {
 	Name  string
@@ -48,7 +49,7 @@ func SetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 
 	attrsLen := len(attrs)
 
-	params := &pqueue.QueueParams{}
+	params := &qconf.QueueParams{}
 
 	for i := 1; i < attrsLen; i++ {
 		a, ok := attrs[i]
@@ -116,7 +117,7 @@ func SetQueueAttributes(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_resp
 		}
 	}
 
-	pq.SetParams(params)
+	pq.UpdateConfig(params)
 	return &SetQueueAttributesResponse{
 		RequestId: "req",
 	}

@@ -17,12 +17,12 @@ import (
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto/resp"
-	"github.com/vburenin/firempq/queue_info"
+	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/utils"
 )
 
-func getConfig() *conf.PQConfig {
-	return &conf.PQConfig{
+func getConfig() *qconf.QueueConfig {
+	return &qconf.QueueConfig{
 		MaxMsgsInQueue: 100001,
 		MaxMsgSize:     256000,
 		MsgTtl:         100000,
@@ -34,8 +34,8 @@ func getConfig() *conf.PQConfig {
 	}
 }
 
-func getDesc() *queue_info.ServiceDescription {
-	return &queue_info.ServiceDescription{
+func getDesc() *qconf.QueueDescription {
+	return &qconf.QueueDescription{
 		ExportId:  10,
 		SType:     "PQueue",
 		Name:      "name",
@@ -81,7 +81,7 @@ func CreateSingleQueue(options ...string) (*PQueue, func()) {
 		log.Fatal("could not create db: %s", err)
 	}
 	deadMsgs := make(chan DeadMessage, 16)
-	q := NewPQueue(db, getDesc(), deadMsgs, getConfig())
+	q := NewPQueue(db, getDesc(), deadMsgs, getConfig(), nil)
 	f := func() {
 		db.Close()
 		for _, v := range options {
@@ -439,7 +439,7 @@ func TestSetParams(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 
-	p := &QueueParams{
+	p := &qconf.QueueParams{
 		MsgTTL:         int64Ptr(10000),
 		MaxMsgSize:     int64Ptr(256000),
 		MaxMsgsInQueue: int64Ptr(20000),
@@ -449,17 +449,16 @@ func TestSetParams(t *testing.T) {
 		FailQueue:      strPtr("some queue"),
 	}
 
-	a.Equal(resp.OK, q.SetParams(p))
+	a.Equal(mpqerr.ErrDbProblem, q.UpdateConfig(p))
 
-	s, _ := q.GetCurrentStatus().(*resp.DictResponse)
-	status := s.GetDict()
-	a.EqualValues(10000, status[StatusQueueMsgTTL])
-	a.EqualValues(256000, status[StatusQueueMaxMsgSize])
-	a.EqualValues(20000, status[StatusQueueMaxSize])
-	a.EqualValues(30000, status[StatusQueueDeliveryDelay])
-	a.EqualValues(40000, status[StatusQueuePopCountLimit])
-	a.EqualValues(50000, status[StatusQueuePopLockTimeout])
-	a.EqualValues("some queue", status[StatusQueueDeadMsgQueue])
+	configUpdated := false
+	q.configUpdater = func(config *qconf.QueueParams) (*qconf.QueueConfig, error) {
+		configUpdated = true
+		return q.config, nil
+	}
+
+	a.Equal(resp.OK, q.UpdateConfig(p))
+	a.True(configUpdated)
 
 }
 
@@ -663,18 +662,10 @@ func TestSizeLimit(t *testing.T) {
 	a := assert.New(t)
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
-	p := &QueueParams{
-		MsgTTL:         int64Ptr(10000),
-		MaxMsgSize:     int64Ptr(256000),
-		MaxMsgsInQueue: int64Ptr(3),
-		DeliveryDelay:  int64Ptr(10000),
-		PopCountLimit:  int64Ptr(0),
-		PopLockTimeout: int64Ptr(50000),
-	}
-	q.SetParams(p)
-	VerifyOkResponse(a, q.Push("1", "p", 10000, 0))
-	VerifyOkResponse(a, q.Push("2", "p", 10000, 0))
-	VerifyOkResponse(a, q.Push("3", "p", 10000, 0))
+	q.config.MaxMsgsInQueue = 3
+	VerifyMsgIdResponse(a, "1", q.Push("1", "p", 10000, 0))
+	VerifyMsgIdResponse(a, "2", q.Push("2", "p", 10000, 0))
+	VerifyMsgIdResponse(a, "3", q.Push("3", "p", 10000, 0))
 	a.Equal(mpqerr.ErrSizeExceeded, q.Push("4", "p", 10000, 0))
 	a.EqualValues(3, q.TotalMessages())
 }
@@ -768,6 +759,14 @@ func VerifyItems(a *assert.Assertions, r apis.IResponse, size int, itemSpecs ...
 			a.Equal(itemPayload, string(items[itemPos].Payload()))
 		}
 		return true
+	}
+	return false
+}
+
+func VerifyMsgIdResponse(a *assert.Assertions, msgID string, r apis.IResponse) bool {
+	mr, ok := r.(*resp.MsgResponse)
+	if a.True(ok) {
+		return a.EqualValues(msgID, mr.MsgId)
 	}
 	return false
 }

@@ -15,16 +15,16 @@ import (
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pmsg"
-	"github.com/vburenin/firempq/queue_info"
+	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
 )
 
 type PQueue struct {
 	// A must attribute of each service containing all essential service information generated upon creation.
-	desc *queue_info.ServiceDescription
+	desc *qconf.QueueDescription
 	// Configuration setting on a queue level.
-	config *conf.PQConfig
+	config *qconf.QueueConfig
 
 	// Database storage
 	db apis.DataStorage
@@ -54,13 +54,16 @@ type PQueue struct {
 
 	// Number of locked messages
 	lockedMsgCnt uint64
+
+	configUpdater func(config *qconf.QueueParams) (*qconf.QueueConfig, error)
 }
 
 func NewPQueue(
 	db apis.DataStorage,
-	desc *queue_info.ServiceDescription,
+	desc *qconf.QueueDescription,
 	deadMsgChan chan DeadMessage,
-	config *conf.PQConfig) *PQueue {
+	config *qconf.QueueConfig,
+	configUpdater func(config *qconf.QueueParams) (*qconf.QueueConfig, error)) *PQueue {
 
 	return &PQueue{
 		desc:               desc,
@@ -72,6 +75,7 @@ func NewPQueue(
 		timeoutHeap:        NewTimeoutHeap(),
 		newMsgNotification: make(chan struct{}),
 		deadMsgChan:        deadMsgChan,
+		configUpdater:      configUpdater,
 	}
 }
 
@@ -89,12 +93,12 @@ func (pq *PQueue) Update() int64 {
 
 // ServiceConfig returns service config as an empty interface type.
 // User service type getter to find out the expected config type.
-func (pq *PQueue) Config() *conf.PQConfig {
+func (pq *PQueue) Config() *qconf.QueueConfig {
 	return pq.config
 }
 
 // Description is queue description.
-func (pq *PQueue) Description() *queue_info.ServiceDescription {
+func (pq *PQueue) Description() *qconf.QueueDescription {
 	return pq.desc
 }
 
@@ -149,49 +153,17 @@ func (pq *PQueue) GetStatus() map[string]interface{} {
 	return res
 }
 
-type QueueParams struct {
-	MsgTTL         *int64
-	MaxMsgSize     *int64
-	MaxMsgsInQueue *int64
-	DeliveryDelay  *int64
-	PopCountLimit  *int64
-	PopLockTimeout *int64
-	PopWaitTimeout *int64
-	FailQueue      *string
-}
-
-func (pq *PQueue) SetParams(params *QueueParams) apis.IResponse {
+func (pq *PQueue) UpdateConfig(config *qconf.QueueParams) apis.IResponse {
+	if pq.configUpdater == nil {
+		return mpqerr.ErrDbProblem
+	}
+	updatedConf, err := pq.configUpdater(config)
+	if err != nil {
+		return mpqerr.ErrDbProblem
+	}
 	pq.lock.Lock()
-
-	if params.FailQueue != nil {
-		pq.config.PopLimitQueueName = *params.FailQueue
-	}
-
-	pq.config.LastUpdateTs = utils.Uts()
-
-	if params.MsgTTL != nil {
-		pq.config.MsgTtl = *params.MsgTTL
-	}
-	if params.MaxMsgSize != nil {
-		pq.config.MaxMsgSize = *params.MaxMsgSize
-	}
-	if params.MaxMsgsInQueue != nil {
-		pq.config.MaxMsgsInQueue = *params.MaxMsgsInQueue
-	}
-	if params.DeliveryDelay != nil {
-		pq.config.DeliveryDelay = *params.DeliveryDelay
-	}
-	if params.PopCountLimit != nil {
-		pq.config.PopCountLimit = *params.PopCountLimit
-	}
-	if params.PopLockTimeout != nil {
-		pq.config.PopLockTimeout = *params.PopLockTimeout
-	}
-	if params.PopWaitTimeout != nil {
-		pq.config.PopWaitTimeout = *params.PopWaitTimeout
-	}
+	pq.config = updatedConf
 	pq.lock.Unlock()
-	queue_info.SaveServiceConfig(pq.desc.ServiceId, pq.config)
 	return resp.OK
 }
 

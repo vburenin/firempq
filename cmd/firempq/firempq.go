@@ -5,7 +5,7 @@ import (
 	_ "net/http/pprof"
 
 	"os"
-	"runtime/pprof"
+	"runtime/trace"
 
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/fctx"
@@ -20,8 +20,11 @@ func main() {
 	f, _ := os.Create("fmpq.profile")
 	defer f.Close()
 
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
+	//pprof.StartCPUProfile(f)
+	//defer pprof.StopCPUProfile()
+
+	trace.Start(f)
+	defer trace.Stop()
 
 	if len(conf.CFG.Profiler) > 0 {
 		log.Info("Initializing profiler")

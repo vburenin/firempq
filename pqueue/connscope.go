@@ -12,6 +12,7 @@ import (
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
+	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/utils"
 )
 
@@ -83,14 +84,14 @@ const (
 	CPRM_POP_WAIT          = "WAIT"
 )
 
-func DefaultPQConfig() *conf.PQConfig {
+func DefaultPQConfig() *qconf.QueueConfig {
 	cfg := &conf.Config{}
 	flags.ParseArgs(cfg, []string{"firempq"})
 
 	conf.CFG = cfg
 	conf.CFG_PQ = &cfg.PQueueConfig
 
-	return &conf.PQConfig{
+	return &qconf.QueueConfig{
 		MaxMsgsInQueue:    conf.CFG_PQ.DefaultMaxQueueSize,
 		MsgTtl:            conf.CFG_PQ.DefaultMessageTTL,
 		DeliveryDelay:     conf.CFG_PQ.DefaultDeliveryDelay,
@@ -104,7 +105,7 @@ func DefaultPQConfig() *conf.PQConfig {
 	}
 }
 
-func ParsePQConfig(params []string) (*conf.PQConfig, apis.IResponse) {
+func ParsePQConfig(params []string) (*qconf.QueueConfig, apis.IResponse) {
 	var err *mpqerr.ErrorResponse
 
 	cfg := DefaultPQConfig()
@@ -645,7 +646,7 @@ func (cs *ConnScope) SetParamValue(params []string) apis.IResponse {
 		return mpqerr.ErrCmdNoParams
 	}
 
-	pqParams := &QueueParams{}
+	pqParams := &qconf.QueueParams{}
 
 	for len(params) > 0 {
 		switch params[0] {
@@ -677,7 +678,7 @@ func (cs *ConnScope) SetParamValue(params []string) apis.IResponse {
 			return err
 		}
 	}
-	return cs.pq.SetParams(pqParams)
+	return cs.pq.UpdateConfig(pqParams)
 }
 
 func (cs *ConnScope) Finish() {

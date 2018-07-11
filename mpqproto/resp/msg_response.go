@@ -9,12 +9,12 @@ import (
 
 // StrResponse is a simple string response used to return some quick responses for commands like ping, etc.
 type MsgResponse struct {
-	msgId string
+	MsgId string
 }
 
 func NewMsgResponse(msgId string) *MsgResponse {
 	return &MsgResponse{
-		msgId: msgId,
+		MsgId: msgId,
 	}
 }
 
@@ -28,7 +28,7 @@ func (r *MsgResponse) StringResponse() string {
 
 func (r *MsgResponse) WriteResponse(buf *bufio.Writer) error {
 	buf.WriteString("+MSG ")
-	return enc.WriteString(buf, r.msgId)
+	return enc.WriteString(buf, r.MsgId)
 }
 
 func (r *MsgResponse) IsError() bool {
