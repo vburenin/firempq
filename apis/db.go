@@ -14,7 +14,7 @@ type PayloadLocation struct {
 }
 
 type DataStorage interface {
-	Flush() error
+	SyncWait()
 	GetStats() map[string]interface{}
 	Close() error
 

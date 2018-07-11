@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/ferr"
 	"github.com/vburenin/firempq/pmsg"
@@ -37,14 +38,26 @@ func (pql *QueueLoader) Messages() MsgArray {
 	return output
 }
 
-func (pql *QueueLoader) Update(action byte, msg *pmsg.MsgMeta) {
-	switch action {
-	case DBActionAddMetadata, DBActionUpdateMetadata:
-		pql.msgs[msg.Serial] = msg
-	case DBActionDeleteMetadata:
-		delete(pql.msgs, msg.Serial)
-	case DBActionWipeAll:
-		pql.msgs = make(map[uint64]*pmsg.MsgMeta, 4096)
+var msgPool = make([]*pmsg.MsgMeta, 0, 100)
+var poolPos = 0
+
+func getNewMsg() *pmsg.MsgMeta {
+	if poolPos > 0 {
+		m := msgPool[poolPos-1]
+		poolPos--
+		return m
+	}
+	return &pmsg.MsgMeta{}
+}
+
+func retMsg(m *pmsg.MsgMeta) {
+	m.Reset()
+	if poolPos == len(msgPool) {
+		msgPool = append(msgPool, m)
+		poolPos++
+	} else {
+		msgPool[poolPos] = m
+		poolPos++
 	}
 }
 
@@ -60,14 +73,58 @@ func ReplayData(ctx *fctx.Context, queues map[uint64]*QueueLoader, iter apis.Ite
 			continue
 		}
 
-		action, queueID, msg := DecodeMetadata(iter.GetData())
+		action, queueID, msg, delSn := DecodeMetadata(iter.GetData())
 		if action == DBActionWrongData {
 			ctx.Error("Received blob cannot be decoded")
 		}
+
 		loader := queues[queueID]
 		if loader == nil {
 			continue
 		}
-		loader.Update(action, msg)
+
+		switch action {
+		case DBActionAddMetadata, DBActionUpdateMetadata:
+			loader.msgs[msg.Serial] = msg
+		case DBActionDeleteMetadata:
+			m := loader.msgs[delSn]
+			if m != nil {
+				retMsg(m)
+			}
+			delete(loader.msgs, delSn)
+		case DBActionWipeAll:
+			loader.msgs = make(map[uint64]*pmsg.MsgMeta, 4096)
+		}
+
 	}
+}
+
+func DecodeMetadata(data []byte) (action byte, queueID uint64, msg *pmsg.MsgMeta, msgSn uint64) {
+	if len(data) < 9 {
+		println("too short data")
+		return DBActionWrongData, 0, nil, 0
+	}
+
+	queueID = enc.DecodeBytesToUnit64(data)
+	action = data[8]
+	data = data[9:]
+
+	switch action {
+	case DBActionAddMetadata, DBActionUpdateMetadata:
+		msg := getNewMsg()
+		if err := msg.Unmarshal(data); err != nil {
+			return DBActionWrongData, 0, nil, 0
+		}
+		return action, queueID, msg, 0
+	case DBActionDeleteMetadata:
+		if len(data) < 8 {
+			return DBActionWrongData, 0, nil, 0
+		}
+		return action, queueID, nil, enc.DecodeBytesToUnit64(data)
+	case DBActionQueueRemoved:
+	case DBActionWipeAll:
+	default:
+		return DBActionWrongData, 0, nil, 0
+	}
+	return action, queueID, msg, 0
 }

@@ -4,8 +4,6 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/vburenin/firempq/enc"
 )
 
 const (
@@ -36,5 +34,5 @@ func (g *IdGen) RandId() string {
 		randData[i] = msgIdCharacters[byte(g.rndgen.Int63())>>2]
 	}
 	g.mutex.Unlock()
-	return enc.UnsafeBytesToString(randData)
+	return string(randData)
 }

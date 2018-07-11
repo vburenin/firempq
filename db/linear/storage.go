@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/ferr"
@@ -139,6 +140,9 @@ type FlatStorage struct {
 	curPayloadBlob   *OpenedFile
 	payloadCache     *PayloadCache
 
+	// used to sync flush operation with external waiters.
+	flushSync chan struct{}
+
 	muMeta        sync.Mutex
 	metaDataBuf   *bufio.Writer
 	metaDataFile  *os.File
@@ -149,6 +153,8 @@ type FlatStorage struct {
 
 	muPayloads     sync.RWMutex
 	activePayloads map[int64]*OpenedFile
+
+	closed bool
 }
 
 var PayloadFileNotFound = fmt.Errorf("payload file not found")
@@ -184,6 +190,8 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 		metaEncBuf:       make([]byte, 8),
 		activePayloads:   make(map[int64]*OpenedFile, 64),
 		payloadCache:     NewPayloadCache(16384),
+		flushSync:        make(chan struct{}),
+		closed:           false,
 	}
 	if err := fs.metaRollover(); err != nil {
 		return nil, err
@@ -195,15 +203,47 @@ func NewFlatStorage(dbPath string, payloadSizeLimit, metadataSizeLimit int64) (*
 	return fs, nil
 }
 
-func (fstg *FlatStorage) Flush() error {
+func (fstg *FlatStorage) syncLoop(waitInterval time.Duration) {
+	go func() {
+		for {
+			<-time.After(waitInterval)
+			fstg.mu.Lock()
+			if fstg.closed {
+				fstg.mu.Unlock()
+				return
+			}
+			fstg.flush()
+			fstg.mu.Unlock()
+		}
+	}()
+}
+
+func (fstg *FlatStorage) SyncWait() {
 	fstg.mu.Lock()
+	c := fstg.flushSync
+	fstg.mu.Unlock()
+	<-c
+}
+
+func (fstg *FlatStorage) flush() error {
 	err1 := fstg.metaDataBuf.Flush()
 	err2 := fstg.curPayloadBlob.Flush()
-	fstg.mu.Unlock()
 	if err1 != nil {
 		return err1
 	}
-	return err2
+	if err2 != nil {
+		return err2
+	}
+	close(fstg.flushSync)
+	fstg.flushSync = make(chan struct{})
+	return nil
+}
+
+func (fstg *FlatStorage) Flush() error {
+	fstg.mu.Lock()
+	err := fstg.flush()
+	fstg.mu.Unlock()
+	return err
 }
 
 func (fstg *FlatStorage) GetStats() map[string]interface{} {
@@ -213,7 +253,6 @@ func (fstg *FlatStorage) GetStats() map[string]interface{} {
 func (fstg *FlatStorage) Close() error {
 	fstg.mu.Lock()
 	defer fstg.mu.Unlock()
-
 	err1 := fstg.metaDataBuf.Flush()
 	err2 := fstg.metaDataFile.Close()
 	err3 := make([]error, 0)
@@ -222,6 +261,8 @@ func (fstg *FlatStorage) Close() error {
 			err3 = append(err3, e)
 		}
 	}
+	close(fstg.flushSync)
+	fstg.closed = true
 	if err1 != nil {
 		return err1
 	}
@@ -235,9 +276,8 @@ func (fstg *FlatStorage) Close() error {
 }
 
 func (fstg *FlatStorage) AddMetadata(metadata []byte) error {
-	fstg.muMeta.Lock()
-
 	l := len(metadata)
+	fstg.muMeta.Lock()
 	fstg.metaDataBuf.WriteByte(byte(l))
 	_, err := fstg.metaDataBuf.Write(metadata)
 	fstg.metaPos += int64(1 + l)

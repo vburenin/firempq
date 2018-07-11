@@ -4,24 +4,23 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/mpqerr"
 )
 
 const (
-	STATE_PARSE_TEXT_TOKEN     = 1
-	STATE_PARSE_BINARY_PAYLOAD = 2
-	SYMBOL_CR                  = 0x0A
+	stateParseTextToken     = 1
+	stateParseBinaryPayload = 2
+	symbolCr                = 0x0A
 )
 
 const (
-	MAX_TOKENS_PER_MSG    = 32
-	MAX_RECV_BUFFER_SIZE  = 4096
-	MAX_TEXT_TOKEN_LEN    = 256
-	MAX_BINARY_TOKEN_LEN  = 128 * 1024 * 1024
-	START_ASCII_RANGE     = 0x21
-	END_ASCII_RANGE       = 0x7E
-	INIT_TOKEN_BUFFER_LEN = 48
+	maxTokensPerMsg    = 100
+	maxRecvBufferSize  = 4096
+	maxTextTokenLen    = 256
+	maxBinaryTokenLen  = 128 * 1024 * 1024
+	startAsciiRange    = 0x21
+	endAsciiRange      = 0x7E
+	initTokenBufferLen = 48
 )
 
 type Tokenizer struct {
@@ -32,7 +31,7 @@ type Tokenizer struct {
 
 func NewTokenizer() *Tokenizer {
 	tok := Tokenizer{
-		buffer: make([]byte, MAX_RECV_BUFFER_SIZE),
+		buffer: make([]byte, maxRecvBufferSize),
 		bufPos: 0,
 		bufLen: 0,
 	}
@@ -41,11 +40,11 @@ func NewTokenizer() *Tokenizer {
 
 func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 	var err error
-	var token []byte = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
+	var token = make([]byte, 0, initTokenBufferLen)
 	var binTokenLen int
-	var state int = STATE_PARSE_TEXT_TOKEN
+	var state = stateParseTextToken
 
-	result := make([]string, 0, MAX_TOKENS_PER_MSG)
+	result := make([]string, 0, maxTokensPerMsg)
 
 	for {
 		if tok.bufPos >= tok.bufLen {
@@ -61,7 +60,7 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 		}
 
 		// Tokenize content of the buffer
-		if state == STATE_PARSE_BINARY_PAYLOAD {
+		if state == stateParseBinaryPayload {
 			availableBytes := tok.bufLen - tok.bufPos
 			if availableBytes > binTokenLen {
 				availableBytes = binTokenLen
@@ -73,12 +72,12 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 
 			if binTokenLen <= 0 {
 				// Binary token complete
-				state = STATE_PARSE_TEXT_TOKEN
-				result = append(result, enc.UnsafeBytesToString(token))
-				if len(result) > MAX_TOKENS_PER_MSG {
+				state = stateParseTextToken
+				result = append(result, string(token))
+				if len(result) > maxTokensPerMsg {
 					return nil, mpqerr.ErrTokTooManyTokens
 				}
-				token = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
+				token = token[0:0]
 			}
 			continue
 		}
@@ -86,32 +85,32 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 		val := tok.buffer[tok.bufPos]
 		tok.bufPos += 1
 
-		if val >= START_ASCII_RANGE && val <= END_ASCII_RANGE {
+		if val >= startAsciiRange && val <= endAsciiRange {
 			token = append(token, val)
 		} else if len(token) > 0 {
 			if token[0] == '$' {
-				binTokenLen, err = strconv.Atoi(enc.UnsafeBytesToString(token[1:]))
-				if err == nil && (binTokenLen < 1 || binTokenLen > MAX_BINARY_TOKEN_LEN) {
+				binTokenLen, err = strconv.Atoi(string(token[1:]))
+				if err == nil && (binTokenLen < 1 || binTokenLen > maxBinaryTokenLen) {
 					return nil, mpqerr.ErrTokInvalid
 				}
-				state = STATE_PARSE_BINARY_PAYLOAD
+				state = stateParseBinaryPayload
 				token = make([]byte, 0, binTokenLen)
 			} else {
-				result = append(result, enc.UnsafeBytesToString(token))
-				if len(result) > MAX_TOKENS_PER_MSG {
+				result = append(result, string(token))
+				if len(result) > maxTokensPerMsg {
 					return nil, mpqerr.ErrTokTooManyTokens
 				}
-				if val == SYMBOL_CR {
+				if val == symbolCr {
 					return result, nil
 				}
-				token = make([]byte, 0, INIT_TOKEN_BUFFER_LEN)
+				token = token[0:0]
 			}
 		} else {
-			if val == SYMBOL_CR {
+			if val == symbolCr {
 				return result, nil
 			}
 		}
-		if len(token) > MAX_TEXT_TOKEN_LEN {
+		if len(token) > maxTextTokenLen {
 			return nil, mpqerr.ErrTokTooLong
 		}
 	}

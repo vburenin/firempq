@@ -373,8 +373,7 @@ func (cs *ConnScope) Push(params []string) apis.IResponse {
 		if len(asyncId) == 0 {
 			res := cs.pq.Push(msgId, payload, msgTtl, delay)
 			if !res.IsError() {
-				// TODO(vburenin): Add flush wait.
-				// ctx.pq.WaitFlush()
+				cs.pq.SyncWait()
 			}
 			return res
 		} else {
@@ -382,8 +381,7 @@ func (cs *ConnScope) Push(params []string) apis.IResponse {
 				cs.asyncGroup.Add(1)
 				res := cs.pq.Push(msgId, payload, msgTtl, delay)
 				if !res.IsError() {
-					// TODO(vburenin): Add flush wait.
-					// ctx.pq.WaitFlush()
+					cs.pq.SyncWait()
 				}
 				cs.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
 				cs.asyncGroup.Done()
@@ -474,34 +472,62 @@ func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
 	}
 	callPos++
 	responses := make([]apis.IResponse, callPos)
-	if !syncWait {
+
+	if len(asyncId) == 0 {
 		for i := 0; i < callPos; i++ {
 			v := calls[i]
 			responses[i] = cs.pq.Push(v.msgId, v.payload, v.msgTtl, v.delay)
 		}
+		if syncWait {
+			cs.pq.SyncWait()
+		}
+		resp.NewBatchResponse(responses)
 	}
 
-	if asyncId != "" {
+	if !syncWait && asyncId != "" {
 
 	}
 
-	/*if syncWait {
-		if len(asyncId) == 0 {
-			return res
-		} else {
-			go func() {
-				cs.asyncGroup.Add(1)
+	/*
+			if syncWait {
+			if len(asyncId) == 0 {
 				res := cs.pq.Push(msgId, payload, msgTtl, delay)
 				if !res.IsError() {
-					// TODO(vburenin): Add flush wait.
-					// cs.pq.WaitFlush()
+					cs.pq.SyncWait()
 				}
-				cs.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
-				cs.asyncGroup.Done()
-			}()
-			return resp.NewAsyncAccept(asyncId)
+				return res
+			} else {
+				go func() {
+					cs.asyncGroup.Add(1)
+					res := cs.pq.Push(msgId, payload, msgTtl, delay)
+					if !res.IsError() {
+						cs.pq.SyncWait()
+					}
+					cs.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
+					cs.asyncGroup.Done()
+				}()
+				return resp.NewAsyncAccept(asyncId)
+			}
 		}
-	}*/
+	*/
+	/*
+		if syncWait {
+			if len(asyncId) == 0 {
+				return res
+			} else {
+				go func() {
+					cs.asyncGroup.Add(1)
+					res := cs.pq.Push(msgId, payload, msgTtl, delay)
+					if !res.IsError() {
+						// TODO(vburenin): Add flush wait.
+						// cs.pq.WaitFlush()
+					}
+					cs.responseWriter.WriteResponse(resp.NewAsyncResponse(asyncId, res))
+					cs.asyncGroup.Done()
+				}()
+				return resp.NewAsyncAccept(asyncId)
+			}
+		}*/
 	/*if len(asyncId) > 0 {
 		return resp.NewAsyncResponse(asyncId, mpqerr.ErrAsyncPush)
 	}*/

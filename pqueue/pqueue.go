@@ -392,6 +392,10 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay int64) apis.IRespons
 	return resp.NewMsgResponse(msgId)
 }
 
+func (pq *PQueue) SyncWait() {
+	pq.db.SyncWait()
+}
+
 func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.IResponseItem {
 	nowTs := utils.Uts()
 	var msgs []apis.IResponseItem

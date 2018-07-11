@@ -59,32 +59,3 @@ func (dbf *MetaActionDB) AddMetadata(m *pmsg.MsgMeta) {
 	final := data[:n+9]
 	dbf.db.AddMetadata(final)
 }
-
-func DecodeMetadata(data []byte) (action byte, queueID uint64, msg *pmsg.MsgMeta) {
-	if len(data) < 9 {
-		println("too short data")
-		return DBActionWrongData, 0, nil
-	}
-
-	queueID = enc.DecodeBytesToUnit64(data)
-	action = data[8]
-	data = data[9:]
-
-	switch action {
-	case DBActionAddMetadata, DBActionUpdateMetadata:
-		msg = &pmsg.MsgMeta{}
-		if err := msg.Unmarshal(data); err != nil {
-			return DBActionWrongData, 0, nil
-		}
-	case DBActionDeleteMetadata:
-		if len(data) < 8 {
-			return DBActionWrongData, 0, nil
-		}
-		msg = &pmsg.MsgMeta{Serial: enc.DecodeBytesToUnit64(data)}
-	case DBActionQueueRemoved:
-	case DBActionWipeAll:
-	default:
-		return DBActionWrongData, 0, nil
-	}
-	return action, queueID, msg
-}
