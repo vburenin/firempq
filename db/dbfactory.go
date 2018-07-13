@@ -42,6 +42,6 @@ func getDatabase() apis.DataStorage {
 	return database
 }
 
-func GetDatabase(path string) {
-
+func GetDatabase(path string) (apis.DataStorage, error) {
+	return linear.NewFlatStorage(path, 2*1024*1024*1024-1, 2*1024*1024*1024-1)
 }

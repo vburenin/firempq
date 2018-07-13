@@ -29,8 +29,9 @@ type ConnectionServer struct {
 }
 
 func NewServer(ctx *fctx.Context) *ConnectionServer {
+	os.MkdirAll(conf.CFG.DatabasePath, 0700)
 	return &ConnectionServer{
-		qmgr:       pqueue.NewQueueManager(ctx, db.DatabaseInstance(), conf.CFG),
+		qmgr:       pqueue.NewQueueManager(ctx, conf.CFG),
 		signalChan: make(chan os.Signal, 1),
 	}
 }

@@ -28,8 +28,6 @@ type PQueue struct {
 
 	// Database storage
 	db apis.DataStorage
-	// A wrapper on top of common database operations.
-	metadb *MetaActionDB
 
 	// For messages jumping around all their jumps should be protected.
 	lock sync.Mutex
@@ -61,15 +59,14 @@ type PQueue struct {
 func NewPQueue(
 	db apis.DataStorage,
 	desc *qconf.QueueDescription,
-	deadMsgChan chan DeadMessage,
 	config *qconf.QueueConfig,
+	deadMsgChan chan DeadMessage,
 	configUpdater func(config *qconf.QueueParams) (*qconf.QueueConfig, error)) *PQueue {
 
 	return &PQueue{
 		desc:               desc,
 		config:             config,
 		db:                 db,
-		metadb:             NewDBFunctor(desc.ExportId, db),
 		id2msg:             make(map[string]*pmsg.MsgMeta),
 		availMsgs:          NewMsgQueue(),
 		timeoutHeap:        NewTimeoutHeap(),
@@ -175,7 +172,7 @@ func (pq *PQueue) GetCurrentStatus() apis.IResponse {
 func (pq *PQueue) Clear() {
 	total := 0
 	pq.lock.Lock()
-	pq.metadb.WipeAll()
+	pq.WriteWipeAll()
 	pq.id2msg = make(map[string]*pmsg.MsgMeta, 4096)
 	pq.availMsgs.Clear()
 	pq.lock.Unlock()
@@ -301,7 +298,7 @@ func (pq *PQueue) AddExistingMessage(msg *pmsg.MsgMeta) error {
 	msg.Serial = pq.msgSerialNumber
 	pq.id2msg[msg.StrId] = msg
 	pq.lock.Unlock()
-	pq.metadb.AddMetadata(msg)
+	pq.WriteAddMetadata(msg)
 
 	pq.lock.Lock()
 	pq.timeoutHeap.Push(msg)
@@ -355,7 +352,7 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay int64) apis.IRespons
 	if delay == 0 {
 		pq.availMsgs.Add(msg)
 	}
-	pq.metadb.AddMetadata(msg)
+	pq.WriteAddMetadata(msg)
 	pq.timeoutHeap.Push(msg)
 	pq.lock.Unlock()
 
@@ -388,7 +385,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.
 			pq.timeoutHeap.Push(msg)
 			pq.lock.Unlock()
 
-			pq.metadb.UpdateMetadata(msg)
+			pq.WriteUpdateMetadata(msg)
 		} else {
 			delete(pq.id2msg, msg.StrId)
 			pq.timeoutHeap.Remove(msg.Serial)
@@ -400,7 +397,7 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.
 		msgs = append(msgs, NewMsgResponseItem(msg, payload))
 
 		if !lock {
-			pq.metadb.DeleteMetadata(msg.Serial)
+			pq.WriteDeleteMetadata(msg.Serial)
 		}
 	}
 	return msgs
@@ -420,7 +417,7 @@ func (pq *PQueue) UpdateLockById(msgId string, lockTimeout int64) (r apis.IRespo
 		msg.UnlockTs = utils.Uts() + lockTimeout
 		pq.timeoutHeap.Push(msg)
 		pq.lock.Unlock()
-		pq.metadb.UpdateMetadata(msg)
+		pq.WriteUpdateMetadata(msg)
 		return resp.OK
 	}
 	pq.lock.Unlock()
@@ -493,7 +490,7 @@ func (pq *PQueue) UpdateLockByRcpt(rcpt string, lockTimeout int64) apis.IRespons
 	} else {
 		msg.UnlockTs = utils.Uts() + lockTimeout
 		pq.timeoutHeap.Push(msg)
-		pq.metadb.UpdateMetadata(msg)
+		pq.WriteUpdateMetadata(msg)
 	}
 
 	pq.lock.Unlock()
@@ -529,7 +526,7 @@ func (pq *PQueue) UnlockByReceipt(rcpt string) apis.IResponse {
 func (pq *PQueue) deleteMessage(msg *pmsg.MsgMeta) {
 	pq.timeoutHeap.Remove(msg.Serial)
 	delete(pq.id2msg, msg.StrId)
-	pq.metadb.DeleteMetadata(msg.Serial)
+	pq.WriteDeleteMetadata(msg.Serial)
 	msg.Serial = 0
 }
 
@@ -543,7 +540,7 @@ func (pq *PQueue) returnToFront(msg *pmsg.MsgMeta) {
 	if popLimit > 0 && msg.PopCount >= popLimit {
 		pq.timeoutHeap.Remove(msg.Serial)
 		delete(pq.id2msg, msg.StrId)
-		pq.metadb.DeleteMetadata(msg.Serial)
+		pq.WriteDeleteMetadata(msg.Serial)
 
 		msg.Serial = 0
 		if pq.config.PopLimitQueueName != "" {
@@ -560,7 +557,7 @@ func (pq *PQueue) returnToFront(msg *pmsg.MsgMeta) {
 			pq.availMsgs.Return(msg)
 		}
 		pq.timeoutHeap.Push(msg)
-		pq.metadb.UpdateMetadata(msg)
+		pq.WriteUpdateMetadata(msg)
 	}
 }
 
@@ -599,7 +596,6 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 }
 
 func (pq *PQueue) LoadMessages(ctx *fctx.Context, msgs []*pmsg.MsgMeta) {
-	ctx = fctx.WithParent(ctx, pq.desc.Name)
 	ts := utils.Uts()
 	ctx.Debug("initializing queue...")
 	pq.msgSerialNumber = 0
@@ -634,7 +630,35 @@ func (pq *PQueue) LoadMessages(ctx *fctx.Context, msgs []*pmsg.MsgMeta) {
 
 	}
 
-	ctx.Debugf("total messages: %d", len(pq.id2msg))
-	ctx.Debugf("locked messages: %d", pq.lockedMsgCnt)
-	ctx.Debugf("available messages: %d", pq.availMsgs.Size())
+	ctx.Debugf("total: %d, locked: %d, available: %d", len(pq.id2msg), pq.lockedMsgCnt, pq.availMsgs.Size())
+}
+
+func (pq *PQueue) Close() error {
+	return pq.db.Close()
+}
+
+func (pq *PQueue) WriteAddMetadata(m *pmsg.MsgMeta) {
+	data := make([]byte, m.Size()+1)
+	data[0] = DBActionAddMetadata
+	n, _ := m.MarshalTo(data[1:])
+	final := data[:n+1]
+	pq.db.AddMetadata(final)
+}
+
+func (pq *PQueue) WriteUpdateMetadata(m *pmsg.MsgMeta) {
+	data := make([]byte, m.Size()+1)
+	data[0] = DBActionUpdateMetadata
+	n, _ := m.MarshalTo(data[1:])
+	pq.db.AddMetadata(data[:n+1])
+}
+
+func (pq *PQueue) WriteDeleteMetadata(sn uint64) {
+	data := make([]byte, 1+8)
+	data[0] = DBActionDeleteMetadata
+	enc.Uint64ToBin(sn, data[1:])
+	pq.db.AddMetadata(data)
+}
+
+func (pq *PQueue) WriteWipeAll() {
+	pq.db.AddMetadata([]byte{DBActionWipeAll})
 }

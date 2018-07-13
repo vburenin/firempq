@@ -15,10 +15,11 @@ type PayloadLocation struct {
 
 type DataStorage interface {
 	SyncWait()
+	Flush() error
 	GetStats() map[string]interface{}
 	Close() error
 
-	AddPayload(payload []byte) (int64, int64, error)
+	AddPayload(payload []byte) (fileID int64, pos int64, err error)
 	RetrievePayload(fileID, pos int64) ([]byte, error)
 
 	AddMetadata(metadata []byte) error

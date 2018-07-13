@@ -22,9 +22,14 @@ func NewConfigManager(dbPath string) *ConfigManager {
 	return &ConfigManager{dbPath: dbPath}
 }
 
+func (qcm *ConfigManager) QueueDataPath(queueID string) string {
+	return filepath.Join(qcm.dbPath, queueID)
+}
+
 func (qcm *ConfigManager) ConfigFilePath(queueID string) string {
 	return filepath.Join(qcm.dbPath, queueID, "config")
 }
+
 func (qcm *ConfigManager) DescriptionFilePath(queueID string) string {
 	return filepath.Join(qcm.dbPath, queueID, "description")
 }

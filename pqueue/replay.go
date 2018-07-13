@@ -19,12 +19,15 @@ func (m MsgArray) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
 func (m MsgArray) Less(i, j int) bool { return m[i].Serial < m[j].Serial }
 
 type QueueLoader struct {
-	msgs map[uint64]*pmsg.MsgMeta
+	msgs    map[uint64]*pmsg.MsgMeta
+	msgPool []*pmsg.MsgMeta
+	poolPos int
 }
 
 func NewQueueLoader() *QueueLoader {
 	return &QueueLoader{
-		msgs: make(map[uint64]*pmsg.MsgMeta),
+		msgs:    make(map[uint64]*pmsg.MsgMeta),
+		msgPool: make([]*pmsg.MsgMeta, 0, 100),
 	}
 }
 
@@ -38,30 +41,7 @@ func (pql *QueueLoader) Messages() MsgArray {
 	return output
 }
 
-var msgPool = make([]*pmsg.MsgMeta, 0, 100)
-var poolPos = 0
-
-func getNewMsg() *pmsg.MsgMeta {
-	if poolPos > 0 {
-		m := msgPool[poolPos-1]
-		poolPos--
-		return m
-	}
-	return &pmsg.MsgMeta{}
-}
-
-func retMsg(m *pmsg.MsgMeta) {
-	m.Reset()
-	if poolPos == len(msgPool) {
-		msgPool = append(msgPool, m)
-		poolPos++
-	} else {
-		msgPool[poolPos] = m
-		poolPos++
-	}
-}
-
-func ReplayData(ctx *fctx.Context, queues map[uint64]*QueueLoader, iter apis.ItemIterator) error {
+func (pql *QueueLoader) ReplayData(ctx *fctx.Context, iter apis.ItemIterator) error {
 	for {
 		if err := iter.Next(); err != nil {
 			if err == io.EOF {
@@ -73,58 +53,52 @@ func ReplayData(ctx *fctx.Context, queues map[uint64]*QueueLoader, iter apis.Ite
 			continue
 		}
 
-		action, queueID, msg, delSn := DecodeMetadata(iter.GetData())
-		if action == DBActionWrongData {
-			ctx.Error("Received blob cannot be decoded")
-		}
-
-		loader := queues[queueID]
-		if loader == nil {
-			continue
-		}
+		data := iter.GetData()
+		action := data[0]
+		data = data[1:]
 
 		switch action {
 		case DBActionAddMetadata, DBActionUpdateMetadata:
-			loader.msgs[msg.Serial] = msg
-		case DBActionDeleteMetadata:
-			m := loader.msgs[delSn]
-			if m != nil {
-				retMsg(m)
+			msg := pql.getNewMsg()
+			if err := msg.Unmarshal(data); err != nil {
+				ctx.Errorf("wrong data from iterator: %s", err)
+			} else {
+				pql.msgs[msg.Serial] = msg
 			}
-			delete(loader.msgs, delSn)
+		case DBActionDeleteMetadata:
+			if len(data) < 8 {
+				ctx.Errorf("Invalid length of 'delete' data")
+			} else {
+				delSn := enc.DecodeBytesToUnit64(data)
+				m := pql.msgs[delSn]
+				if m != nil {
+					pql.retMsg(m)
+				}
+			}
 		case DBActionWipeAll:
-			loader.msgs = make(map[uint64]*pmsg.MsgMeta, 4096)
+			pql.msgs = make(map[uint64]*pmsg.MsgMeta, 4096)
+		default:
+			ctx.Errorf("Unknown action: %d", action)
 		}
-
 	}
 }
 
-func DecodeMetadata(data []byte) (action byte, queueID uint64, msg *pmsg.MsgMeta, msgSn uint64) {
-	if len(data) < 9 {
-		println("too short data")
-		return DBActionWrongData, 0, nil, 0
+func (pql *QueueLoader) getNewMsg() *pmsg.MsgMeta {
+	if pql.poolPos > 0 {
+		m := pql.msgPool[pql.poolPos-1]
+		pql.poolPos--
+		return m
 	}
+	return &pmsg.MsgMeta{}
+}
 
-	queueID = enc.DecodeBytesToUnit64(data)
-	action = data[8]
-	data = data[9:]
-
-	switch action {
-	case DBActionAddMetadata, DBActionUpdateMetadata:
-		msg := getNewMsg()
-		if err := msg.Unmarshal(data); err != nil {
-			return DBActionWrongData, 0, nil, 0
-		}
-		return action, queueID, msg, 0
-	case DBActionDeleteMetadata:
-		if len(data) < 8 {
-			return DBActionWrongData, 0, nil, 0
-		}
-		return action, queueID, nil, enc.DecodeBytesToUnit64(data)
-	case DBActionQueueRemoved:
-	case DBActionWipeAll:
-	default:
-		return DBActionWrongData, 0, nil, 0
+func (pql *QueueLoader) retMsg(m *pmsg.MsgMeta) {
+	m.Reset()
+	if pql.poolPos == len(pql.msgPool) {
+		pql.msgPool = append(pql.msgPool, m)
+		pql.poolPos++
+	} else {
+		pql.msgPool[pql.poolPos] = m
+		pql.poolPos++
 	}
-	return action, queueID, msg, 0
 }

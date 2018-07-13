@@ -16,3 +16,8 @@ const (
 	StatusQueueDeadMsgQueue   = "FailQueue"
 	StatusQueueMaxMsgSize     = "MaxMsgSize"
 )
+
+const DBActionAddMetadata = byte(1)
+const DBActionUpdateMetadata = byte(2)
+const DBActionDeleteMetadata = byte(3)
+const DBActionWipeAll = byte(4)

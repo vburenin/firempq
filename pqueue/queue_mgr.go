@@ -3,7 +3,6 @@ package pqueue
 import (
 	"strings"
 	"sync"
-
 	"time"
 
 	"github.com/vburenin/firempq/apis"
@@ -27,7 +26,6 @@ type QueueManager struct {
 	queues            map[string]*PQueue
 	rwLock            sync.RWMutex
 	queueIDsn         uint64
-	db                apis.DataStorage
 	cfg               *conf.Config
 	deadMsgs          chan DeadMessage
 	expireLoopBreaker chan struct{}
@@ -36,21 +34,44 @@ type QueueManager struct {
 	wg sync.WaitGroup
 }
 
-func NewQueueManager(ctx *fctx.Context, db apis.DataStorage, config *conf.Config) *QueueManager {
+func NewQueueManager(ctx *fctx.Context, config *conf.Config) *QueueManager {
 	f := QueueManager{
 		queues:            make(map[string]*PQueue),
 		queueIDsn:         0,
-		db:                db,
 		cfg:               config,
 		deadMsgs:          make(chan DeadMessage, 128),
 		expireLoopBreaker: make(chan struct{}),
 		configMgr:         qconf.NewConfigManager(config.DatabasePath),
 	}
+
 	f.loadAllServices(ctx)
 	f.wg.Add(2)
 	go f.deadMessageProcessorLoop(fctx.Background("dead-queue"))
 	go f.expireLoop(fctx.Background("expire-loop"))
 	return &f
+}
+
+func (qm *QueueManager) flushLoop(ctx *fctx.Context) {
+	defer func() {
+		qm.wg.Done()
+		ctx.Info("stopping flash loop")
+	}()
+	for {
+		qm.rwLock.RLock()
+		for _, q := range qm.queues {
+			err := q.db.Flush()
+			if err != nil {
+				ctx.Errorf("flush failed for the queue %s: %s", q.Description().Name, err)
+			}
+		}
+		qm.rwLock.Unlock()
+
+		select {
+		case <-time.After(time.Millisecond * 100):
+		case <-qm.expireLoopBreaker:
+			return
+		}
+	}
 }
 
 func (qm *QueueManager) deadMessageProcessorLoop(ctx *fctx.Context) {
@@ -98,6 +119,29 @@ func (qm *QueueManager) expireLoop(ctx *fctx.Context) {
 	}
 }
 
+func (qm *QueueManager) initQueue(ctx *fctx.Context, desc *qconf.QueueDescription, cfg *qconf.QueueConfig) {
+	ctx = fctx.WithParent(ctx, desc.Name)
+	iterator := db.NewIterator(ctx, qm.configMgr.QueueDataPath(desc.ServiceId))
+
+	ql := NewQueueLoader()
+	if err := ql.ReplayData(ctx, iterator); err != nil {
+		ctx.Errorf("Failed to initialize %s queue: %s", desc.Name, err)
+		return
+	}
+
+	ldb, err := db.GetDatabase(qm.configMgr.QueueDataPath(desc.ServiceId))
+	if err != nil {
+		ctx.Errorf("Failed to initialize %s queue: %s", desc.Name, err)
+		return
+	}
+
+	queue := NewPQueue(ldb, desc, cfg, qm.deadMsgs, qm.makeConfigUpdater(desc.ServiceId))
+	queue.LoadMessages(ctx, ql.Messages())
+	qm.rwLock.Lock()
+	qm.queues[desc.Name] = queue
+	qm.rwLock.Unlock()
+}
+
 func (qm *QueueManager) loadAllServices(ctx *fctx.Context) {
 	descList, err := qm.configMgr.LoadDescriptions()
 	if err != nil {
@@ -107,9 +151,9 @@ func (qm *QueueManager) loadAllServices(ctx *fctx.Context) {
 	if len(descList) > 0 {
 		qm.queueIDsn = descList[len(descList)-1].ExportId
 	}
-
-	queuesData := make(map[uint64]*QueueLoader)
-	for _, desc := range descList {
+	cwg := nsync.NewControlWaitGroup(8)
+	for _, d := range descList {
+		desc := d
 		ctx.Debugf("found queue: %s", desc.Name)
 		if _, ok := qm.queues[desc.Name]; ok {
 			ctx.Warnf("Service with the same name detected: %s", desc.Name)
@@ -125,25 +169,8 @@ func (qm *QueueManager) loadAllServices(ctx *fctx.Context) {
 				ctx.Errorf("Didn't load config: %s", err)
 				continue
 			}
-			qm.queues[desc.Name] = NewPQueue(qm.db, desc, qm.deadMsgs, cfg, qm.makeConfigUpdater(desc.ServiceId))
-			queuesData[desc.ExportId] = NewQueueLoader()
+			cwg.Do(func() { qm.initQueue(ctx, desc, cfg) })
 		}
-	}
-
-	iter := db.NewIterator(ctx, qm.cfg.DatabasePath)
-
-	err = ReplayData(ctx, queuesData, iter)
-	if err != nil {
-		ctx.Fatalf("Failed to restore queues state: %s", err)
-	}
-	cwg := nsync.NewControlWaitGroup(8)
-	for _, queue := range qm.queues {
-		q := queue
-		data := queuesData[queue.Description().ExportId]
-		if data == nil {
-			ctx.Fatalf("queue has disappeared: %s", q.Description().Name)
-		}
-		cwg.Do(func() { q.LoadMessages(ctx, data.Messages()) })
 	}
 	cwg.Wait()
 }
@@ -180,13 +207,20 @@ func (qm *QueueManager) CreateQueue(ctx *fctx.Context, queueName string, config 
 		return mpqerr.ErrDbProblem
 	}
 
+	ldb, err := db.GetDatabase(qm.configMgr.QueueDataPath(desc.ServiceId))
+	if err != nil {
+		ctx.Errorf("Failed to initialize %s queue: %s", desc.Name, err)
+		qm.configMgr.DeleteQueueData(ctx, desc.ServiceId)
+		return mpqerr.ErrDbProblem
+	}
+
 	if err := qm.configMgr.SaveConfig(desc.ServiceId, config); err != nil {
 		ctx.Errorf("could not save service config: %s", err)
 		qm.configMgr.DeleteQueueData(ctx, desc.ServiceId)
 		return mpqerr.ErrDbProblem
 	}
 
-	svc := NewPQueue(qm.db, desc, qm.deadMsgs, config, qm.makeConfigUpdater(desc.ServiceId))
+	svc := NewPQueue(ldb, desc, config, qm.deadMsgs, qm.makeConfigUpdater(desc.ServiceId))
 
 	qm.queueIDsn++
 	qm.queues[queueName] = svc
@@ -232,6 +266,14 @@ func (qm *QueueManager) GetQueue(name string) *PQueue {
 
 // Close closes all available services walking through all of them.
 func (qm *QueueManager) Close() {
+	qm.rwLock.Lock()
+	ctx := fctx.Background("shutdown")
+	for _, q := range qm.queues {
+		if err := q.Close(); err != nil {
+			ctx.Errorf("Could not close database: %s", err)
+		}
+	}
+	qm.rwLock.Unlock()
 	close(qm.expireLoopBreaker)
 	close(qm.deadMsgs)
 	qm.wg.Wait()

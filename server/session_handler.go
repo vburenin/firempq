@@ -1,11 +1,11 @@
 package server
 
 import (
+	"bufio"
+	"io"
 	"net"
 	"strconv"
 	"sync"
-
-	"bufio"
 
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/db"
@@ -87,12 +87,18 @@ func (s *SessionHandler) DispatchConn() {
 	s.WriteResponse(resp.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
-		if err == nil {
-			resp := s.processCmdTokens(cmdTokens)
-			err = s.WriteResponse(resp)
-		}
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			s.ctx.Warnf("connection error: %s", err)
+			break
+		}
+
+		r := s.processCmdTokens(cmdTokens)
+		err = s.WriteResponse(r)
+		if err != nil {
+			s.ctx.Warnf("write error: %s", err)
 			break
 		}
 	}
