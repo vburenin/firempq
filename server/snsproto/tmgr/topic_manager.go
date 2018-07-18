@@ -6,6 +6,7 @@ import (
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/server/snsproto/arnutil"
 	"github.com/vburenin/firempq/server/snsproto/dbdata"
+	"go.uber.org/zap"
 )
 
 const TopicListPrefix = ":tlist:"
@@ -54,7 +55,7 @@ func (tm *TopicManager) ListTopics(offset int) ([]string, int) {
 	for i := offset; i < maxLen; i++ {
 		topicName := tm.TopicList[i]
 		if t := tm.Topics[topicName]; t == nil {
-			log.Error("Inconsistent data! No data for topic name: %s", topicName)
+			log.Error("no data for topic name", zap.String("topic", topicName))
 		} else {
 			res = append(res, t.Arn)
 		}

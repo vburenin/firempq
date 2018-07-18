@@ -17,10 +17,10 @@ const (
 	maxTokensPerMsg    = 100
 	maxRecvBufferSize  = 4096
 	maxTextTokenLen    = 256
-	maxBinaryTokenLen  = 128 * 1024 * 1024
+	maxBinaryTokenLen  = 1024 * 1024
 	startAsciiRange    = 0x21
 	endAsciiRange      = 0x7E
-	initTokenBufferLen = 48
+	initTokenBufferLen = 128
 )
 
 type Tokenizer struct {

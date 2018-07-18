@@ -13,7 +13,7 @@ import (
 type Context struct {
 	ctx     context.Context
 	traceID string
-	Logger  *zap.SugaredLogger
+	Logger  *zap.Logger
 }
 
 func WithCancel(parent context.Context, traceID string) (*Context, context.CancelFunc) {
@@ -26,7 +26,7 @@ func WithCancel(parent context.Context, traceID string) (*Context, context.Cance
 	return &Context{
 		ctx:     ctx,
 		traceID: traceID,
-		Logger:  p.Logger,
+		Logger:  p.Logger.With(zap.String("id", traceID)),
 	}, cancel
 }
 
@@ -61,7 +61,7 @@ func WithParent(parent context.Context, traceID string) *Context {
 	return &Context{
 		ctx:     parent,
 		traceID: traceID,
-		Logger:  log.Logger,
+		Logger:  log.Logger.With(zap.String("id", traceID)),
 	}
 }
 
@@ -81,54 +81,30 @@ func (c *Context) Value(key interface{}) interface{} {
 	return c.ctx.Value(key)
 }
 
-func (c *Context) Trace(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Debugf(msg, args...)
+func (c *Context) Trace(msg string, fields ...zap.Field) {
+	c.Logger.Debug(msg, fields...)
 }
 
-func (c *Context) Debug(msg string) {
-	c.Logger.With(zap.String("id", c.traceID)).Debug(msg)
+func (c *Context) Debug(msg string, fields ...zap.Field) {
+	c.Logger.Debug(msg, fields...)
 }
 
-func (c *Context) Debugf(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Debugf(msg, args...)
+func (c *Context) Info(msg string, fields ...zap.Field) {
+	c.Logger.Info(msg, fields...)
 }
 
-func (c *Context) Info(msg string) {
-	c.Logger.With(zap.String("id", c.traceID)).Info(msg)
+func (c *Context) Warn(msg string, fields ...zap.Field) {
+	c.Logger.Warn(msg, fields...)
 }
 
-func (c *Context) Infof(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Infof(msg, args...)
+func (c *Context) Error(msg string, fields ...zap.Field) {
+	c.Logger.Error(msg, fields...)
 }
 
-func (c *Context) Warn(msg string) {
-	c.Logger.With(zap.String("id", c.traceID)).Warn(msg)
+func (c *Context) Panic(msg string, fields ...zap.Field) {
+	c.Logger.Panic(msg, fields...)
 }
 
-func (c *Context) Warnf(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Warnf(msg, args...)
-}
-
-func (c *Context) Error(msg string) {
-	c.Logger.With(zap.String("id", c.traceID)).Error(msg)
-}
-
-func (c *Context) Errorf(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Errorf(msg, args...)
-}
-
-func (c *Context) Panic(msg string) {
-	c.Logger.With(zap.String("id", c.traceID)).Panic(msg)
-}
-
-func (c *Context) Criticalf(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Panicf(msg, args...)
-}
-
-func (c *Context) Fatal(msg string) {
-	c.Logger.With(zap.String("id", c.traceID)).Fatal(msg)
-}
-
-func (c *Context) Fatalf(msg string, args ...interface{}) {
-	c.Logger.With(zap.String("id", c.traceID)).Fatalf(msg, args...)
+func (c *Context) Fatal(msg string, fields ...zap.Field) {
+	c.Logger.Fatal(msg, fields...)
 }

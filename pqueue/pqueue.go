@@ -18,9 +18,11 @@ import (
 	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
+	"go.uber.org/zap"
 )
 
 type PQueue struct {
+	MessagePool
 	// A must attribute of each service containing all essential service information generated upon creation.
 	desc *qconf.QueueDescription
 	// Configuration setting on a queue level.
@@ -63,7 +65,7 @@ func NewPQueue(
 	deadMsgChan chan DeadMessage,
 	configUpdater func(config *qconf.QueueParams) (*qconf.QueueConfig, error)) *PQueue {
 
-	return &PQueue{
+	q := &PQueue{
 		desc:               desc,
 		config:             config,
 		db:                 db,
@@ -74,6 +76,8 @@ func NewPQueue(
 		deadMsgChan:        deadMsgChan,
 		configUpdater:      configUpdater,
 	}
+	q.InitPool(1000)
+	return q
 }
 
 func (pq *PQueue) ConnScope(rw apis.ResponseWriter) *ConnScope {
@@ -82,9 +86,7 @@ func (pq *PQueue) ConnScope(rw apis.ResponseWriter) *ConnScope {
 
 // StartUpdate runs a loop of periodic data updates.
 func (pq *PQueue) Update() int64 {
-	pq.lock.Lock()
 	cnt := pq.checkTimeouts(utils.Uts())
-	pq.lock.Unlock()
 	return cnt
 }
 
@@ -176,18 +178,15 @@ func (pq *PQueue) Clear() {
 	pq.id2msg = make(map[string]*pmsg.MsgMeta, 4096)
 	pq.availMsgs.Clear()
 	pq.lock.Unlock()
-	log.Debug("Removed %d messages.", total)
+	log.Debug("messages removed", zap.Int("count", total))
 }
 
 func (pq *PQueue) TimeoutItems(cutOffTs int64) apis.IResponse {
 	var total int64
-	pq.lock.Lock()
 
 	for value := pq.checkTimeouts(cutOffTs); value > 0; value = pq.checkTimeouts(cutOffTs) {
 		total += value
 	}
-
-	pq.lock.Unlock()
 
 	return resp.NewIntResponse(total)
 }
@@ -246,34 +245,52 @@ func (pq *PQueue) GetMessageInfo(msgId string) apis.IResponse {
 
 func (pq *PQueue) DeleteLockedById(msgId string) apis.IResponse {
 	pq.lock.Lock()
-	defer pq.lock.Unlock()
 	msg, ok := pq.id2msg[msgId]
 
 	if !ok {
+		pq.lock.Unlock()
 		return mpqerr.ErrMsgNotFound
 	}
 
 	if msg.UnlockTs == 0 {
+		pq.lock.Unlock()
 		return mpqerr.ErrMsgNotLocked
 	}
 
-	pq.deleteMessage(msg)
+	sn := msg.Serial
 	pq.lockedMsgCnt--
+	pq.timeoutHeap.Remove(msg.Serial)
+	delete(pq.id2msg, msg.StrId)
+	pq.ReturnMessage(msg)
+	pq.lock.Unlock()
+
+	pq.WriteDeleteMetadata(sn)
 
 	return resp.OK
 }
 
 func (pq *PQueue) DeleteById(msgId string) apis.IResponse {
 	pq.lock.Lock()
-	defer pq.lock.Unlock()
+
 	msg, ok := pq.id2msg[msgId]
 	if !ok {
+		pq.lock.Unlock()
 		return mpqerr.ErrMsgNotFound
 	}
 	if msg.UnlockTs > 0 {
+		pq.lock.Unlock()
 		return mpqerr.ErrMsgLocked
 	}
-	pq.deleteMessage(msg)
+
+	sn := msg.Serial
+	pq.lockedMsgCnt--
+	pq.timeoutHeap.Remove(msg.Serial)
+	delete(pq.id2msg, msg.StrId)
+	pq.ReturnMessage(msg)
+	pq.lock.Unlock()
+
+	pq.WriteDeleteMetadata(sn)
+
 	return resp.OK
 }
 
@@ -318,16 +335,6 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay int64) apis.IRespons
 	nowTs := utils.Uts()
 	atomic.StoreInt64(&pq.config.LastPushTs, nowTs)
 
-	// pre-creating message before grabbing a lock
-	msg := &pmsg.MsgMeta{
-		StrId:    msgId,
-		ExpireTs: nowTs + msgTtl,
-	}
-
-	if delay > 0 {
-		msg.UnlockTs = nowTs + delay
-	}
-
 	pq.lock.Lock()
 	_, ok := pq.id2msg[msgId]
 	if ok {
@@ -335,12 +342,22 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay int64) apis.IRespons
 		return mpqerr.ErrMsgAlreadyExists
 	}
 
+	// pre-creating message before grabbing a lock
 	pq.msgSerialNumber++
+
+	msg := pq.AllocateNewMessage()
+	msg.StrId = msgId
+	msg.ExpireTs = nowTs + msgTtl
 	msg.Serial = pq.msgSerialNumber
+
+	if delay > 0 {
+		msg.UnlockTs = nowTs + delay
+	}
+
 	pq.id2msg[msgId] = msg
 	pq.lock.Unlock()
 
-	msg.PayloadFileId, msg.PayloadOffset, err = pq.db.AddPayload(enc.UnsafeStringToBytes(payload))
+	payloadID, payloadOffset, err := pq.db.AddPayload(enc.UnsafeStringToBytes(payload))
 
 	pq.lock.Lock()
 	if err != nil {
@@ -349,10 +366,17 @@ func (pq *PQueue) Push(msgId, payload string, msgTtl, delay int64) apis.IRespons
 		return mpqerr.ErrDbProblem
 	}
 
+	msg.PayloadFileId = payloadID
+	msg.PayloadOffset = payloadOffset
+	pq.lock.Unlock()
+
+	pq.WriteAddMetadata(msg)
+
+	pq.lock.Lock()
 	if delay == 0 {
 		pq.availMsgs.Add(msg)
 	}
-	pq.WriteAddMetadata(msg)
+
 	pq.timeoutHeap.Push(msg)
 	pq.lock.Unlock()
 
@@ -365,12 +389,11 @@ func (pq *PQueue) SyncWait() {
 	pq.db.SyncWait()
 }
 
-func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.IResponseItem {
+func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []*pmsg.FullMessage {
 	nowTs := utils.Uts()
-	var msgs []apis.IResponseItem
+	msgs := make([]*pmsg.FullMessage, 0, 10)
 
 	atomic.StoreInt64(&pq.config.LastPopTs, nowTs)
-
 	for int64(len(msgs)) < limit {
 		pq.lock.Lock()
 		msg := pq.availMsgs.Pop()
@@ -378,27 +401,32 @@ func (pq *PQueue) popMessages(lockTimeout int64, limit int64, lock bool) []apis.
 			pq.lock.Unlock()
 			return msgs
 		}
+
+		pq.lock.Unlock()
+		// TODO(vburenin): Log ignored error
+		payload, _ := pq.db.RetrievePayload(msg.PayloadFileId, msg.PayloadOffset)
+		pq.lock.Lock()
+
 		if lock {
 			pq.lockedMsgCnt++
 			msg.UnlockTs = nowTs + lockTimeout
 			msg.PopCount++
 			pq.timeoutHeap.Push(msg)
+			msgs = append(msgs, pmsg.NewFullMessage(msg, payload))
 			pq.lock.Unlock()
 
 			pq.WriteUpdateMetadata(msg)
 		} else {
+			sn := msg.Serial
 			delete(pq.id2msg, msg.StrId)
 			pq.timeoutHeap.Remove(msg.Serial)
+			msgs = append(msgs, pmsg.NewFullMessage(msg, payload))
+			pq.ReturnMessage(msg)
 			pq.lock.Unlock()
-		}
-		// TODO(vburenin): Log ignored error
-		payload, _ := pq.db.RetrievePayload(msg.PayloadFileId, msg.PayloadOffset)
 
-		msgs = append(msgs, NewMsgResponseItem(msg, payload))
-
-		if !lock {
-			pq.WriteDeleteMetadata(msg.Serial)
+			pq.WriteDeleteMetadata(sn)
 		}
+
 	}
 	return msgs
 }
@@ -504,9 +532,15 @@ func (pq *PQueue) DeleteByReceipt(rcpt string) apis.IResponse {
 	if err != nil {
 		return err
 	}
+
+	sn := msg.Serial
 	pq.lockedMsgCnt--
-	pq.deleteMessage(msg)
+	pq.timeoutHeap.Remove(msg.Serial)
+	delete(pq.id2msg, msg.StrId)
+	pq.ReturnMessage(msg)
 	pq.lock.Unlock()
+
+	pq.WriteDeleteMetadata(sn)
 	return resp.OK
 }
 
@@ -521,13 +555,6 @@ func (pq *PQueue) UnlockByReceipt(rcpt string) apis.IResponse {
 	}
 	pq.lock.Unlock()
 	return resp.OK
-}
-
-func (pq *PQueue) deleteMessage(msg *pmsg.MsgMeta) {
-	pq.timeoutHeap.Remove(msg.Serial)
-	delete(pq.id2msg, msg.StrId)
-	pq.WriteDeleteMetadata(msg.Serial)
-	msg.Serial = 0
 }
 
 // Attempts to return a message into the front of the queue.
@@ -562,9 +589,7 @@ func (pq *PQueue) returnToFront(msg *pmsg.MsgMeta) {
 }
 
 func (pq *PQueue) CheckTimeouts(ts int64) apis.IResponse {
-	pq.lock.Lock()
 	r := resp.NewIntResponse(pq.checkTimeouts(ts))
-	pq.lock.Unlock()
 	return r
 }
 
@@ -573,31 +598,50 @@ func (pq *PQueue) checkTimeouts(ts int64) int64 {
 	h := pq.timeoutHeap
 	var cntDel int64 = 0
 	var cntRet int64 = 0
-	for h.NotEmpty() && cntDel+cntRet < conf.CFG_PQ.TimeoutCheckBatchSize {
+
+	for {
+		pq.lock.Lock()
+		if h.Empty() {
+			pq.lock.Unlock()
+			break
+		}
+
 		msg := h.MinMsg()
 		if msg.ExpireTs < ts {
 			cntDel++
-			pq.deleteMessage(msg)
+			sn := msg.Serial
+			pq.lockedMsgCnt--
+			pq.timeoutHeap.Remove(msg.Serial)
+			delete(pq.id2msg, msg.StrId)
+			pq.ReturnMessage(msg)
+			pq.lock.Unlock()
+
+			pq.WriteDeleteMetadata(sn)
 		} else if msg.UnlockTs > 0 && msg.UnlockTs < ts {
 			cntRet++
 			pq.returnToFront(msg)
+			pq.lock.Unlock()
 		} else {
+			pq.lock.Unlock()
+			break
+		}
+
+		if cntDel+cntRet > conf.CFG_PQ.TimeoutCheckBatchSize {
+			pq.lock.Unlock()
 			break
 		}
 	}
+
 	if cntRet > 0 {
 		signals.NewMessageNotify(pq.newMsgNotification)
-		log.Debug("%d item(s) moved to the queue.", cntRet)
 	}
-	if cntDel > 0 {
-		log.Debug("%d item(s) removed from the queue.", cntDel)
-	}
+
 	return cntDel + cntRet
 }
 
 func (pq *PQueue) LoadMessages(ctx *fctx.Context, msgs []*pmsg.MsgMeta) {
 	ts := utils.Uts()
-	ctx.Debug("initializing queue...")
+	ctx.Debug("initializing queue with messages", zap.Int("count", len(msgs)))
 	pq.msgSerialNumber = 0
 	if len(msgs) > 0 {
 		pq.msgSerialNumber = msgs[len(msgs)-1].Serial
@@ -629,8 +673,10 @@ func (pq *PQueue) LoadMessages(ctx *fctx.Context, msgs []*pmsg.MsgMeta) {
 		}
 
 	}
-
-	ctx.Debugf("total: %d, locked: %d, available: %d", len(pq.id2msg), pq.lockedMsgCnt, pq.availMsgs.Size())
+	ctx.Debug("messages loaded",
+		zap.Int("total", len(pq.id2msg)),
+		zap.Uint64("locked", pq.lockedMsgCnt),
+		zap.Uint64("available", pq.availMsgs.Size()))
 }
 
 func (pq *PQueue) Close() error {

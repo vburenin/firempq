@@ -492,7 +492,7 @@ func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
 	/*
 			if syncWait {
 			if len(asyncId) == 0 {
-				res := cs.pq.Push(msgId, payload, msgTtl, delay)
+				res := cs.pq.Push(msgId, Payload, msgTtl, delay)
 				if !res.IsError() {
 					cs.pq.SyncWait()
 				}
@@ -500,7 +500,7 @@ func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
 			} else {
 				go func() {
 					cs.asyncGroup.Add(1)
-					res := cs.pq.Push(msgId, payload, msgTtl, delay)
+					res := cs.pq.Push(msgId, Payload, msgTtl, delay)
 					if !res.IsError() {
 						cs.pq.SyncWait()
 					}
@@ -518,7 +518,7 @@ func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
 			} else {
 				go func() {
 					cs.asyncGroup.Add(1)
-					res := cs.pq.Push(msgId, payload, msgTtl, delay)
+					res := cs.pq.Push(msgId, Payload, msgTtl, delay)
 					if !res.IsError() {
 						// TODO(vburenin): Add flush wait.
 						// cs.pq.WaitFlush()

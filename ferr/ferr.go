@@ -3,6 +3,7 @@ package ferr
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 // Package errors provides simple error handling primitives.
@@ -109,7 +110,18 @@ type FError struct {
 }
 
 func (fe *FError) Error() string {
-	return fe.Msg
+	text := []string{fe.Msg}
+	curErr := fe.Cause
+	for curErr != nil {
+		if e, ok := fe.Cause.(*FError); ok {
+			text = append(text, e.Msg)
+			curErr = e.Cause
+		} else {
+			text = append(text, curErr.Error())
+			break
+		}
+	}
+	return strings.Join(text, ": ")
 }
 
 func Error(message string) error {

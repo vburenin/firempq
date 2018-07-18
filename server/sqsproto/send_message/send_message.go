@@ -20,6 +20,7 @@ import (
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
 	"github.com/vburenin/firempq/server/sqsproto/validation"
 	"github.com/vburenin/firempq/utils"
+	"go.uber.org/zap"
 )
 
 type SendMessageResponse struct {
@@ -235,8 +236,10 @@ func PushAMessage(pq *pqueue.PQueue, senderId string, paramList []string) sqs_re
 
 	d, marshalErr := msgPayload.Marshal()
 	if marshalErr != nil {
-		log.Error("Failed to serialize message payload: %v", err)
+		log.Error("payload problem", zap.Error(marshalErr))
+		return sqserr.MalformedInputError(msgPayload.SenderId)
 	}
+
 	payload := string(d)
 
 	resp := pq.Push(msgId, payload, pq.Config().MsgTtl, out.DelaySeconds)

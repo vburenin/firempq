@@ -17,6 +17,7 @@ import (
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/signals"
 	"github.com/vburenin/firempq/utils"
+	"go.uber.org/zap"
 )
 
 const (
@@ -83,7 +84,7 @@ func (s *SessionHandler) QuitListener(wg *sync.WaitGroup) {
 // DispatchConn dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
 	addr := s.conn.RemoteAddr().String()
-	s.ctx.Debugf("Client connected: %s", addr)
+	s.ctx.Debug("new connection", zap.String("addr", addr))
 	s.WriteResponse(resp.NewStrResponse("HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
@@ -91,14 +92,14 @@ func (s *SessionHandler) DispatchConn() {
 			if err == io.EOF {
 				break
 			}
-			s.ctx.Warnf("connection error: %s", err)
+			s.ctx.Warn("connection error", zap.Error(err), zap.String("addr", addr))
 			break
 		}
 
 		r := s.processCmdTokens(cmdTokens)
 		err = s.WriteResponse(r)
 		if err != nil {
-			s.ctx.Warnf("write error: %s", err)
+			s.ctx.Warn("write error", zap.String("addr", addr), zap.Error(err))
 			break
 		}
 	}
@@ -107,7 +108,7 @@ func (s *SessionHandler) DispatchConn() {
 		s.scope.Finish()
 	}
 	s.conn.Close()
-	s.ctx.Debugf("Client disconnected: %s", addr)
+	s.ctx.Debug("client disconnected", zap.String("addr", addr))
 }
 
 // Basic token processing that looks for global commands,
@@ -199,7 +200,7 @@ func (s *SessionHandler) dropQueueHandler(tokens []string) apis.IResponse {
 		return mpqerr.InvalidRequest("DROP accept queue name only")
 	}
 	svcName := tokens[0]
-	res := s.qmgr.DropService(s.ctx, svcName)
+	res := s.qmgr.DropQueue(s.ctx, svcName)
 	return res
 }
 
@@ -246,7 +247,7 @@ func (s *SessionHandler) listServicesHandler(tokens []string) apis.IResponse {
 		svcPrefix = tokens[0]
 	}
 
-	return resp.NewStrArrayResponse("+SVCLIST", s.qmgr.BuildServiceNameList(svcPrefix))
+	return resp.NewStrArrayResponse("+SVCLIST", s.qmgr.GetQueueList(svcPrefix))
 }
 
 // Ping responder.
@@ -273,7 +274,7 @@ func logLevelHandler(tokens []string) apis.IResponse {
 	if e != nil || l < 0 || l > 5 {
 		return mpqerr.InvalidRequest("Log level is an integer in range [0-5]")
 	}
-	log.Warning("Log level changed to: %d", l)
+	log.Warning("log level change", zap.Int("level", l))
 	log.SetLevel(l)
 	return resp.OK
 }

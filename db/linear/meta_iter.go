@@ -10,6 +10,7 @@ import (
 
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/ferr"
+	"go.uber.org/zap"
 )
 
 type MetadataIterator struct {
@@ -108,7 +109,7 @@ func (it *MetadataIterator) nextReader() error {
 	}
 
 	fn := filepath.Join(it.dbPath, MakeMetaFileName(it.metafileIDs[0]))
-	it.ctx.Debugf("reading metadata from: %s", fn)
+	it.ctx.Debug("reading metadata from file", zap.String("filename", fn))
 
 	f, err := os.Open(fn)
 	if err != nil {

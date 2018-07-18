@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -109,6 +110,8 @@ func (qcm *ConfigManager) LoadDescriptions() (ServiceDescriptionList, error) {
 		}
 		sdList = append(sdList, info)
 	}
+
+	sort.Slice(sdList, func(i int, j int) bool { return sdList[i].ExportId < sdList[j].ExportId })
 
 	return sdList, nil
 }

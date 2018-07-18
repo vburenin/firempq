@@ -17,6 +17,7 @@ import (
 	"github.com/vburenin/firempq/server/snsproto"
 	"github.com/vburenin/firempq/server/sqsproto"
 	"github.com/vburenin/firempq/signals"
+	"go.uber.org/zap"
 	"gopkg.in/tylerb/graceful.v1"
 )
 
@@ -30,8 +31,12 @@ type ConnectionServer struct {
 
 func NewServer(ctx *fctx.Context) *ConnectionServer {
 	os.MkdirAll(conf.CFG.DatabasePath, 0700)
+	mgr, err := pqueue.NewQueueManager(ctx, conf.CFG)
+	if err != nil {
+		log.Fatal("queue manager is not initialized", zap.Error(err))
+	}
 	return &ConnectionServer{
-		qmgr:       pqueue.NewQueueManager(ctx, conf.CFG),
+		qmgr:       mgr,
 		signalChan: make(chan os.Signal, 1),
 	}
 }
@@ -41,8 +46,7 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			log.Info("Starting SQS Protocol Server on: %s", conf.CFG.SQSServerInterface)
-
+			log.Info("SQS service proto", zap.String("interface", conf.CFG.SQSServerInterface))
 			mux := http.NewServeMux()
 			mux.Handle("/", &sqsproto.SQSRequestHandler{
 				ServiceManager: cs.qmgr,
@@ -51,15 +55,14 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 
 		}()
 	} else {
-		log.Debug("No SQS Interface configured")
+		log.Debug("no SQS service enabled")
 	}
 
 	if conf.CFG.SNSServerInterface != "" {
 		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			log.Info("Starting SNS Protocol Server on: %s", conf.CFG.SNSServerInterface)
-
+			log.Info("SNS service proto", zap.String("interface", conf.CFG.SNSServerInterface))
 			mux := http.NewServeMux()
 
 			mux.Handle("/", &snsproto.SNSRequestHandler{
@@ -68,16 +71,16 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 			graceful.Run(conf.CFG.SNSServerInterface, time.Second*10, mux)
 		}()
 	} else {
-		log.Debug("No SNS interface configured")
+		log.Debug("no SNS service enabled")
 	}
 }
 
 func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 	if conf.CFG.FMPQServerInterface != "" {
-		log.Info("Starting FireMPQ Protocol Server at %s", conf.CFG.FMPQServerInterface)
+		log.Info("FireMPQ service", zap.String("interface", conf.CFG.FMPQServerInterface))
 		listener, err := net.Listen("tcp", conf.CFG.FMPQServerInterface)
 		if err != nil {
-			log.Error("Could not start FireMPQ protocol listener: %v", err)
+			log.Error("could not start FireMPQ listener", zap.Error(err))
 			return listener, err
 		}
 		cs.waitGroup.Add(1)
@@ -97,7 +100,7 @@ func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 					case <-signals.QuitChan:
 						return
 					default:
-						log.Error("Could not accept incoming request: %v", err)
+						log.Error("Could not accept incoming request", zap.Error(err))
 					}
 				}
 			}

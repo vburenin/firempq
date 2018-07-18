@@ -21,7 +21,7 @@ func (lqr *ListQueuesResponse) XmlDocument() string                  { return sq
 func (lqr *ListQueuesResponse) BatchResult(docId string) interface{} { return nil }
 
 func ListQueues(svcMgr *pqueue.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-	nameList := svcMgr.BuildServiceNameList(sqsQuery.QueueNamePrefix)
+	nameList := svcMgr.GetQueueList(sqsQuery.QueueNamePrefix)
 	sort.Strings(nameList)
 
 	urlList := make([]string, 0, len(nameList))

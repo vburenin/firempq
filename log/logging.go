@@ -8,15 +8,15 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var Logger *zap.SugaredLogger
+var Logger *zap.Logger
 
-var Fatal = Logger.Fatalf
-var Error = Logger.Errorf
-var Critical = Logger.Panicf
-var Warning = Logger.Warnf
-var Notice = Logger.Warnf
-var Info = Logger.Infof
-var Debug = Logger.Debugf
+var Fatal = Logger.Fatal
+var Error = Logger.Error
+var Critical = Logger.Panic
+var Warning = Logger.Warn
+var Notice = Logger.Warn
+var Info = Logger.Info
+var Debug = Logger.Debug
 
 func InitLogging() {
 	cfg := zap.Config{
@@ -31,23 +31,21 @@ func InitLogging() {
 			EncodeLevel: zapcore.CapitalLevelEncoder,
 
 			TimeKey:    "time",
-			EncodeTime: zapcore.ISO8601TimeEncoder,
+			EncodeTime: zapcore.EpochTimeEncoder,
 
 			CallerKey:    "caller",
 			EncodeCaller: zapcore.ShortCallerEncoder,
 		},
 	}
-	l, _ := cfg.Build(zap.AddCallerSkip(1))
+	Logger, _ = cfg.Build(zap.AddCallerSkip(1))
 
-	Logger = l.Sugar()
-
-	Fatal = Logger.Fatalf
-	Error = Logger.Errorf
-	Critical = Logger.Panicf
-	Warning = Logger.Warnf
-	Notice = Logger.Warnf
-	Info = Logger.Infof
-	Debug = Logger.Debugf
+	Fatal = Logger.Fatal
+	Error = Logger.Error
+	Critical = Logger.Panic
+	Warning = Logger.Warn
+	Notice = Logger.Warn
+	Info = Logger.Info
+	Debug = Logger.Debug
 }
 
 func SetLevel(l int) {

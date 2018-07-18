@@ -1,26 +1,21 @@
 package resp
 
 import (
+	"bufio"
 	"bytes"
 
-	"bufio"
-
-	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/pmsg"
 )
 
 type MessagesResponse struct {
-	items []apis.IResponseItem
+	Messages []*pmsg.FullMessage
 }
 
-func NewItemsResponse(items []apis.IResponseItem) *MessagesResponse {
+func NewItemsResponse(items []*pmsg.FullMessage) *MessagesResponse {
 	return &MessagesResponse{
-		items: items,
+		Messages: items,
 	}
-}
-
-func (r *MessagesResponse) GetItems() []apis.IResponseItem {
-	return r.items
 }
 
 func (r *MessagesResponse) StringResponse() string {
@@ -33,8 +28,8 @@ func (r *MessagesResponse) StringResponse() string {
 
 func (r *MessagesResponse) WriteResponse(buf *bufio.Writer) error {
 	_, err := buf.WriteString("+MSGS ")
-	err = enc.WriteArraySize(buf, len(r.items))
-	for _, item := range r.items {
+	err = enc.WriteArraySize(buf, len(r.Messages))
+	for _, item := range r.Messages {
 		err = buf.WriteByte(' ')
 		err = item.WriteResponse(buf)
 	}

@@ -2,13 +2,6 @@ package apis
 
 import "bufio"
 
-// IResponseItem is an existing data response.
-type IResponseItem interface {
-	WriteResponse(b *bufio.Writer) error
-	ID() string
-	Payload() []byte
-}
-
 // IResponse is a standard interface to any returned data.
 type IResponse interface {
 	// GetResponse returns serialized string of data that can be returned to the client.

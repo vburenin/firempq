@@ -9,9 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vburenin/firempq/apis"
-	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqproto/resp"
+	"github.com/vburenin/firempq/pmsg"
 	"github.com/vburenin/firempq/pqueue"
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
@@ -130,30 +129,25 @@ func MakeMessageAttr(name string, sqsAttr *sqsmsg.UserAttribute) *MessageAttribu
 	}
 }
 
-func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
+func MakeMessageResponse(msg *pmsg.FullMessage, opts *ReceiveMessageOptions,
 	sqsQuery *urlutils.SQSQuery) *MessageResponse {
-	msg, ok := iMsg.(*pqueue.MsgResponseItem)
-	if !ok {
-		return nil
-	}
+
 	sqsMsg := &sqsmsg.SQSMessagePayload{}
-	payload := msg.Payload()
+	payload := msg.Payload
 	if err := sqsMsg.Unmarshal([]byte(payload)); err != nil {
 		// Recovering from error. Non SQS messages will be filled with bulk info.
-		sqsMsg.Payload = string(msg.Payload())
+		sqsMsg.Payload = string(msg.Payload)
 		sqsMsg.SenderId = "unknown"
 		sqsMsg.SentTimestamp = strconv.FormatInt(utils.Uts(), 10)
 		sqsMsg.MD5OfMessageAttributes = fmt.Sprintf("%x", md5.Sum(nil))
 		sqsMsg.MD5OfMessageBody = fmt.Sprintf("%x", md5.Sum([]byte(sqsMsg.Payload)))
 	}
 
-	msgMeta := msg.GetMeta()
-
 	output := &MessageResponse{
 		MD5OfMessageAttributes: sqsMsg.MD5OfMessageAttributes,
 		MD5OfMessageBody:       sqsMsg.MD5OfMessageBody,
 		ReceiptHandle:          msg.Receipt(),
-		MessageId:              msg.ID(),
+		MessageId:              msg.StrId,
 		Body:                   sqsMsg.Payload,
 	}
 
@@ -165,7 +159,7 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 			Name: AttrSentTimestamp, Value: sqsMsg.SentTimestamp,
 		})
 		output.Attributes = append(output.Attributes, &SysAttribute{
-			Name: AttrApproximateReceiveCount, Value: strconv.FormatInt(msgMeta.PopCount, 10),
+			Name: AttrApproximateReceiveCount, Value: strconv.FormatInt(msg.PopCount, 10),
 		})
 		output.Attributes = append(output.Attributes, &SysAttribute{
 			Name: AttrApproximateFirstReceiveTimestamp, Value: strconv.FormatInt(utils.Uts(), 10),
@@ -183,7 +177,7 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 				})
 			case AttrApproximateReceiveCount:
 				output.Attributes = append(output.Attributes, &SysAttribute{
-					Name: AttrApproximateReceiveCount, Value: strconv.FormatInt(msgMeta.PopCount, 10),
+					Name: AttrApproximateReceiveCount, Value: strconv.FormatInt(msg.PopCount, 10),
 				})
 			case AttrApproximateFirstReceiveTimestamp:
 				output.Attributes = append(output.Attributes, &SysAttribute{
@@ -207,10 +201,6 @@ func MakeMessageResponse(iMsg apis.IResponseItem, opts *ReceiveMessageOptions,
 		}
 	}
 
-	if !ok {
-		log.Error("Failed to cast response item")
-		return nil
-	}
 	return output
 }
 
@@ -238,11 +228,10 @@ func ReceiveMessage(pq *pqueue.PQueue, sqsQuery *urlutils.SQSQuery) sqs_response
 		return sqserr.InvalidParameterValueError(e.Error())
 	}
 
-	m, _ := res.(*resp.MessagesResponse)
-	items := m.GetItems()
+	msgs := res.(*resp.MessagesResponse).Messages
 
 	output := &ReceiveMessageResponse{}
-	for _, item := range items {
+	for _, item := range msgs {
 		if msgResp := MakeMessageResponse(item, opts, sqsQuery); msgResp != nil {
 			output.Message = append(output.Message, msgResp)
 		}

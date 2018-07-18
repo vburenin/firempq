@@ -1,7 +1,6 @@
 package pqueue
 
 import (
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"strconv"
@@ -17,8 +16,10 @@ import (
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
 	"github.com/vburenin/firempq/mpqproto/resp"
+	"github.com/vburenin/firempq/pmsg"
 	"github.com/vburenin/firempq/qconf"
 	"github.com/vburenin/firempq/utils"
+	"go.uber.org/zap"
 )
 
 func getConfig() *qconf.QueueConfig {
@@ -78,10 +79,10 @@ func CreateSingleQueue(options ...string) (*PQueue, func()) {
 
 	db, err := linear.NewFlatStorage("testdata/tempdb", 1024*1024, 1024*1024)
 	if err != nil {
-		log.Fatal("could not create db: %s", err)
+		log.Fatal("could not create db", zap.Error(err))
 	}
 	deadMsgs := make(chan DeadMessage, 16)
-	q := NewPQueue(db, getDesc(), deadMsgs, getConfig(), nil)
+	q := NewPQueue(db, getDesc(), getConfig(), deadMsgs, nil)
 	f := func() {
 		db.Close()
 		for _, v := range options {
@@ -93,27 +94,28 @@ func CreateSingleQueue(options ...string) (*PQueue, func()) {
 	return q, f
 }
 
-func CreateQueueManager(options ...string) (*QueueManager, func()) {
-	ctx := fctx.Background("test")
+func CreateQueueManager(a *assert.Assertions, options ...string) (*QueueManager, func()) {
 	log.InitLogging()
 	conf.UseDefaultsOnly()
+
+	ctx := fctx.Background("test")
 
 	for _, v := range options {
 		if v == PreOptionWipe {
 			WipeTestQueueData()
 		}
 	}
-
-	db, err := linear.NewFlatStorage("testdata/tempdb", 1024*1024, 1024*1024)
-	if err != nil {
-		log.Fatal("could not create db: %s", err)
-	}
 	conf.CFG.DatabasePath = "testdata/tempdb"
-	qm := NewQueueManager(ctx, db, conf.CFG)
+
+	os.MkdirAll(conf.CFG.DatabasePath, 0755)
+
+	qm, err := NewQueueManager(ctx, conf.CFG)
+	if err != nil {
+		a.FailNow("queue manager not initialized", err.Error())
+	}
 
 	f := func() {
 		qm.Close()
-		db.Close()
 		for _, v := range options {
 			if v == PostOptionWipe {
 				WipeTestQueueData()
@@ -123,10 +125,57 @@ func CreateQueueManager(options ...string) (*QueueManager, func()) {
 	return qm, f
 }
 
-func cmp(t *testing.T, a, b string) {
-	if a != b {
-		t.Error("Unexpected value '" + a + "'. Expecting: '" + b + "'")
+// Push some messages and load them
+func TestMessageLoad(t *testing.T) {
+	a := assert.New(t)
+	qm, closer := CreateQueueManager(a, PreOptionWipe)
+	ctx := fctx.Background("test")
+
+	qm.CreateQueue(ctx, "test-msg-load", getConfig())
+
+	q := qm.GetQueue("test-msg-load")
+	if !a.NotNil(q) {
+		return
 	}
+	PushVerifyOk(a, q, "d0", "p", 100000, 0)
+	PushVerifyOk(a, q, "d1", "p", 100000, 0)
+	PushVerifyOk(a, q, "d2", "p", 100000, 0)
+	PushVerifyOk(a, q, "d3", "p", 100000, 0)
+	PushVerifyOk(a, q, "d4", "p", 100000, 0)
+	PushVerifyOk(a, q, "d5", "p", 100000, 0)
+	PushVerifyOk(a, q, "d6", "p", 100000, 0)
+
+	// This messages should be removed as expired during reload.
+	PushVerifyOk(a, q, "dd", "dd", 0, 0)
+
+	a.Equal(uint64(8), q.TotalMessages())
+	// Queue size should be the same since message is just locked.
+	VerifySingleItem(a, q.Pop(1000, 0, 1, true), "d0", "p")
+	a.Equal(uint64(8), q.TotalMessages())
+
+	closer()
+
+	qm, closer = CreateQueueManager(a, PostOptionWipe)
+	defer closer()
+	q = qm.GetQueue("test-msg-load")
+	if !a.NotNil(q) {
+		return
+	}
+
+	// 7 messages because one of them has expired during reload.
+	a.Equal(uint64(7), q.TotalMessages())
+
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d1", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d2", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d3", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d4", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d5", "p")
+	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d6", "p")
+
+	a.Equal(uint64(1), q.TotalMessages())
+	VerifyOkResponse(a, q.DeleteLockedById("d0"))
+	a.Equal(uint64(0), q.TotalMessages())
+	ctx.Debug("datatadata", zap.String("asdasd", "asdasdas"), zap.Uint8("asdasd", 12))
 }
 
 func TestPushPopAndTimeUnlockItems(t *testing.T) {
@@ -136,8 +185,8 @@ func TestPushPopAndTimeUnlockItems(t *testing.T) {
 
 	//defer WipeTestQueueData()
 
-	q.Push("data1", "p1", 10000, 0)
-	q.Push("data2", "p2", 10000, 0)
+	PushVerifyOk(a, q, "data1", "p1", 10000, 0)
+	PushVerifyOk(a, q, "data2", "p2", 10000, 0)
 	a.Equal(uint64(2), q.TotalMessages())
 
 	items := q.Pop(10000, 0, 10, true)
@@ -164,9 +213,9 @@ func TestAutoExpiration(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 
-	q.Push("data1", "p1", 1000, 0)
-	q.Push("data2", "p2", 1000, 0)
-	q.Push("data3", "p3", 10000, 0)
+	PushVerifyOk(a, q, "data1", "p1", 1000, 0)
+	PushVerifyOk(a, q, "data2", "p2", 1000, 0)
+	PushVerifyOk(a, q, "data3", "p3", 10000, 0)
 	a.Equal(uint64(3), q.TotalMessages())
 	q.checkTimeouts(utils.Uts() + 1300)
 	a.Equal(uint64(1), q.TotalMessages())
@@ -179,8 +228,8 @@ func TestUnlockById(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 
-	q.Push("data1", "p1", 1000, 0)
-	q.Push("data2", "p2", 1000, 0)
+	PushVerifyOk(a, q, "data1", "p1", 1000, 0)
+	PushVerifyOk(a, q, "data2", "p2", 1000, 0)
 	VerifyItems(a, q.Pop(10000, 0, 10, true), 2, "data1", "p1", "data2", "p2")
 	VerifyItems(a, q.Pop(10000, 0, 10, true), 0)
 	VerifyOkResponse(a, q.UnlockMessageById("data2"))
@@ -194,7 +243,7 @@ func TestDeleteById(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 
-	q.Push("data1", "p1", 1000, 0)
+	PushVerifyOk(a, q, "data1", "p1", 1000, 0)
 	a.Equal(uint64(1), q.TotalMessages())
 	VerifyOkResponse(a, q.DeleteById("data1"))
 	a.Equal(uint64(0), q.TotalMessages())
@@ -208,8 +257,8 @@ func TestDeleteLockedById(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 
-	q.Push("data1", "p1", 10000, 0)
-	q.Push("data2", "p2", 10000, 0)
+	PushVerifyOk(a, q, "data1", "p1", 10000, 0)
+	PushVerifyOk(a, q, "data2", "p2", 10000, 0)
 	items := q.Pop(10000, 0, 10, true)
 	VerifyItems(a, items, 2, "data1", "p1", "data2", "p2")
 	VerifyOkResponse(a, q.DeleteLockedById("data1"))
@@ -226,9 +275,9 @@ func TestPopWaitBatch(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Second / 10)
-		q.Push("d1", "1", 10000, 0)
-		q.Push("d2", "2", 10000, 0)
-		q.Push("d3", "3", 10000, 0)
+		PushVerifyOk(a, q, "d1", "1", 10000, 0)
+		PushVerifyOk(a, q, "d2", "2", 10000, 0)
+		PushVerifyOk(a, q, "d3", "3", 10000, 0)
 	}()
 	items := q.Pop(10000, 1000, 10, true)
 	VerifyItems(a, items, 3, "d1", "1", "d2", "2", "d3", "3")
@@ -240,9 +289,9 @@ func TestPopWaitTimeout(t *testing.T) {
 	q, closer := CreateSingleQueue(PostOptionWipe)
 	defer closer()
 
-	q.Push("d1", "1", 100000, 1000)
-	q.Push("d2", "2", 100000, 1000)
-	q.Push("d3", "3", 100000, 1000)
+	PushVerifyOk(a, q, "d1", "1", 100000, 1000)
+	PushVerifyOk(a, q, "d2", "2", 100000, 1000)
+	PushVerifyOk(a, q, "d3", "3", 100000, 1000)
 
 	items := q.Pop(0, 10, 10, true)
 	VerifyItems(a, items, 0)
@@ -315,65 +364,9 @@ func TestPushLotsOfMessages(t *testing.T) {
 		if !ok {
 			break
 		}
-		counter += len(resp.GetItems())
+		counter += len(resp.Messages)
 	}
 	a.Equal(totalMsg, counter)
-	a.Equal(uint64(0), q.TotalMessages())
-}
-
-// Push some messages and load them
-func TestMessageLoad(t *testing.T) {
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-
-	a := assert.New(t)
-	qm, closer := CreateQueueManager(PreOptionWipe)
-
-	ctx := fctx.Background("test")
-	qm.CreateQueue(ctx, "test-msg-load", getConfig())
-
-	q := qm.GetQueue("test-msg-load")
-	if !a.NotNil(q) {
-		return
-	}
-
-	q.Push("d0", "p", 100000, 0)
-	q.Push("d1", "p", 100000, 0)
-	q.Push("d2", "p", 100000, 0)
-	q.Push("d3", "p", 100000, 0)
-	q.Push("d4", "p", 100000, 0)
-	q.Push("d5", "p", 100000, 0)
-	q.Push("d6", "p", 100000, 0)
-
-	// This messages should be removed as expired during reload.
-	VerifyOkResponse(a, q.Push("dd", "dd", 0, 0))
-	a.Equal(uint64(8), q.TotalMessages())
-	// Queue size should be the same since message is just locked.
-	VerifySingleItem(a, q.Pop(1000, 0, 1, true), "d0", "p")
-	a.Equal(uint64(8), q.TotalMessages())
-
-	closer()
-
-	qm, closer = CreateQueueManager(PostOptionWipe)
-	defer closer()
-	q = qm.GetQueue("test-msg-load")
-	if !a.NotNil(q) {
-		return
-	}
-
-	// 7 messages because one of them has expired during reload.
-	a.Equal(uint64(7), q.TotalMessages())
-
-	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d1", "p")
-	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d2", "p")
-	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d3", "p")
-	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d4", "p")
-	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d5", "p")
-	VerifySingleItem(a, q.Pop(0, 0, 1, false), "d6", "p")
-
-	a.Equal(uint64(1), q.TotalMessages())
-	VerifyOkResponse(a, q.DeleteLockedById("d0"))
 	a.Equal(uint64(0), q.TotalMessages())
 }
 
@@ -548,7 +541,7 @@ func TestExpiration(t *testing.T) {
 
 // One message should ne released
 func TestReleaseInFlight(t *testing.T) {
-	q, closer := CreateSingleQueue(PostOptionWipe)
+	q, closer := CreateSingleQueue(PreOptionWipe, PostOptionWipe)
 	defer closer()
 	q.Push("d1", "p", 10000, 100)
 	r, _ := q.TimeoutItems(utils.Uts() + 1000).(*resp.IntResponse)
@@ -609,7 +602,7 @@ func TestUnlockByReceipt(t *testing.T) {
 	a.EqualValues(1, q.TotalMessages())
 	VerifyItemsRespSize(a, r, 1)
 
-	rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).Receipt()
+	rcpt := r.(*resp.MessagesResponse).Messages[0].Receipt()
 	a.True(len(rcpt) > 2)
 
 	VerifyOkResponse(a, q.UnlockByReceipt(rcpt))
@@ -632,7 +625,7 @@ func TestDeleteByReceipt(t *testing.T) {
 	a.EqualValues(1, q.TotalMessages())
 	VerifyItemsRespSize(a, r, 1)
 
-	rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).Receipt()
+	rcpt := r.(*resp.MessagesResponse).Messages[0].Receipt()
 	a.True(len(rcpt) > 2)
 	VerifyOkResponse(a, q.DeleteByReceipt(rcpt))
 	a.EqualValues(0, q.TotalMessages())
@@ -651,7 +644,7 @@ func TestUpdateLockByReceipt(t *testing.T) {
 	a.EqualValues(1, q.TotalMessages())
 	VerifyItemsRespSize(a, r, 1)
 
-	rcpt := r.(*resp.MessagesResponse).GetItems()[0].(*MsgResponseItem).Receipt()
+	rcpt := r.(*resp.MessagesResponse).Messages[0].Receipt()
 	a.True(len(rcpt) > 2)
 	VerifyOkResponse(a, q.UpdateLockByRcpt(rcpt, 10000))
 	a.EqualValues(1, q.TotalMessages())
@@ -725,11 +718,11 @@ func TestMessagesMovedToAnotherQueue(t *testing.T) {
 }
 */
 
-func VerifyItemsRespSize(a *assert.Assertions, r apis.IResponse, size int) ([]apis.IResponseItem, bool) {
+func VerifyItemsRespSize(a *assert.Assertions, r apis.IResponse, size int) ([]*pmsg.FullMessage, bool) {
 	ir, ok := r.(*resp.MessagesResponse)
 	a.True(ok)
 	if ok {
-		items := ir.GetItems()
+		items := ir.Messages
 		a.Equal(size, len(items))
 		return items, len(items) == size
 	}
@@ -738,13 +731,22 @@ func VerifyItemsRespSize(a *assert.Assertions, r apis.IResponse, size int) ([]ap
 
 func VerifySingleItem(a *assert.Assertions, r apis.IResponse, itemId, payload string) bool {
 	if items, ok := VerifyItemsRespSize(a, r, 1); ok {
-		return a.Equal(itemId, items[0].ID()) && a.Equal(payload, string(items[0].Payload()))
+		return a.Equal(itemId, items[0].StrId) && a.Equal(payload, string(items[0].Payload))
 	}
 	return false
 }
 
 func VerifyOkResponse(a *assert.Assertions, r apis.IResponse) bool {
 	return a.Equal(resp.OK, r)
+}
+
+func PushVerifyOk(a *assert.Assertions, q *PQueue, msgid, payload string, msgTtl, delay int64) {
+	ir := q.Push(msgid, payload, msgTtl, delay)
+	r, ok := ir.(*resp.MsgResponse)
+	if !ok {
+		a.FailNow("wrong type")
+	}
+	a.EqualValues(msgid, r.MsgId)
 }
 
 func VerifyItems(a *assert.Assertions, r apis.IResponse, size int, itemSpecs ...string) bool {
@@ -755,8 +757,8 @@ func VerifyItems(a *assert.Assertions, r apis.IResponse, size int, itemSpecs ...
 			itemPos := i / 2
 			itemId := itemSpecs[i]
 			itemPayload := itemSpecs[i+1]
-			a.Equal(itemId, items[itemPos].ID())
-			a.Equal(itemPayload, string(items[itemPos].Payload()))
+			a.Equal(itemId, items[itemPos].StrId)
+			a.Equal(itemPayload, string(items[itemPos].Payload))
 		}
 		return true
 	}

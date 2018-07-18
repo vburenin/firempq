@@ -10,9 +10,15 @@ import (
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/server"
+	"go.uber.org/zap"
 )
 
 func main() {
+
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	// Initialize logging to a default INFO level to be able to log config error.
 	log.InitLogging()
 	conf.ParseConfigParameters()
@@ -26,10 +32,10 @@ func main() {
 	//defer trace.Stop()
 
 	if len(conf.CFG.Profiler) > 0 {
-		log.Info("Initializing profiler")
+		log.Info("initializing profiler")
 		go func() {
 			if err := http.ListenAndServe(conf.CFG.Profiler, nil); err != nil {
-				log.Error("Could not initialize profiler: %v", err)
+				log.Error("could not initialize profiler", zap.Error(err))
 			}
 		}()
 	}

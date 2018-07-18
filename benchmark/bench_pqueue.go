@@ -2,28 +2,48 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"sync"
 	"time"
 
-	"os"
-
-	"runtime/pprof"
-
+	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/enc"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
-	"github.com/vburenin/firempq/mpqtesting/resp_writer"
 	"github.com/vburenin/firempq/pqueue"
-	"github.com/vburenin/firempq/qmgr"
 )
 
+type TestResponseWriter struct {
+	mutex     sync.Mutex
+	responses []apis.IResponse
+}
+
+func (rw *TestResponseWriter) WriteResponse(resp apis.IResponse) error {
+	rw.mutex.Lock()
+	rw.responses = append(rw.responses, resp)
+	rw.mutex.Unlock()
+	return nil
+}
+
+func (rw *TestResponseWriter) GetResponses() []apis.IResponse {
+	return rw.responses
+}
+
+func NewTestResponseWriter() *TestResponseWriter {
+	return &TestResponseWriter{
+		responses: make([]apis.IResponse, 0, 1000),
+	}
+}
+
 func BenchMassPush() {
-	conf.ParseConfigParameters()
+	conf.UseDefaultsOnly()
 	ctx := fctx.Background("1")
-	f := qmgr.NewQueueManager(ctx)
-	resp := f.DropService(ctx, "BenchTest")
+	f := pqueue.NewQueueManager(ctx, conf.CFG)
+
+	resp := f.DropQueue(ctx, "BenchTest")
 	if !resp.IsError() {
 		log.Info("BenchTest Queue exists alredy! Dropping...")
 	}
@@ -37,7 +57,8 @@ func BenchMassPush() {
 	if svc == nil {
 		log.Fatal("Could not get created service: BenchTest")
 	}
-	respWriter := resp_writer.NewTestResponseWriter()
+	respWriter := NewTestResponseWriter()
+
 	cs := svc.ConnScope(respWriter)
 
 	cs.Call(pqueue.CmdSetConfig, []string{pqueue.CPRM_MAX_MSGS_IN_QUEUE, "10000000", pqueue.CPRM_MSG_TTL, "10000000"})
@@ -68,19 +89,19 @@ func BenchMassPush() {
 	db.DatabaseInstance().Flush()
 	//println("waiting...")
 	//time.Sleep(time.Second * 1200)
-	//f.DropService("BenchTest")
+	//f.DropQueue("BenchTest")
 	f.Close()
 	db.DatabaseInstance().Close()
 }
 
 func BenchMassPushMultiQueue() {
-	conf.ParseConfigParameters()
+	conf.UseDefaultsOnly()
 	ctx := fctx.Background("1")
-	f := qmgr.NewQueueManager(ctx)
-	resp1 := f.DropService(ctx, "BenchTest1")
-	resp2 := f.DropService(ctx, "BenchTest2")
-	resp3 := f.DropService(ctx, "BenchTest3")
-	resp4 := f.DropService(ctx, "BenchTest4")
+	f := pqueue.NewQueueManager(ctx, conf.CFG)
+	resp1 := f.DropQueue(ctx, "BenchTest1")
+	resp2 := f.DropQueue(ctx, "BenchTest2")
+	resp3 := f.DropQueue(ctx, "BenchTest3")
+	resp4 := f.DropQueue(ctx, "BenchTest4")
 
 	resp1 = f.CreateQueueFromParams(ctx, "BenchTest1", []string{})
 	if resp1.IsError() {
@@ -120,10 +141,10 @@ func BenchMassPushMultiQueue() {
 		log.Fatal("Could not get created service: BenchTest4")
 	}
 
-	respWriter1 := resp_writer.NewTestResponseWriter()
-	respWriter2 := resp_writer.NewTestResponseWriter()
-	respWriter3 := resp_writer.NewTestResponseWriter()
-	respWriter4 := resp_writer.NewTestResponseWriter()
+	respWriter1 := NewTestResponseWriter()
+	respWriter2 := NewTestResponseWriter()
+	respWriter3 := NewTestResponseWriter()
+	respWriter4 := NewTestResponseWriter()
 	ctx1 := svc1.ConnScope(respWriter1)
 	ctx2 := svc2.ConnScope(respWriter2)
 	ctx3 := svc3.ConnScope(respWriter3)
@@ -173,13 +194,13 @@ func BenchMassPushMultiQueue() {
 	db.DatabaseInstance().Flush()
 
 	log.Info("Deleting BenchTest1")
-	f.DropService(fctx.Background("1"), "BenchTest1")
+	f.DropQueue(fctx.Background("1"), "BenchTest1")
 	log.Info("Deleting BenchTest2")
-	f.DropService(fctx.Background("1"), "BenchTest2")
+	f.DropQueue(fctx.Background("1"), "BenchTest2")
 	log.Info("Deleting BenchTest3")
-	f.DropService(fctx.Background("1"), "BenchTest3")
+	f.DropQueue(fctx.Background("1"), "BenchTest3")
 	log.Info("Deleting BenchTest4")
-	f.DropService(fctx.Background("1"), "BenchTest4")
+	f.DropQueue(fctx.Background("1"), "BenchTest4")
 	log.Info("Closing facade...")
 	f.Close()
 	log.Info("Waiting flush...")
@@ -229,7 +250,7 @@ func main() {
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
 	log.InitLogging()
-	BenchMassPush()
+	BenchMassPushMultiQueue()
 	//BenchHeap()
 	//BenchMassPushMultiQueue()
 	//MarshalTest()

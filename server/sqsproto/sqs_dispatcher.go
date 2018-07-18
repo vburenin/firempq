@@ -27,6 +27,7 @@ import (
 	"github.com/vburenin/firempq/server/sqsproto/sqs_response"
 	"github.com/vburenin/firempq/server/sqsproto/sqserr"
 	"github.com/vburenin/firempq/server/sqsproto/urlutils"
+	"go.uber.org/zap"
 )
 
 type SQSRequestHandler struct {
@@ -92,7 +93,7 @@ func (rh *SQSRequestHandler) dispatchSQSQuery(r *http.Request) sqs_response.SQSR
 
 	sqsQuery, err := urlutils.ParseSQSQuery(r)
 	if err != nil {
-		ctx.Warnf("invalid query: %s", err)
+		ctx.Warn("invalid query: %s", zap.Error(err))
 		return sqserr.ServiceDeniedError()
 	}
 

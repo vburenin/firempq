@@ -24,7 +24,7 @@ func (dqr *DeleteQueueResponse) XmlDocument() string {
 func (dqr *DeleteQueueResponse) BatchResult(docId string) interface{} { return nil }
 
 func DeleteQueue(ctx *fctx.Context, svcMgr *pqueue.QueueManager, sqsQuery *urlutils.SQSQuery) sqs_response.SQSResponse {
-	resp := svcMgr.DropService(ctx, sqsQuery.QueueName)
+	resp := svcMgr.DropQueue(ctx, sqsQuery.QueueName)
 	if resp == mpqerr.ErrNoQueue {
 		return sqserr.QueueDoesNotExist()
 	}

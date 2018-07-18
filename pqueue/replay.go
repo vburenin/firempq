@@ -10,6 +10,7 @@ import (
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/ferr"
 	"github.com/vburenin/firempq/pmsg"
+	"go.uber.org/zap"
 )
 
 type MsgArray []*pmsg.MsgMeta
@@ -19,16 +20,16 @@ func (m MsgArray) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
 func (m MsgArray) Less(i, j int) bool { return m[i].Serial < m[j].Serial }
 
 type QueueLoader struct {
-	msgs    map[uint64]*pmsg.MsgMeta
-	msgPool []*pmsg.MsgMeta
-	poolPos int
+	MessagePool
+	msgs map[uint64]*pmsg.MsgMeta
 }
 
 func NewQueueLoader() *QueueLoader {
-	return &QueueLoader{
-		msgs:    make(map[uint64]*pmsg.MsgMeta),
-		msgPool: make([]*pmsg.MsgMeta, 0, 100),
+	ql := &QueueLoader{
+		msgs: make(map[uint64]*pmsg.MsgMeta),
 	}
+	ql.InitPool(5000)
+	return ql
 }
 
 func (pql *QueueLoader) Messages() MsgArray {
@@ -61,24 +62,25 @@ func (pql *QueueLoader) ReplayData(ctx *fctx.Context, iter apis.ItemIterator) er
 		case DBActionAddMetadata, DBActionUpdateMetadata:
 			msg := pql.getNewMsg()
 			if err := msg.Unmarshal(data); err != nil {
-				ctx.Errorf("wrong data from iterator: %s", err)
+				ctx.Error("invalid data", zap.Error(err))
 			} else {
 				pql.msgs[msg.Serial] = msg
 			}
 		case DBActionDeleteMetadata:
 			if len(data) < 8 {
-				ctx.Errorf("Invalid length of 'delete' data")
+				ctx.Error("Invalid length of 'delete' data", zap.Int("length", len(data)))
 			} else {
 				delSn := enc.DecodeBytesToUnit64(data)
 				m := pql.msgs[delSn]
 				if m != nil {
 					pql.retMsg(m)
 				}
+				delete(pql.msgs, delSn)
 			}
 		case DBActionWipeAll:
 			pql.msgs = make(map[uint64]*pmsg.MsgMeta, 4096)
 		default:
-			ctx.Errorf("Unknown action: %d", action)
+			ctx.Error("unknown action", zap.Int("action", int(action)))
 		}
 	}
 }

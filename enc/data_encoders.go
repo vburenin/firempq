@@ -6,22 +6,27 @@ import (
 )
 
 // To36Base creates a string value of service INT id.
-func To36Base(exportId uint64) string {
-	return strconv.FormatUint(exportId, 36)
+func To36Base(i uint64) string {
+	return strconv.FormatUint(i, 36)
 }
 
-// EncodeUint64ToString encodes uint64 to the sequence of bytes.
-func Sn2Bin(v uint64) []byte {
-	b := make([]byte, 8)
-	b[0] = byte(v >> 56)
-	b[1] = byte(v >> 48)
-	b[2] = byte(v >> 40)
-	b[3] = byte(v >> 32)
-	b[4] = byte(v >> 24)
-	b[5] = byte(v >> 16)
-	b[6] = byte(v >> 8)
-	b[7] = byte(v)
-	return b
+func UintToHex(i uint64) []byte {
+	b := make([]byte, 16)
+	d := 15
+	for {
+		v := i & 0x0f
+		if v < 10 {
+			b[d] = byte(0x30 | v)
+		} else {
+			b[d] = byte(55 + v)
+		}
+		i >>= 4
+		if i == 0 || d == 0 {
+			break
+		}
+		d--
+	}
+	return b[d:]
 }
 
 func Uint64ToBin(v uint64, b []byte) {
