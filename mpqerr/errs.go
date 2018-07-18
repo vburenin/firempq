@@ -70,6 +70,7 @@ func ServerError(errorText string) *ErrorResponse {
 }
 
 var ErrNoQueue = InvalidRequest("queue is not created")
+var ErrContextNotEmpty = ConflictRequest("context must not be set")
 var ErrInvalidQueueName = InvalidRequest("name can only include alphanumeric characters, hyphens, or underscores. 1 to 80 in length")
 var ErrQueueAlreadyExists = ConflictRequest("queue exists already")
 var ErrMsgAlreadyExists = ConflictRequest("message exists already")
