@@ -12,7 +12,8 @@ type IResponse interface {
 	IsError() bool
 }
 
-// ResponseWriter is a writer of IResponse object.
-type ResponseWriter interface {
+// ResponseWriteCloser is a writer of IResponse object.
+type ResponseWriteCloser interface {
 	WriteResponse(IResponse) error
+	Close() error
 }

@@ -3,6 +3,7 @@ package pqueue
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/vburenin/firempq/apis"
@@ -20,19 +21,17 @@ type ConnScope struct {
 	pq             *PQueue
 	idGen          *idgen.IdGen
 	callsCount     int64
-	responseWriter apis.ResponseWriter
+	responseWriter apis.ResponseWriteCloser
 	asyncGroup     sync.WaitGroup
-	asyncLock      sync.Mutex
-	asyncCount     int64
-	finishFlag     bool
+
+	stop int32
 }
 
-func NewConnScope(pq *PQueue, r apis.ResponseWriter) *ConnScope {
+func NewConnScope(pq *PQueue, r apis.ResponseWriteCloser) *ConnScope {
 	return &ConnScope{
 		pq:             pq,
 		callsCount:     0,
 		responseWriter: r,
-		asyncCount:     512,
 		idGen:          idgen.NewGen(),
 	}
 }
@@ -137,9 +136,13 @@ func ParsePQConfig(params []string) (*qconf.QueueConfig, apis.IResponse) {
 	return cfg, resp.OK
 }
 
+func (cs *ConnScope) Queue() *PQueue {
+	return cs.pq
+}
+
 // Call dispatches to the command handler to process necessary parameters.
 func (cs *ConnScope) Call(cmd string, params []string) apis.IResponse {
-	if cs.finishFlag {
+	if atomic.LoadInt32(&cs.stop) > 0 {
 		return mpqerr.ErrConnClosing
 	}
 	cs.callsCount += 1
@@ -681,9 +684,12 @@ func (cs *ConnScope) SetParamValue(params []string) apis.IResponse {
 	return cs.pq.UpdateConfig(pqParams)
 }
 
+func (cs *ConnScope) Close() error {
+	cs.Finish()
+	return cs.responseWriter.Close()
+}
+
 func (cs *ConnScope) Finish() {
-	if !cs.finishFlag {
-		cs.finishFlag = true
-		cs.asyncGroup.Wait()
-	}
+	atomic.StoreInt32(&cs.stop, 1)
+	cs.asyncGroup.Wait()
 }

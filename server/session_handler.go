@@ -2,13 +2,13 @@ package server
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/vburenin/firempq/apis"
-	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
@@ -28,12 +28,11 @@ const (
 	CmdUnitTs     = "TS"
 	CmdList       = "LIST"
 	CmdCtx        = "CTX"
-	CmdLogLevel   = "LOGLEVEL"
 	CmdPanic      = "PANIC"
-	CmdDBStats    = "DBSTATS"
+	CmdNoCtx      = "NOCTX"
 )
 
-type FuncHandler func([]string) apis.IResponse
+var sessionCounter uint64
 
 type SessionHandler struct {
 	connLock   sync.Mutex
@@ -45,10 +44,11 @@ type SessionHandler struct {
 	qmgr       *pqueue.QueueManager
 	connWriter *bufio.Writer
 	ctx        *fctx.Context
+	ID         uint64
 }
 
 func NewSessionHandler(wg *sync.WaitGroup, conn net.Conn, qmgr *pqueue.QueueManager) *SessionHandler {
-
+	v := atomic.AddUint64(&sessionCounter, 1)
 	sh := &SessionHandler{
 		conn:       conn,
 		tokenizer:  mpqproto.NewTokenizer(),
@@ -57,8 +57,10 @@ func NewSessionHandler(wg *sync.WaitGroup, conn net.Conn, qmgr *pqueue.QueueMana
 		qmgr:       qmgr,
 		stopChan:   make(chan struct{}),
 		connWriter: bufio.NewWriter(conn),
-		ctx:        fctx.Background("sess-" + conn.RemoteAddr().String()),
+		ctx:        fctx.Background(fmt.Sprintf("ID:%d:%s", v, conn.RemoteAddr().String())),
+		ID:         v,
 	}
+	sh.ctx.Info("new session")
 	sh.QuitListener(wg)
 	return sh
 }
@@ -81,11 +83,27 @@ func (s *SessionHandler) QuitListener(wg *sync.WaitGroup) {
 	}()
 }
 
+func (s *SessionHandler) ReleaseScope() {
+	if s.scope != nil {
+		s.scope.Queue().DetachConn(s.ID)
+		s.scope = nil
+	}
+}
+
+func (s *SessionHandler) Close() error {
+	s.WriteResponse(resp.DISCONNECT)
+	err := s.conn.Close()
+	s.ReleaseScope()
+	return err
+}
+
 // DispatchConn dispatcher. Entry point to start connection handling.
 func (s *SessionHandler) DispatchConn() {
+	defer s.ReleaseScope()
+	defer s.conn.Close()
 	addr := s.conn.RemoteAddr().String()
 	s.ctx.Debug("new connection", zap.String("addr", addr))
-	s.WriteResponse(resp.NewStrResponse("HELLO FIREMPQ-0.1"))
+	s.WriteResponse(resp.NewStrResponse("+HELLO FIREMPQ-0.1"))
 	for s.active {
 		cmdTokens, err := s.tokenizer.ReadTokens(s.conn)
 		if err != nil {
@@ -107,7 +125,7 @@ func (s *SessionHandler) DispatchConn() {
 	if s.scope != nil {
 		s.scope.Finish()
 	}
-	s.conn.Close()
+
 	s.ctx.Debug("client disconnected", zap.String("addr", addr))
 }
 
@@ -139,16 +157,14 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 		return s.dropQueueHandler(tokens)
 	case CmdList:
 		return s.listServicesHandler(tokens)
-	case CmdLogLevel:
-		return logLevelHandler(tokens)
 	case CmdPing:
 		return pingHandler(tokens)
 	case CmdUnitTs:
 		return tsHandler(tokens)
 	case CmdPanic:
 		return panicHandler(tokens)
-	case CmdDBStats:
-		return dbstatHandler(tokens)
+	case CmdNoCtx:
+		return s.noContextHandler(tokens)
 	default:
 		return mpqerr.InvalidRequest("unknown command: " + cmd)
 	}
@@ -157,11 +173,10 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 // WriteResponse writes apis.IResponse into connection writer.
 func (s *SessionHandler) WriteResponse(resp apis.IResponse) error {
 	s.connLock.Lock()
-	defer s.connLock.Unlock()
-
-	err := resp.WriteResponse(s.connWriter)
-	err = s.connWriter.WriteByte('\n')
-	err = s.connWriter.Flush()
+	resp.WriteResponse(s.connWriter)
+	s.connWriter.WriteByte('\n')
+	err := s.connWriter.Flush()
+	s.connLock.Unlock()
 	return err
 }
 
@@ -191,6 +206,16 @@ func (s *SessionHandler) createQueueHandler(tokens []string) apis.IResponse {
 	return s.qmgr.CreateQueueFromParams(s.ctx, queueName, tokens[1:])
 }
 
+func (s *SessionHandler) noContextHandler(tokens []string) apis.IResponse {
+	if len(tokens) == 0 {
+		if s.scope != nil {
+			s.ReleaseScope()
+		}
+		return resp.OK
+	}
+	return mpqerr.InvalidRequest("no parameters must be provided")
+}
+
 // Drop service.
 func (s *SessionHandler) dropQueueHandler(tokens []string) apis.IResponse {
 	if len(tokens) == 0 {
@@ -199,6 +224,11 @@ func (s *SessionHandler) dropQueueHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 1 {
 		return mpqerr.InvalidRequest("DROP accept queue name only")
 	}
+
+	if s.scope != nil {
+		return mpqerr.ErrContextNotEmpty
+	}
+
 	svcName := tokens[0]
 	res := s.qmgr.DropQueue(s.ctx, svcName)
 	return res
@@ -219,7 +249,16 @@ func (s *SessionHandler) ctxHandler(tokens []string) apis.IResponse {
 	if queue == nil {
 		return mpqerr.ErrNoQueue
 	}
-	s.scope = queue.ConnScope(s)
+
+	if s.scope != nil {
+		s.ReleaseScope()
+	}
+
+	// if at this point we get nil, it means queue is being deleted.
+	s.scope = queue.ConnScope(s.ID, s)
+	if s.scope == nil {
+		return mpqerr.ErrNoQueue
+	}
 	return resp.OK
 }
 
@@ -266,19 +305,6 @@ func tsHandler(tokens []string) apis.IResponse {
 	return resp.NewIntResponse(utils.Uts())
 }
 
-func logLevelHandler(tokens []string) apis.IResponse {
-	if len(tokens) != 1 {
-		return mpqerr.InvalidRequest("Log level accept one integer parameter in range [0-5]")
-	}
-	l, e := strconv.Atoi(tokens[0])
-	if e != nil || l < 0 || l > 5 {
-		return mpqerr.InvalidRequest("Log level is an integer in range [0-5]")
-	}
-	log.Warning("log level change", zap.Int("level", l))
-	log.SetLevel(l)
-	return resp.OK
-}
-
 func panicHandler(tokens []string) apis.IResponse {
 	if len(tokens) > 0 {
 		return mpqerr.ErrCmdNoParamsAllowed
@@ -287,12 +313,4 @@ func panicHandler(tokens []string) apis.IResponse {
 	log.Critical("Panic requested!")
 	panic("Panic requested")
 	return resp.OK
-}
-
-func dbstatHandler(tokens []string) apis.IResponse {
-	if len(tokens) > 0 {
-		return mpqerr.ErrCmdNoParamsAllowed
-	}
-	db := db.DatabaseInstance()
-	return resp.NewDictResponse("+DBSTATS", db.GetStats())
 }

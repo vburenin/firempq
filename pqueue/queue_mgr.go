@@ -244,6 +244,10 @@ func (qm *QueueManager) DropQueue(ctx *fctx.Context, queueName string) apis.IRes
 	if queue == nil {
 		return mpqerr.ErrNoQueue
 	}
+	err := queue.Close()
+	if err != nil {
+		ctx.Error("queue was not closed", zap.Error(err))
+	}
 	delete(qm.queues, queueName)
 	svcID := queue.Description().ServiceId
 	qm.configMgr.DeleteQueueData(ctx, svcID)

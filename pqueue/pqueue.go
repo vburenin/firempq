@@ -56,6 +56,10 @@ type PQueue struct {
 	lockedMsgCnt uint64
 
 	configUpdater func(config *qconf.QueueParams) (*qconf.QueueConfig, error)
+
+	muSess         sync.Mutex
+	activeSessions map[uint64]*ConnScope
+	sessionCounter uint64
 }
 
 func NewPQueue(
@@ -75,13 +79,29 @@ func NewPQueue(
 		newMsgNotification: make(chan struct{}),
 		deadMsgChan:        deadMsgChan,
 		configUpdater:      configUpdater,
+		activeSessions:     make(map[uint64]*ConnScope),
 	}
 	q.InitPool(1000)
 	return q
 }
 
-func (pq *PQueue) ConnScope(rw apis.ResponseWriter) *ConnScope {
-	return NewConnScope(pq, rw)
+func (pq *PQueue) ConnScope(sessionID uint64, rw apis.ResponseWriteCloser) *ConnScope {
+	pq.muSess.Lock()
+	if pq.activeSessions == nil {
+		pq.muSess.Unlock()
+		return nil
+	}
+
+	connScope := NewConnScope(pq, rw)
+	pq.activeSessions[sessionID] = connScope
+	pq.muSess.Unlock()
+	return connScope
+}
+
+func (pq *PQueue) DetachConn(sessionID uint64) {
+	pq.muSess.Lock()
+	delete(pq.activeSessions, sessionID)
+	pq.muSess.Unlock()
 }
 
 // StartUpdate runs a loop of periodic data updates.
@@ -680,6 +700,22 @@ func (pq *PQueue) LoadMessages(ctx *fctx.Context, msgs []*pmsg.MsgMeta) {
 }
 
 func (pq *PQueue) Close() error {
+	pq.muSess.Lock()
+	ses := pq.activeSessions
+	pq.activeSessions = nil
+	pq.muSess.Unlock()
+
+	wg := sync.WaitGroup{}
+	for _, v := range ses {
+		s := v
+		wg.Add(1)
+		go func() {
+			s.Close()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
 	return pq.db.Close()
 }
 
