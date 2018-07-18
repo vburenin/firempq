@@ -34,7 +34,7 @@ func Background(traceID string) *Context {
 	return &Context{
 		ctx:     context.Background(),
 		traceID: traceID,
-		Logger:  log.Logger,
+		Logger:  log.Logger.With(zap.String("id", traceID)),
 	}
 }
 
@@ -42,7 +42,7 @@ func Empty(traceID string) *Context {
 	return &Context{
 		ctx:     context.Background(),
 		traceID: traceID,
-		Logger:  log.Logger,
+		Logger:  log.Logger.With(zap.String("id", traceID)),
 	}
 }
 
@@ -50,7 +50,7 @@ func TODO(traceID string) *Context {
 	return &Context{
 		ctx:     context.TODO(),
 		traceID: traceID,
-		Logger:  log.Logger,
+		Logger:  log.Logger.With(zap.String("id", traceID)),
 	}
 }
 
