@@ -38,6 +38,3 @@ func (r *AsyncResponse) WriteResponse(buf *bufio.Writer) error {
 	err = r.resp.WriteResponse(buf)
 	return err
 }
-
-var PONG = NewStrResponse("PONG")
-var OK = NewStrResponse("OK")

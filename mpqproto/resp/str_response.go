@@ -7,21 +7,18 @@ import (
 
 // StrResponse is a simple string response used to return some quick responses for commands like ping, etc.
 type StrResponse struct {
-	prefix string
-	data   string
+	data string
 }
 
 func NewStrResponse(data string) *StrResponse {
 	return &StrResponse{
-		prefix: "+",
-		data:   data,
+		data: data,
 	}
 }
 
 func NewAsyncAccept(data string) *StrResponse {
 	return &StrResponse{
-		prefix: "+A ",
-		data:   data,
+		data: "+A " + data,
 	}
 }
 
@@ -34,11 +31,14 @@ func (r *StrResponse) StringResponse() string {
 }
 
 func (r *StrResponse) WriteResponse(buf *bufio.Writer) error {
-	_, err := buf.WriteString(r.prefix)
-	_, err = buf.WriteString(r.data)
+	_, err := buf.WriteString(r.data)
 	return err
 }
 
 func (r *StrResponse) IsError() bool {
 	return false
 }
+
+var PONG = NewStrResponse("+PONG")
+var OK = NewStrResponse("+OK")
+var DISCONNECT = NewStrResponse("-DISCONNECT")
