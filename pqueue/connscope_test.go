@@ -54,11 +54,11 @@ func TestCtxParsePQConfig(t *testing.T) {
 	t.Run("Check all parameters are correct", func(t *testing.T) {
 		a := assert.New(t)
 		params := []string{
-			CPRM_MSG_TTL, "100",
-			CPRM_MAX_MSGS_IN_QUEUE, "200",
-			CPRM_DELIVERY_DELAY, "300",
-			CPRM_POP_LIMIT, "400",
-			CPRM_LOCK_TIMEOUT, "500",
+			CPrmMsgTtl, "100",
+			CPrmMaxQueueSize, "200",
+			CPrmDeliveryDelay, "300",
+			CPrmPopLimit, "400",
+			CPrmLockTimeout, "500",
 		}
 		cfg, resp := ParsePQConfig(params)
 		VerifyOkResponse(a, resp)
@@ -69,23 +69,23 @@ func TestCtxParsePQConfig(t *testing.T) {
 		a.EqualValues(500, cfg.PopLockTimeout)
 	})
 	t.Run("Message ttl parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPRM_MSG_TTL, "-1"})
+		_, err := ParsePQConfig([]string{CPrmMsgTtl, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(conf.CFG_PQ.MaxMessageTTL))
 	})
 	t.Run("Max size parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPRM_MAX_MSGS_IN_QUEUE, "-1"})
+		_, err := ParsePQConfig([]string{CPrmMaxQueueSize, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(math.MaxInt64))
 	})
 	t.Run("Delivery delay parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPRM_DELIVERY_DELAY, "-1"})
+		_, err := ParsePQConfig([]string{CPrmDeliveryDelay, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(conf.CFG_PQ.MaxDeliveryDelay))
 	})
 	t.Run("Pop limit parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPRM_POP_LIMIT, "-1"})
+		_, err := ParsePQConfig([]string{CPrmPopLimit, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(math.MaxInt64))
 	})
 	t.Run("Lock timeout parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPRM_LOCK_TIMEOUT, "-1"})
+		_, err := ParsePQConfig([]string{CPrmLockTimeout, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(conf.CFG_PQ.MaxLockTimeout))
 	})
 
@@ -389,24 +389,24 @@ func TestCtxSetParamValue(t *testing.T) {
 			So(resp, ShouldEqual, mpqerr.ERR_CMD_PARAM_NOT_PROVIDED)
 		})
 		Convey("Message TTL error", func() {
-			resp := q.Call(CmdSetConfig, []string{CPRM_MSG_TTL, "0"})
+			resp := q.Call(CmdSetConfig, []string{CPrmMsgTtl, "0"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxMessageTTL))
 		})
 		Convey("Queue Max Size", func() {
-			resp := q.Call(CmdSetConfig, []string{CPRM_MAX_MSGS_IN_QUEUE, "-1"})
+			resp := q.Call(CmdSetConfig, []string{CPrmMaxQueueSize, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 		Convey("Message delivery delay error", func() {
-			resp := q.Call(CmdSetConfig, []string{CPRM_DELIVERY_DELAY, "-1"})
+			resp := q.Call(CmdSetConfig, []string{CPrmDeliveryDelay, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxDeliveryDelay))
 		})
 		Convey("Pop limit out of range error", func() {
-			resp := q.Call(CmdSetConfig, []string{CPRM_POP_LIMIT, "-1"})
+			resp := q.Call(CmdSetConfig, []string{CPrmPopLimit, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(math.MaxInt64))
 		})
 
 		Convey("Lock timeout error", func() {
-			resp := q.Call(CmdSetConfig, []string{CPRM_LOCK_TIMEOUT, "-1"})
+			resp := q.Call(CmdSetConfig, []string{CPrmLockTimeout, "-1"})
 			So(resp.StringResponse(), ShouldContainSubstring, i2a(conf.CFG_PQ.MaxLockTimeout))
 		})
 
@@ -416,9 +416,9 @@ func TestCtxSetParamValue(t *testing.T) {
 		})
 		Convey("All parameters should be set", func() {
 			params := []string{
-				CPRM_DELIVERY_DELAY, "100",
-				CPRM_MSG_TTL, "10000",
-				CPRM_MAX_MSGS_IN_QUEUE, "100000",
+				CPrmDeliveryDelay, "100",
+				CPrmMsgTtl, "10000",
+				CPrmMaxQueueSize, "100000",
 			}
 			VerifyOkResponse(q.Call(CmdSetConfig, params))
 		})
