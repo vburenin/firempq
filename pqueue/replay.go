@@ -1,12 +1,11 @@
 package pqueue
 
 import (
+	"io"
 	"sort"
 
-	"io"
-
 	"github.com/vburenin/firempq/apis"
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/ferr"
 	"github.com/vburenin/firempq/pmsg"
@@ -70,7 +69,7 @@ func (pql *QueueLoader) ReplayData(ctx *fctx.Context, iter apis.ItemIterator) er
 			if len(data) < 8 {
 				ctx.Error("Invalid length of 'delete' data", zap.Int("length", len(data)))
 			} else {
-				delSn := enc.DecodeBytesToUnit64(data)
+				delSn := encoding.DecodeBytesToUnit64(data)
 				m := pql.msgs[delSn]
 				if m != nil {
 					pql.retMsg(m)

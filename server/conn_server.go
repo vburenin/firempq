@@ -83,25 +83,27 @@ func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 			log.Error("could not start FireMPQ listener", zap.Error(err))
 			return listener, err
 		}
-		cs.waitGroup.Add(1)
+		cs.waitGroup.Add(2)
 		go func() {
 			<-signals.QuitChan
 			listener.Close()
+			cs.waitGroup.Done()
 		}()
 		go func() {
 			defer cs.waitGroup.Done()
 			defer listener.Close()
 			for {
 				conn, err := listener.Accept()
-				if err == nil {
-					go cs.handleConnection(conn)
-				} else {
+				if err != nil {
 					select {
 					case <-signals.QuitChan:
 						return
 					default:
 						log.Error("Could not accept incoming request", zap.Error(err))
 					}
+				} else {
+					cs.waitGroup.Add(1)
+					go cs.handleConnection(conn)
 				}
 			}
 			log.Info("Stopped accepting connections for FireMPQ.")
@@ -115,20 +117,23 @@ func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 
 func (cs *ConnectionServer) Start() {
 	signal.Notify(cs.signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	ctx := fctx.Background("shutdown")
 	l, err := cs.startMPQListener()
 	if err != nil {
-		cs.Shutdown()
+
+		ctx.Error("could not start queue listener", zap.Error(err))
+		cs.Shutdown(ctx)
 		return
 	}
 	go cs.waitForSignal(l)
 	cs.startAWSProtoListeners()
 	cs.waitGroup.Wait()
-	cs.Shutdown()
+	cs.Shutdown(ctx)
 }
 
-func (cs *ConnectionServer) Shutdown() {
+func (cs *ConnectionServer) Shutdown(ctx *fctx.Context) {
 	log.Info("Closing queues...")
-	cs.qmgr.Close()
+	cs.qmgr.Close(ctx)
 	log.Info("Saving not saved data...")
 	db.DatabaseInstance().Close()
 	time.Sleep(time.Second)
@@ -137,21 +142,19 @@ func (cs *ConnectionServer) Shutdown() {
 
 func (cs *ConnectionServer) waitForSignal(l net.Listener) {
 	<-cs.signalChan
+	cs.Stop(fctx.Background("shutdown-signal"))
 	signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	cs.Stop()
 	if l != nil {
 		l.Close()
 	}
 }
 
-func (cs *ConnectionServer) Stop() {
-	log.Info("Server has been told to stop.")
-	log.Info("Disconnection all clients...")
+func (cs *ConnectionServer) Stop(ctx *fctx.Context) {
+	ctx.Info("stopping server")
 	signals.CloseQuitChan()
 }
 
 func (cs *ConnectionServer) handleConnection(conn net.Conn) {
-	cs.waitGroup.Add(1)
 	sh := NewSessionHandler(&cs.waitGroup, conn, cs.qmgr)
 	sh.DispatchConn()
 	cs.waitGroup.Done()

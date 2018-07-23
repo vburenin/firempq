@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
 )
 
 type DictResponse struct {
@@ -38,7 +38,7 @@ func (r *DictResponse) WriteResponse(buf *bufio.Writer) error {
 		err = buf.WriteByte(' ')
 	}
 
-	enc.WriteDict(buf, r.dict)
+	encoding.WriteMap(buf, r.dict)
 	return err
 }
 

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/vburenin/firempq/apis"
+	"github.com/vburenin/firempq/export/proto"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
@@ -20,18 +21,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	CmdPing       = "PING"
-	CmdCreateQueu = "CRT"
-	CmdDropQueue  = "DROP"
-	CmdQuit       = "QUIT"
-	CmdUnitTs     = "TS"
-	CmdList       = "LIST"
-	CmdCtx        = "CTX"
-	CmdPanic      = "PANIC"
-	CmdNoCtx      = "NOCTX"
-)
-
 var sessionCounter uint64
 
 type SessionHandler struct {
@@ -40,7 +29,7 @@ type SessionHandler struct {
 	active     bool
 	scope      *pqueue.ConnScope
 	stopChan   chan struct{}
-	tokenizer  *mpqproto.Tokenizer
+	tokenizer  *proto.Tokenizer
 	qmgr       *pqueue.QueueManager
 	connWriter *bufio.Writer
 	ctx        *fctx.Context
@@ -51,7 +40,7 @@ func NewSessionHandler(wg *sync.WaitGroup, conn net.Conn, qmgr *pqueue.QueueMana
 	v := atomic.AddUint64(&sessionCounter, 1)
 	sh := &SessionHandler{
 		conn:       conn,
-		tokenizer:  mpqproto.NewTokenizer(),
+		tokenizer:  proto.NewTokenizer(),
 		scope:      nil,
 		active:     true,
 		qmgr:       qmgr,
@@ -147,23 +136,23 @@ func (s *SessionHandler) processCmdTokens(cmdTokens []string) apis.IResponse {
 		}
 	}
 	switch cmd {
-	case CmdQuit:
+	case proto.CmdQuit:
 		return s.quitHandler(tokens)
-	case CmdCtx:
+	case proto.CmdCtx:
 		return s.ctxHandler(tokens)
-	case CmdCreateQueu:
+	case proto.CmdCreateQueue:
 		return s.createQueueHandler(tokens)
-	case CmdDropQueue:
+	case proto.CmdDropQueue:
 		return s.dropQueueHandler(tokens)
-	case CmdList:
+	case proto.CmdList:
 		return s.listServicesHandler(tokens)
-	case CmdPing:
+	case proto.CmdPing:
 		return pingHandler(tokens)
-	case CmdUnitTs:
+	case proto.CmdUnitTs:
 		return tsHandler(tokens)
-	case CmdPanic:
+	case proto.CmdPanic:
 		return panicHandler(tokens)
-	case CmdNoCtx:
+	case proto.CmdNoCtx:
 		return s.noContextHandler(tokens)
 	default:
 		return mpqerr.InvalidRequest("unknown command: " + cmd)

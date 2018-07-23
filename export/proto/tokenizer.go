@@ -1,4 +1,4 @@
-package mpqproto
+package proto
 
 import (
 	"io"

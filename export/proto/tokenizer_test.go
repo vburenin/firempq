@@ -1,4 +1,4 @@
-package mpqproto
+package proto
 
 import (
 	"io"
@@ -72,8 +72,13 @@ func TestIncompleteReads(t *testing.T) {
 func TestTooMuchData(t *testing.T) {
 	Convey("Too much data is not ok", t, func() {
 		tok := NewTokenizer()
-		Convey("To many tokens", func() {
+		Convey("Too many tokens", func() {
 			d := "a b c d e f g h i j k l m n o p q r s t u v w x w z"
+			d += d
+			d += d
+			d += d
+			d += d
+			d += d
 			d += d
 			d += "\n"
 			_, err := tok.ReadTokens(NewTestDataReader(d))

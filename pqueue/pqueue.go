@@ -9,10 +9,11 @@ import (
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
+	"github.com/vburenin/firempq/export/proto"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
-	"github.com/vburenin/firempq/mpqproto"
 	"github.com/vburenin/firempq/mpqproto/resp"
 	"github.com/vburenin/firempq/pmsg"
 	"github.com/vburenin/firempq/qconf"
@@ -496,12 +497,12 @@ func (pq *PQueue) getMessageByRcpt(rcpt string) (*pmsg.MsgMeta, *mpqerr.ErrorRes
 	if len(parts) != 2 {
 		return nil, mpqerr.ErrInvalidRcpt
 	}
-	sn, err := mpqproto.Parse36BaseUIntValue(parts[0])
+	sn, err := proto.HexToUint(parts[0])
 	if err != nil {
 		return nil, mpqerr.ErrInvalidRcpt
 	}
 
-	popCount, err := mpqproto.Parse36BaseIntValue(parts[1])
+	popCount, err := proto.HexToUint(parts[1])
 	if err != nil {
 		return nil, mpqerr.ErrInvalidRcpt
 	}
@@ -510,7 +511,7 @@ func (pq *PQueue) getMessageByRcpt(rcpt string) (*pmsg.MsgMeta, *mpqerr.ErrorRes
 	pq.lock.Lock()
 	msg := pq.timeoutHeap.GetMsg(sn)
 
-	if msg != nil && msg.PopCount == popCount {
+	if msg != nil && msg.PopCount == int64(popCount) {
 		return msg, nil
 	}
 
@@ -737,7 +738,7 @@ func (pq *PQueue) WriteUpdateMetadata(m *pmsg.MsgMeta) {
 func (pq *PQueue) WriteDeleteMetadata(sn uint64) {
 	data := make([]byte, 1+8)
 	data[0] = DBActionDeleteMetadata
-	enc.Uint64ToBin(sn, data[1:])
+	encoding.Uint64ToBin(sn, data[1:])
 	pq.db.AddMetadata(data)
 }
 

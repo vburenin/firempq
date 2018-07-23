@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
 )
 
 var CodeInvalidReq int64 = 400
@@ -34,7 +34,7 @@ func (e *ErrorResponse) StringResponse() string {
 }
 
 func (e *ErrorResponse) WriteResponse(buf *bufio.Writer) error {
-	return enc.WriteError(buf, e.Code, e.Text)
+	return encoding.WriteError(buf, e.Code, e.Text)
 }
 
 func (e *ErrorResponse) IsError() bool {

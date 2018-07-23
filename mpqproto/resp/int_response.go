@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
 )
 
 // IntResponse is a simple integer response.
@@ -26,7 +26,7 @@ func (r *IntResponse) StringResponse() string {
 
 func (r *IntResponse) WriteResponse(buf *bufio.Writer) error {
 	_, err := buf.WriteString("+DATA ")
-	enc.WriteInt64(buf, r.Value)
+	encoding.WriteInt64(buf, r.Value)
 	return err
 }
 

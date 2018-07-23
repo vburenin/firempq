@@ -8,6 +8,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
+	"github.com/vburenin/firempq/export/proto"
 	"github.com/vburenin/firempq/idgen"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/mpqerr"
@@ -36,53 +37,6 @@ func NewConnScope(pq *PQueue, r apis.ResponseWriteCloser) *ConnScope {
 	}
 }
 
-const PayloadSizeLimit = 512 * 1024
-
-const (
-	CmdDeleteLockedByID = "DELLCK"
-	CmdDeleteByID       = "DEL"
-	CmdDeleteByRcpt     = "RDEL"
-	CmdUpdateLock       = "RUNLCK"
-	CmdUnlockByID       = "UNLCK"
-	CmdUpdateLockByID   = "UPDLCK"
-	CmdUpdateLockByRcpt = "RUPDLCK"
-	CmdPush             = "PUSH"
-	CmdPushBatch        = "PUSHB"
-	CmdBatchNext        = "NXT"
-	CmdPop              = "POP"
-	CmdPopLock          = "POPLCK"
-	CmdMsgInfo          = "MSGINFO"
-	CmdStats            = "STATUS"
-	CmdCheckTimeouts    = "CHKTS"
-	CmdSetConfig        = "SETCFG"
-	CmdPurge            = "PURGE"
-)
-
-const (
-	PrmID          = "ID"
-	PrmReceipt     = "RCPT"
-	PrmPopWait     = "WAIT"
-	PrmLockTimeout = "TIMEOUT"
-	PrmLimit       = "LIMIT"
-	PrmPayload     = "PL"
-	PrmDelay       = "DELAY"
-	PrmTimeStamp   = "TS"
-	PrmAsync       = "ASYNC"
-	PrmSyncWait    = "SYNCWAIT"
-	PrmMsgTTL      = "TTL"
-)
-
-const (
-	CPrmMsgTtl        = "MSGTTL"
-	CPrmMaxMsgSize    = "MSGSIZE"
-	CPrmMaxQueueSize  = "MAXMSGS"
-	CPrmDeliveryDelay = "DELAY"
-	CPrmPopLimit      = "POPLIMIT"
-	CPrmLockTimeout   = "TIMEOUT"
-	CPrmFailQueue     = "FAILQ"
-	CPrmPopWait       = "WAIT"
-)
-
 func DefaultPQConfig() *qconf.QueueConfig {
 	cfg := &conf.Config{}
 	flags.ParseArgs(cfg, []string{"firempq"})
@@ -110,21 +64,21 @@ func ParsePQConfig(params []string) (*qconf.QueueConfig, apis.IResponse) {
 	cfg := DefaultPQConfig()
 	for len(params) > 0 {
 		switch params[0] {
-		case CPrmMsgTtl:
+		case proto.CPrmMsgTtl:
 			params, cfg.MsgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
-		case CPrmMaxMsgSize:
+		case proto.CPrmMaxMsgSize:
 			params, cfg.MaxMsgSize, err = mpqproto.ParseInt64Param(params, 1024, conf.CFG_PQ.MaxMessageSize)
-		case CPrmMaxQueueSize:
+		case proto.CPrmMaxQueueSize:
 			params, cfg.MaxMsgsInQueue, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
-		case CPrmDeliveryDelay:
+		case proto.CPrmDeliveryDelay:
 			params, cfg.DeliveryDelay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
-		case CPrmPopLimit:
+		case proto.CPrmPopLimit:
 			params, cfg.PopCountLimit, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
-		case CPrmLockTimeout:
+		case proto.CPrmLockTimeout:
 			params, cfg.PopLockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
-		case CPrmFailQueue:
+		case proto.CPrmFailQueue:
 			params, cfg.PopLimitQueueName, err = mpqproto.ParseItemId(params)
-		case CPrmPopWait:
+		case proto.CPrmPopWait:
 			params, cfg.PopWaitTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxPopWaitTimeout)
 		default:
 			return nil, mpqerr.UnknownParam(params[0])
@@ -147,37 +101,37 @@ func (cs *ConnScope) Call(cmd string, params []string) apis.IResponse {
 	}
 	cs.callsCount += 1
 	switch cmd {
-	case CmdPopLock:
+	case proto.CmdPopLock:
 		return cs.PopLock(params)
-	case CmdPop:
+	case proto.CmdPop:
 		return cs.Pop(params)
-	case CmdMsgInfo:
+	case proto.CmdMsgInfo:
 		return cs.GetMessageInfo(params)
-	case CmdDeleteByRcpt:
+	case proto.CmdDeleteByRcpt:
 		return cs.DeleteByReceipt(params)
-	case CmdUpdateLock:
+	case proto.CmdUnlockByRcpt:
 		return cs.UnlockByReceipt(params)
-	case CmdDeleteLockedByID:
+	case proto.CmdDeleteLockedByID:
 		return cs.DeleteLockedById(params)
-	case CmdDeleteByID:
+	case proto.CmdDeleteByID:
 		return cs.DeleteById(params)
-	case CmdPush:
+	case proto.CmdPush:
 		return cs.Push(params)
-	case CmdPushBatch:
+	case proto.CmdPushBatch:
 		return cs.PushBatch(params)
-	case CmdUpdateLockByID:
+	case proto.CmdUpdateLockByID:
 		return cs.UpdateLockById(params)
-	case CmdUpdateLockByRcpt:
+	case proto.CmdUpdateLockByRcpt:
 		return cs.UpdateLockByRcpt(params)
-	case CmdUnlockByID:
+	case proto.CmdUnlockByID:
 		return cs.UnlockMessageById(params)
-	case CmdStats:
+	case proto.CmdStats:
 		return cs.GetCurrentStatus(params)
-	case CmdSetConfig:
+	case proto.CmdSetConfig:
 		return cs.SetParamValue(params)
-	case CmdCheckTimeouts:
+	case proto.CmdCheckTimeouts:
 		return cs.CheckTimeouts(params)
-	case CmdPurge:
+	case proto.CmdPurge:
 		cs.pq.Clear()
 		return resp.OK
 	}
@@ -219,13 +173,13 @@ func (cs *ConnScope) PopLock(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PrmLockTimeout:
+		case proto.PrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
-		case PrmLimit:
+		case proto.PrmLimit:
 			params, limit, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxPopBatchSize)
-		case PrmPopWait:
+		case proto.PrmPopWait:
 			params, popWaitTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxPopWaitTimeout)
-		case PrmAsync:
+		case proto.PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -251,11 +205,11 @@ func (cs *ConnScope) Pop(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PrmLimit:
+		case proto.PrmLimit:
 			params, limit, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxPopBatchSize)
-		case PrmPopWait:
+		case proto.PrmPopWait:
 			params, popWaitTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxPopWaitTimeout)
-		case PrmAsync:
+		case proto.PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -349,18 +303,18 @@ func (cs *ConnScope) Push(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PrmID:
+		case proto.PrmID:
 			params, msgId, err = mpqproto.ParseUserItemId(params)
-		case PrmPayload:
-			params, payload, err = mpqproto.ParseStringParam(params, 1, PayloadSizeLimit)
-		case PrmDelay:
+		case proto.PrmPayload:
+			params, payload, err = mpqproto.ParseStringParam(params, 1, conf.CFG_PQ.MaxMessageSize)
+		case proto.PrmDelay:
 			params, delay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
-		case PrmMsgTTL:
+		case proto.PrmMsgTTL:
 			params, msgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
-		case PrmSyncWait:
+		case proto.PrmSyncWait:
 			params = params[1:]
 			syncWait = true
-		case PrmAsync:
+		case proto.PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -427,20 +381,20 @@ func (cs *ConnScope) PushBatch(params []string) apis.IResponse {
 			return mpqerr.InvalidRequest("too many messages in one batch. 10 is the limit.")
 		}
 		switch params[0] {
-		case PrmID:
+		case proto.PrmID:
 			params, msgId, err = mpqproto.ParseUserItemId(params)
-		case PrmPayload:
-			params, payload, err = mpqproto.ParseStringParam(params, 1, PayloadSizeLimit)
-		case PrmDelay:
+		case proto.PrmPayload:
+			params, payload, err = mpqproto.ParseStringParam(params, 1, conf.CFG_PQ.MaxMessageSize)
+		case proto.PrmDelay:
 			params, delay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
-		case PrmMsgTTL:
+		case proto.PrmMsgTTL:
 			params, msgTtl, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxMessageTTL)
-		case PrmSyncWait:
+		case proto.PrmSyncWait:
 			params = params[1:]
 			syncWait = true
-		case PrmAsync:
+		case proto.PrmAsync:
 			params, asyncId, err = mpqproto.ParseItemId(params)
-		case CmdBatchNext:
+		case proto.CmdBatchNext:
 			params = params[1:]
 			if len(msgId) == 0 {
 				msgId = cs.idGen.RandId()
@@ -546,9 +500,9 @@ func (cs *ConnScope) UpdateLockByRcpt(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PrmReceipt:
+		case proto.PrmReceipt:
 			params, rcpt, err = mpqproto.ParseReceiptParam(params)
-		case PrmLockTimeout:
+		case proto.PrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -577,9 +531,9 @@ func (cs *ConnScope) UpdateLockById(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case PrmID:
+		case proto.PrmID:
 			params, msgId, err = mpqproto.ParseItemId(params)
-		case PrmLockTimeout:
+		case proto.PrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -619,7 +573,7 @@ func (cs *ConnScope) CheckTimeouts(params []string) apis.IResponse {
 	var ts int64 = -1
 	for len(params) > 0 {
 		switch params[0] {
-		case PrmTimeStamp:
+		case proto.PrmTimeStamp:
 			params, ts, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
 		default:
 			return mpqerr.UnknownParam(params[0])
@@ -653,25 +607,25 @@ func (cs *ConnScope) SetParamValue(params []string) apis.IResponse {
 
 	for len(params) > 0 {
 		switch params[0] {
-		case CPrmMsgTtl:
+		case proto.CPrmMsgTtl:
 			params, msgTtl, err = mpqproto.ParseInt64Param(params, 1, conf.CFG_PQ.MaxMessageTTL)
 			pqParams.MsgTTL = &msgTtl
-		case CPrmMaxMsgSize:
+		case proto.CPrmMaxMsgSize:
 			params, maxMsgSize, err = mpqproto.ParseInt64Param(params, 1024, conf.CFG_PQ.MaxMessageSize)
 			pqParams.MaxMsgSize = &maxMsgSize
-		case CPrmMaxQueueSize:
+		case proto.CPrmMaxQueueSize:
 			params, maxMsgsInQueue, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
 			pqParams.MaxMsgsInQueue = &maxMsgsInQueue
-		case CPrmDeliveryDelay:
+		case proto.CPrmDeliveryDelay:
 			params, deliveryDelay, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxDeliveryDelay)
 			pqParams.DeliveryDelay = &deliveryDelay
-		case CPrmPopLimit:
+		case proto.CPrmPopLimit:
 			params, popLimit, err = mpqproto.ParseInt64Param(params, 0, math.MaxInt64)
 			pqParams.PopCountLimit = &popLimit
-		case CPrmLockTimeout:
+		case proto.CPrmLockTimeout:
 			params, lockTimeout, err = mpqproto.ParseInt64Param(params, 0, conf.CFG_PQ.MaxLockTimeout)
 			pqParams.PopLockTimeout = &lockTimeout
-		case CPrmFailQueue:
+		case proto.CPrmFailQueue:
 			params, *pqParams.FailQueue, err = mpqproto.ParseItemId(params)
 			pqParams.FailQueue = &failQueue
 		default:

@@ -3,7 +3,8 @@ package pmsg
 import (
 	"bufio"
 
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
+	"github.com/vburenin/firempq/export/proto"
 )
 
 type FullMessage struct {
@@ -19,37 +20,36 @@ func NewFullMessage(msg *MsgMeta, payload []byte) *FullMessage {
 }
 
 func (p *FullMessage) Receipt() string {
-	return enc.To36Base(p.Serial) + "-" + enc.To36Base(uint64(p.PopCount))
+	return string(proto.UintToHex(p.Serial)) + "-" + string(proto.UintToHex(uint64(p.PopCount)))
 }
 
-func (p *FullMessage) WriteResponse(buf *bufio.Writer) error {
-
+func (p *FullMessage) WriteResponse(buf *bufio.Writer) (err error) {
 	v := 5
 	if p.UnlockTs > 0 {
 		v = 6
 	}
 
-	err := enc.WriteDictSize(buf, v)
-	_, err = buf.WriteString(" ID ")
-	err = enc.WriteString(buf, p.StrId)
+	encoding.WriteMapSize(buf, v)
+	buf.WriteString(" ID ")
+	encoding.WriteString(buf, p.StrId)
 
-	_, err = buf.WriteString(" PL ")
-	err = enc.WriteBytes(buf, p.Payload)
+	buf.WriteString(" PL ")
+	encoding.WriteBytes(buf, p.Payload)
 
-	_, err = buf.WriteString(" ETS ")
-	err = enc.WriteInt64(buf, p.ExpireTs)
+	buf.WriteString(" ETS ")
+	encoding.WriteInt64(buf, p.ExpireTs)
 
-	_, err = buf.WriteString(" POPCNT ")
-	err = enc.WriteInt64(buf, p.PopCount)
+	buf.WriteString(" POPCNT ")
+	encoding.WriteInt64(buf, p.PopCount)
 
-	_, err = buf.WriteString(" UTS ")
-	err = enc.WriteInt64(buf, p.UnlockTs)
+	buf.WriteString(" UTS ")
+	err = encoding.WriteInt64(buf, p.UnlockTs)
 
 	if p.UnlockTs > 0 {
-		_, err = buf.WriteString(" RCPT ")
-		_, err = buf.WriteString(enc.To36Base(p.Serial))
-		err = buf.WriteByte('-')
-		_, err = buf.WriteString(enc.To36Base(uint64(p.PopCount)))
+		buf.WriteString(" RCPT ")
+		buf.Write(proto.UintToHex(p.Serial))
+		buf.WriteByte('-')
+		_, err = buf.Write(proto.UintToHex(uint64(p.PopCount)))
 	}
 	return err
 }

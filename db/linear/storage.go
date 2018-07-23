@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
 	"github.com/vburenin/firempq/ferr"
 )
 
@@ -96,7 +96,7 @@ func (of *OpenedFile) WriteTo(data []byte) (pos int64, err error) {
 	pos = of.curPos
 
 	// write down payload size as 8 bytes.
-	enc.Uint64ToBin(uint64(len(data)), of.workBuf8bytes)
+	encoding.Uint64ToBin(uint64(len(data)), of.workBuf8bytes)
 	// ignore error here.
 	n, err := of.writeBuf.Write(of.workBuf8bytes)
 	n, err = of.writeBuf.Write(data)
@@ -111,7 +111,7 @@ func (of *OpenedFile) RetrieveData(pos int64) ([]byte, error) {
 		return nil, ferr.Wrapf(err, "not enough data to read")
 	}
 
-	v := enc.DecodeBytesToUnit64(of.workBuf8bytes)
+	v := encoding.DecodeBytesToUnit64(of.workBuf8bytes)
 	if v > MaxPayloadFileSize {
 		return nil, ferr.Errorf("too large payload data %d bytes (limit %d bytes)",
 			v, MaxPayloadFileSize)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vburenin/firempq"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/qconf"
 )
@@ -54,11 +55,11 @@ func TestCtxParsePQConfig(t *testing.T) {
 	t.Run("Check all parameters are correct", func(t *testing.T) {
 		a := assert.New(t)
 		params := []string{
-			CPrmMsgTtl, "100",
-			CPrmMaxQueueSize, "200",
-			CPrmDeliveryDelay, "300",
-			CPrmPopLimit, "400",
-			CPrmLockTimeout, "500",
+			export.CPrmMsgTtl, "100",
+			export.CPrmMaxQueueSize, "200",
+			export.CPrmDeliveryDelay, "300",
+			export.CPrmPopLimit, "400",
+			export.CPrmLockTimeout, "500",
 		}
 		cfg, resp := ParsePQConfig(params)
 		VerifyOkResponse(a, resp)
@@ -69,23 +70,23 @@ func TestCtxParsePQConfig(t *testing.T) {
 		a.EqualValues(500, cfg.PopLockTimeout)
 	})
 	t.Run("Message ttl parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPrmMsgTtl, "-1"})
+		_, err := ParsePQConfig([]string{export.CPrmMsgTtl, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(conf.CFG_PQ.MaxMessageTTL))
 	})
 	t.Run("Max size parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPrmMaxQueueSize, "-1"})
+		_, err := ParsePQConfig([]string{export.CPrmMaxQueueSize, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(math.MaxInt64))
 	})
 	t.Run("Delivery delay parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPrmDeliveryDelay, "-1"})
+		_, err := ParsePQConfig([]string{export.CPrmDeliveryDelay, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(conf.CFG_PQ.MaxDeliveryDelay))
 	})
 	t.Run("Pop limit parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPrmPopLimit, "-1"})
+		_, err := ParsePQConfig([]string{export.CPrmPopLimit, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(math.MaxInt64))
 	})
 	t.Run("Lock timeout parse error", func(t *testing.T) {
-		_, err := ParsePQConfig([]string{CPrmLockTimeout, "-1"})
+		_, err := ParsePQConfig([]string{export.CPrmLockTimeout, "-1"})
 		assert.Contains(t, err.StringResponse(), i2a(conf.CFG_PQ.MaxLockTimeout))
 	})
 

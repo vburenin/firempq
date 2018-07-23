@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 
-	"github.com/vburenin/firempq/enc"
+	"github.com/vburenin/firempq/export/encoding"
 	"github.com/vburenin/firempq/pmsg"
 )
 
@@ -28,7 +28,7 @@ func (r *MessagesResponse) StringResponse() string {
 
 func (r *MessagesResponse) WriteResponse(buf *bufio.Writer) error {
 	_, err := buf.WriteString("+MSGS ")
-	err = enc.WriteArraySize(buf, len(r.Messages))
+	err = encoding.WriteArraySize(buf, len(r.Messages))
 	for _, item := range r.Messages {
 		err = buf.WriteByte(' ')
 		err = item.WriteResponse(buf)

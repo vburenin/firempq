@@ -67,26 +67,6 @@ func ParseItemId(params []string) ([]string, string, *mpqerr.ErrorResponse) {
 	return nil, "", mpqerr.ErrInvalidID
 }
 
-func ParseServiceType(params []string) ([]string, string, *mpqerr.ErrorResponse) {
-	valName := params[0]
-	if len(params) >= 2 {
-		svcType := params[1]
-		if svcType != "pqueue" && svcType != "pq" {
-			return nil, "", mpqerr.InvalidRequest("Unknown service type: " + svcType)
-		}
-		return params[2:], svcType, nil
-	}
-	return nil, "", mpqerr.InvalidRequest(valName + " must be followed by service type")
-}
-
-func Parse36BaseUIntValue(v string) (uint64, error) {
-	return strconv.ParseUint(v, 36, 0)
-}
-
-func Parse36BaseIntValue(v string) (int64, error) {
-	return strconv.ParseInt(v, 36, 0)
-}
-
 func ParseReceiptParam(params []string) ([]string, string, *mpqerr.ErrorResponse) {
 	return ParseStringParam(params, 3, 256)
 }

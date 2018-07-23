@@ -1,33 +1,9 @@
-package enc
+package encoding
 
 import (
 	"bufio"
 	"strconv"
 )
-
-// To36Base creates a string value of service INT id.
-func To36Base(i uint64) string {
-	return strconv.FormatUint(i, 36)
-}
-
-func UintToHex(i uint64) []byte {
-	b := make([]byte, 16)
-	d := 15
-	for {
-		v := i & 0x0f
-		if v < 10 {
-			b[d] = byte(0x30 | v)
-		} else {
-			b[d] = byte(55 + v)
-		}
-		i >>= 4
-		if i == 0 || d == 0 {
-			break
-		}
-		d--
-	}
-	return b[d:]
-}
 
 func Uint64ToBin(v uint64, b []byte) {
 	b[0] = byte(v >> 56)
@@ -67,6 +43,12 @@ func WriteInt64(b *bufio.Writer, v int64) error {
 	return err
 }
 
+func WriteUint64(b *bufio.Writer, v uint64) error {
+	err := b.WriteByte(':')
+	_, err = b.WriteString(strconv.FormatUint(v, 10))
+	return err
+}
+
 func WriteString(b *bufio.Writer, v string) error {
 	err := b.WriteByte('$')
 	_, err = b.WriteString(strconv.Itoa(len(v)))
@@ -83,13 +65,13 @@ func WriteBytes(b *bufio.Writer, v []byte) error {
 	return err
 }
 
-func WriteDict(b *bufio.Writer, dict map[string]interface{}) error {
-	err := WriteDictSize(b, len(dict))
+func WriteMap(b *bufio.Writer, m map[string]interface{}) error {
+	err := WriteMapSize(b, len(m))
 
-	if len(dict) == 0 {
+	if len(m) == 0 {
 		return nil
 	}
-	for k, v := range dict {
+	for k, v := range m {
 		err = b.WriteByte(' ')
 		err = WriteString(b, k)
 		err = b.WriteByte(' ')
@@ -101,6 +83,8 @@ func WriteDict(b *bufio.Writer, dict map[string]interface{}) error {
 			err = WriteInt64(b, int64(t))
 		case int64:
 			err = WriteInt64(b, t)
+		case uint64:
+			err = WriteUint64(b, t)
 		case bool:
 			err = WriteBool(b, t)
 		}
@@ -113,7 +97,7 @@ func WriteDict(b *bufio.Writer, dict map[string]interface{}) error {
 	return err
 }
 
-func WriteDictSize(b *bufio.Writer, l int) error {
+func WriteMapSize(b *bufio.Writer, l int) error {
 	err := b.WriteByte('%')
 	_, err = b.WriteString(strconv.Itoa(l))
 	return err

@@ -276,9 +276,8 @@ func (qm *QueueManager) GetQueue(name string) *PQueue {
 }
 
 // Close closes all available services walking through all of them.
-func (qm *QueueManager) Close() {
+func (qm *QueueManager) Close(ctx *fctx.Context) {
 	qm.rwLock.Lock()
-	ctx := fctx.Background("shutdown")
 	for _, q := range qm.queues {
 		if err := q.Close(); err != nil {
 			ctx.Error("queue database not closed", zap.String("queue", q.Description().Name), zap.Error(err))

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vburenin/firempq"
 	"github.com/vburenin/firempq/apis"
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/db"
@@ -61,14 +62,14 @@ func BenchMassPush() {
 
 	cs := svc.ConnScope(respWriter)
 
-	cs.Call(pqueue.CmdSetConfig, []string{pqueue.CPrmMaxQueueSize, "10000000", pqueue.CPrmMsgTtl, "10000000"})
+	cs.Call(export.CmdSetConfig, []string{export.CPrmMaxQueueSize, "10000000", export.CPrmMsgTtl, "10000000"})
 
 	var grp sync.WaitGroup
-	data := []string{pqueue.PrmPayload, "7777777777"}
+	data := []string{export.PrmPayload, "7777777777"}
 
 	testFunc := func() {
 		for i := 0; i < 1000000; i++ {
-			cs.Call(pqueue.CmdPush, data)
+			cs.Call(export.CmdPush, data)
 		}
 		grp.Done()
 	}
@@ -150,18 +151,18 @@ func BenchMassPushMultiQueue() {
 	ctx3 := svc3.ConnScope(respWriter3)
 	ctx4 := svc4.ConnScope(respWriter4)
 
-	ctx1.Call(pqueue.CmdSetConfig, []string{pqueue.CPrmMaxQueueSize, "10000000", pqueue.CPrmMsgTtl, "100000", pqueue.CPrmDeliveryDelay, "0"})
-	ctx2.Call(pqueue.CmdSetConfig, []string{pqueue.CPrmMaxQueueSize, "10000000", pqueue.CPrmMsgTtl, "100000", pqueue.CPrmDeliveryDelay, "0"})
-	ctx3.Call(pqueue.CmdSetConfig, []string{pqueue.CPrmMaxQueueSize, "10000000", pqueue.CPrmMsgTtl, "100000", pqueue.CPrmDeliveryDelay, "0"})
-	ctx4.Call(pqueue.CmdSetConfig, []string{pqueue.CPrmMaxQueueSize, "10000000", pqueue.CPrmMsgTtl, "100000", pqueue.CPrmDeliveryDelay, "0"})
+	ctx1.Call(export.CmdSetConfig, []string{export.CPrmMaxQueueSize, "10000000", export.CPrmMsgTtl, "100000", export.CPrmDeliveryDelay, "0"})
+	ctx2.Call(export.CmdSetConfig, []string{export.CPrmMaxQueueSize, "10000000", export.CPrmMsgTtl, "100000", export.CPrmDeliveryDelay, "0"})
+	ctx3.Call(export.CmdSetConfig, []string{export.CPrmMaxQueueSize, "10000000", export.CPrmMsgTtl, "100000", export.CPrmDeliveryDelay, "0"})
+	ctx4.Call(export.CmdSetConfig, []string{export.CPrmMaxQueueSize, "10000000", export.CPrmMsgTtl, "100000", export.CPrmDeliveryDelay, "0"})
 
 	startTs := time.Now().UnixNano()
-	data := []string{pqueue.PrmPayload, "777777777777"}
+	data := []string{export.PrmPayload, "777777777777"}
 
 	var grp sync.WaitGroup
 	testFunc := func(c *pqueue.ConnScope) {
 		for i := 0; i < 1000000; i++ {
-			c.Call(pqueue.CmdPush, data)
+			c.Call(export.CmdPush, data)
 		}
 		grp.Done()
 	}
