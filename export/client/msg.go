@@ -6,7 +6,6 @@ import (
 
 type Message struct {
 	id       string
-	priority int64
 	payload  string
 	delay    int64
 	ttl      int64
@@ -27,11 +26,6 @@ func NewMessage(payload string) *Message {
 
 func (msg *Message) SetId(id string) *Message {
 	msg.id = id
-	return msg
-}
-
-func (msg *Message) SetPriority(priority int64) *Message {
-	msg.priority = priority
 	return msg
 }
 
@@ -67,8 +61,8 @@ func (msg *Message) sendMessageData(t *TokenUtil) error {
 		t.SendInt(msg.delay)
 	}
 	if msg.ttl >= 0 {
-		t.SendSpace()
 		t.SendTokenWithSpace(proto.PrmMsgTTL)
+
 		t.SendInt(msg.ttl)
 	}
 	if msg.syncWait {
@@ -77,7 +71,7 @@ func (msg *Message) sendMessageData(t *TokenUtil) error {
 	}
 
 	t.SendSpace()
-	t.SendToken(proto.PrmPayload)
+	t.SendTokenWithSpace(proto.PrmPayload)
 	return t.SendString(msg.payload)
 }
 
@@ -102,7 +96,7 @@ func parsePoppedMessages(tokens []string) ([]*QueueMessage, error) {
 	tokens = tokens[1:]
 	for i := arraySize; i > 0; i-- {
 		if len(tokens) == 0 {
-			WrongMessageFormatError("Array with messages ends unexpectedly")
+			return nil, WrongMessageFormatError("Array with messages ends unexpectedly")
 		}
 		keysCount, err := ParseMapSize(tokens[0])
 		if err != nil {
@@ -130,17 +124,17 @@ func parseMessage(tokens []string) (*QueueMessage, error) {
 	idx := len(tokens) - 2
 	for idx >= 0 {
 		switch tokens[idx] {
-		case "ID":
+		case proto.MsgAttrID:
 			msg.Id = tokens[idx+1]
-		case "PL":
+		case proto.MsgAttrPayload:
 			msg.Payload = tokens[idx+1]
-		case "RCPT":
+		case proto.MsgAttrRcpt:
 			msg.Receipt = tokens[idx+1]
-		case "UTS":
+		case proto.MsgAttrUnlockTs:
 			msg.UnlockTs, err = ParseInt(tokens[idx+1])
-		case "ETS":
+		case proto.MsgAttrExpireTs:
 			msg.ExpireTs, err = ParseInt(tokens[idx+1])
-		case "POPCNT":
+		case proto.MsgAttrPopCount:
 			msg.PopCount, err = ParseInt(tokens[idx+1])
 		default:
 		}

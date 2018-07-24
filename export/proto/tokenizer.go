@@ -14,36 +14,37 @@ const (
 )
 
 const (
-	maxTokensPerMsg    = 100
-	maxRecvBufferSize  = 4096
-	maxTextTokenLen    = 256
-	maxBinaryTokenLen  = 1024 * 1024
-	startAsciiRange    = 0x21
-	endAsciiRange      = 0x7E
-	initTokenBufferLen = 128
+	maxTokensPerMsg   = 256
+	maxRecvBufferSize = 4096
+	maxTextTokenLen   = 256
+	maxBinaryTokenLen = 600 * 1024
+	startAsciiRange   = 0x21
+	endAsciiRange     = 0x7E
 )
 
 type Tokenizer struct {
-	buffer []byte
-	bufPos int
-	bufLen int
+	buffer   []byte
+	bufPos   int
+	bufLen   int
+	tokenBuf []byte
 }
 
 func NewTokenizer() *Tokenizer {
 	tok := Tokenizer{
-		buffer: make([]byte, maxRecvBufferSize),
-		bufPos: 0,
-		bufLen: 0,
+		buffer:   make([]byte, maxRecvBufferSize),
+		bufPos:   0,
+		bufLen:   0,
+		tokenBuf: make([]byte, 128),
 	}
 	return &tok
 }
 
 func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 	var err error
-	var token = make([]byte, 0, initTokenBufferLen)
 	var binTokenLen int
 	var state = stateParseTextToken
 
+	tok.tokenBuf = tok.tokenBuf[0:0]
 	result := make([]string, 0, maxTokensPerMsg)
 
 	for {
@@ -65,7 +66,7 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 			if availableBytes > binTokenLen {
 				availableBytes = binTokenLen
 			}
-			token = append(token, tok.buffer[tok.bufPos:tok.bufPos+availableBytes]...)
+			tok.tokenBuf = append(tok.tokenBuf, tok.buffer[tok.bufPos:tok.bufPos+availableBytes]...)
 			binTokenLen -= availableBytes
 
 			tok.bufPos += availableBytes
@@ -73,11 +74,11 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 			if binTokenLen <= 0 {
 				// Binary token complete
 				state = stateParseTextToken
-				result = append(result, string(token))
+				result = append(result, string(tok.tokenBuf))
 				if len(result) > maxTokensPerMsg {
 					return nil, mpqerr.ErrTokTooManyTokens
 				}
-				token = token[0:0]
+				tok.tokenBuf = tok.tokenBuf[0:0]
 			}
 			continue
 		}
@@ -86,31 +87,31 @@ func (tok *Tokenizer) ReadTokens(reader io.Reader) ([]string, error) {
 		tok.bufPos += 1
 
 		if val >= startAsciiRange && val <= endAsciiRange {
-			token = append(token, val)
-		} else if len(token) > 0 {
-			if token[0] == '$' {
-				binTokenLen, err = strconv.Atoi(string(token[1:]))
+			tok.tokenBuf = append(tok.tokenBuf, val)
+		} else if len(tok.tokenBuf) > 0 {
+			if tok.tokenBuf[0] == '$' {
+				binTokenLen, err = strconv.Atoi(string(tok.tokenBuf[1:]))
 				if err == nil && (binTokenLen < 1 || binTokenLen > maxBinaryTokenLen) {
 					return nil, mpqerr.ErrTokInvalid
 				}
 				state = stateParseBinaryPayload
-				token = make([]byte, 0, binTokenLen)
+				tok.tokenBuf = make([]byte, 0, binTokenLen)
 			} else {
-				result = append(result, string(token))
+				result = append(result, string(tok.tokenBuf))
 				if len(result) > maxTokensPerMsg {
 					return nil, mpqerr.ErrTokTooManyTokens
 				}
 				if val == symbolCr {
 					return result, nil
 				}
-				token = token[0:0]
+				tok.tokenBuf = tok.tokenBuf[0:0]
 			}
 		} else {
 			if val == symbolCr {
 				return result, nil
 			}
 		}
-		if len(token) > maxTextTokenLen {
+		if len(tok.tokenBuf) > maxTextTokenLen {
 			return nil, mpqerr.ErrTokTooLong
 		}
 	}

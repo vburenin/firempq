@@ -56,3 +56,12 @@ const (
 	CPrmFailQueue     = "FAILQ"
 	CPrmPopWait       = "WAIT"
 )
+
+const (
+	MsgAttrUnlockTs = "UTS"
+	MsgAttrExpireTs = "ETS"
+	MsgAttrPopCount = "POPCNT"
+	MsgAttrRcpt     = "RCPT"
+	MsgAttrPayload  = "PL"
+	MsgAttrID       = "ID"
+)

@@ -13,23 +13,23 @@ type FireMpqClient struct {
 	version     string
 }
 
+const DebugOn = false
+
 // NewFireMpqClient makes a first connection to the service to ensure service availability
 // and returns a client instance.
 func NewFireMpqClient(network, address string) (*FireMpqClient, error) {
 	factory := func() (net.Conn, error) {
-		return net.Dial(network, address)
+		n, err := net.Dial(network, address)
+		if err != nil {
+			return n, err
+		}
+		if DebugOn {
+			return &NetConnDebug{conn: n}, nil
+		}
+		return n, nil
 	}
 
 	fmc := &FireMpqClient{connFactory: factory}
-	t, err := fmc.makeConn()
-	if err != nil {
-		return nil, err
-	}
-	t.SendToken(proto.CmdQuit)
-	err = t.Complete()
-	if err != nil {
-		return nil, err
-	}
 	return fmc, nil
 }
 
@@ -58,7 +58,7 @@ func (fmc *FireMpqClient) makeConn() (*TokenUtil, error) {
 		fmc.version = connHdr[1]
 	} else {
 		t.Close()
-		return nil, NewFireMpqError(-3, fmt.Sprintf("Unexpected hello string: %s", connHdr))
+		return nil, NewError(-3, fmt.Sprintf("unexpected hello string: %s", connHdr))
 	}
 
 	return t, nil

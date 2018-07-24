@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"net"
+	"strconv"
 
 	"github.com/vburenin/firempq/export/encoding"
 	"github.com/vburenin/firempq/export/proto"
@@ -18,16 +19,6 @@ func (t *TokenUtil) ReadTokens() ([]string, error) {
 	return t.tokReader.ReadTokens(t.conn)
 }
 
-func (t *TokenUtil) SendCommandList(cmd string, data ...[]byte) error {
-	t.buf.WriteString(cmd)
-	for _, d := range data {
-		t.buf.WriteByte(' ')
-		t.buf.Write(d)
-	}
-	t.buf.WriteByte('\n')
-	return t.buf.Flush()
-}
-
 func (t *TokenUtil) Complete() error {
 	t.buf.WriteByte('\n')
 	return t.buf.Flush()
@@ -41,7 +32,8 @@ func (t *TokenUtil) Close() error {
 }
 
 func (t *TokenUtil) SendInt(i int64) error {
-	return encoding.WriteInt64(t.buf, i)
+	_, err := t.buf.WriteString(strconv.FormatInt(i, 10))
+	return err
 }
 
 func (t *TokenUtil) SendString(s string) error {

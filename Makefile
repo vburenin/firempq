@@ -1,7 +1,10 @@
-all: clean build
+all: clean build client
 
 build: protobuf
 	go build cmd/firempq/firempq.go
+
+client:
+	go build cmd/client/client.go
 
 install:
 	go install cmd/firempq/firempq.go

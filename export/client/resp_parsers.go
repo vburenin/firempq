@@ -38,7 +38,7 @@ func ParseError(tokens []string) error {
 		if errcode, err := ParseInt(tokens[1]); err != nil {
 			return UnexpectedErrorFormat(tokens)
 		} else {
-			return NewFireMpqError(errcode, tokens[2])
+			return NewError(errcode, tokens[2])
 		}
 	}
 	return nil

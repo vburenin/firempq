@@ -181,6 +181,9 @@ func (opts *QueueParams) SetLockTimeout(v int64) *QueueParams {
 }
 
 func (opts *QueueParams) sendOptions(t *TokenUtil) {
+	if opts == nil {
+		return
+	}
 	if opts.msgTtl > 0 {
 		t.SendSpace()
 		t.SendTokenWithSpace(proto.CPrmMsgTtl)
