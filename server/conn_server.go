@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/vburenin/firempq/conf"
-	"github.com/vburenin/firempq/db"
 	"github.com/vburenin/firempq/fctx"
 	"github.com/vburenin/firempq/log"
 	"github.com/vburenin/firempq/pqueue"
@@ -83,34 +82,34 @@ func (cs *ConnectionServer) startMPQListener() (net.Listener, error) {
 			log.Error("could not start FireMPQ listener", zap.Error(err))
 			return listener, err
 		}
-		cs.waitGroup.Add(2)
-		go func() {
-			<-signals.QuitChan
-			listener.Close()
-			cs.waitGroup.Done()
-		}()
+		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			defer listener.Close()
 			for {
 				conn, err := listener.Accept()
-				if err != nil {
-					select {
-					case <-signals.QuitChan:
-						return
-					default:
-						log.Error("Could not accept incoming request", zap.Error(err))
+				select {
+				case <-signals.QuitChan:
+					if conn != nil {
+						conn.Close()
 					}
-				} else {
-					cs.waitGroup.Add(1)
-					go cs.handleConnection(conn)
+					return
+				default:
+					if err == nil {
+						cs.waitGroup.Add(1)
+						go cs.handleConnection(conn)
+					} else {
+						if err != nil {
+							log.Error("Could not accept incoming request", zap.Error(err))
+						}
+					}
 				}
+
 			}
-			log.Info("Stopped accepting connections for FireMPQ.")
+			log.Info("stopped accepting connections for FireMPQ.")
 		}()
 		return listener, nil
 	} else {
-		log.Debug("No FireMPQ Interface configured")
+		log.Debug("no FireMPQ Interface configured")
 	}
 	return nil, nil
 }
@@ -120,38 +119,31 @@ func (cs *ConnectionServer) Start() {
 	ctx := fctx.Background("shutdown")
 	l, err := cs.startMPQListener()
 	if err != nil {
-
 		ctx.Error("could not start queue listener", zap.Error(err))
 		cs.Shutdown(ctx)
 		return
 	}
-	go cs.waitForSignal(l)
+	cs.waitGroup.Add(1)
+	go func() {
+		<-cs.signalChan
+		ctx := fctx.Background("shutdown-signal")
+		signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+		ctx.Info("stopping server")
+		signals.CloseQuitChan()
+		l.Close()
+		cs.waitGroup.Done()
+	}()
+
 	cs.startAWSProtoListeners()
 	cs.waitGroup.Wait()
+
 	cs.Shutdown(ctx)
 }
 
 func (cs *ConnectionServer) Shutdown(ctx *fctx.Context) {
-	log.Info("Closing queues...")
+	log.Info("closing queues")
 	cs.qmgr.Close(ctx)
-	log.Info("Saving not saved data...")
-	db.DatabaseInstance().Close()
-	time.Sleep(time.Second)
-	log.Info("Server stopped.")
-}
-
-func (cs *ConnectionServer) waitForSignal(l net.Listener) {
-	<-cs.signalChan
-	cs.Stop(fctx.Background("shutdown-signal"))
-	signal.Reset(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	if l != nil {
-		l.Close()
-	}
-}
-
-func (cs *ConnectionServer) Stop(ctx *fctx.Context) {
-	ctx.Info("stopping server")
-	signals.CloseQuitChan()
+	log.Info("server stopped")
 }
 
 func (cs *ConnectionServer) handleConnection(conn net.Conn) {
