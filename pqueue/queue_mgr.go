@@ -278,11 +278,19 @@ func (qm *QueueManager) GetQueue(name string) *PQueue {
 // Close closes all available services walking through all of them.
 func (qm *QueueManager) Close(ctx *fctx.Context) {
 	qm.rwLock.Lock()
+	wg := sync.WaitGroup{}
 	for _, q := range qm.queues {
-		if err := q.Close(); err != nil {
-			ctx.Error("queue database not closed", zap.String("queue", q.Description().Name), zap.Error(err))
-		}
+		qq := q
+		wg.Add(1)
+		go func() {
+			if err := qq.Close(); err != nil {
+				ctx.Error("queue database not closed", zap.String("queue", q.Description().Name), zap.Error(err))
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
+
 	qm.rwLock.Unlock()
 	close(qm.expireLoopBreaker)
 	close(qm.deadMsgs)
