@@ -68,6 +68,7 @@ func (s *SessionHandler) QuitListener(wg *sync.WaitGroup) {
 			s.conn.Close()
 			return
 		case <-s.stopChan:
+			return
 		}
 	}()
 }
