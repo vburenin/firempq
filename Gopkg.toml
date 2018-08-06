@@ -47,10 +47,6 @@
 
 [[constraint]]
   branch = "master"
-  name = "github.com/syndtr/goleveldb"
-
-[[constraint]]
-  branch = "master"
   name = "github.com/vburenin/nsync"
 
 [[constraint]]
