@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vburenin/firempq/fctx"
+	"github.com/vburenin/firempq/log"
 )
 
 func TestOpenedFileOps(t *testing.T) {
@@ -22,13 +24,20 @@ func TestOpenedFileOps(t *testing.T) {
 	val2 := []byte("test2 data to write ------")
 	val3 := []byte("test3 data to write -----------")
 	val4 := []byte("anotherdata")
+
 	of, err := NewOpenedFile(filename, false)
 	assert.Nil(t, err, "Should be nil")
-	p1, err := of.WriteTo(val1) // 23 + 8 bytes
+
+	p1, err := of.Write(val1) // 23 + 8 bytes
 	assert.Nil(t, err, "Should be nil")
-	p2, err := of.WriteTo(val2) // 26 + 8 bytes
+
+	p2, err := of.Write(val2) // 26 + 8 bytes
 	assert.Nil(t, err, "Should be nil")
-	p3, err := of.WriteTo(val3) // 31 + 8 bytes
+
+	p3, err := of.Write(val3) // 31 + 8 bytes
+
+	assert.Nil(t, of.Flush())
+
 	assert.Equal(t, int64(0), p1)
 	assert.Equal(t, int64(31), p2)
 	assert.Equal(t, int64(31+34), p3)
@@ -37,7 +46,8 @@ func TestOpenedFileOps(t *testing.T) {
 	assert.Nil(t, err, "Should be nil")
 	assert.Equal(t, val2, midata)
 
-	p4, err := of.WriteTo(val4) // 31 + 8 bytes
+	p4, err := of.Write(val4) // 31 + 8 bytes
+	assert.Nil(t, of.Flush())
 	assert.Nil(t, err, "Should be nil")
 
 	d1, err := of.RetrieveData(p1)
@@ -68,6 +78,7 @@ func removeDbFiles(path string) {
 }
 
 func TestFlatStorageWriteAndRetrieveMetadata(t *testing.T) {
+	log.InitLogging()
 	a := assert.New(t)
 
 	testDir := "testdata/queue_data"
@@ -90,15 +101,17 @@ func TestFlatStorageWriteAndRetrieveMetadata(t *testing.T) {
 
 	a.Nil(v.Close())
 
-	iter, err := NewIterator(testDir)
+	ctx := fctx.Background("unit-test")
+
+	iterator, err := NewIterator(ctx, testDir)
 	if !a.Nil(err, "init error") {
 		return
 	}
 
 	i := 0
-	for iter.Next() != io.EOF {
-		if iter.valid {
-			data := iter.GetData()
+	for iterator.Next() != io.EOF {
+		if iterator.valid {
+			data := iterator.GetData()
 			if !a.Equal(fmt.Sprintf("test data %d", i), string(data)) {
 				break
 			}

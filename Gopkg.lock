@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:733e3ffdaf6b006fcf83770d5084ead74c6ad93532a5c63bc79113eb052f9cd8"
+  digest = "1:f8e1769b8fcffd2f1a3aa658df834fbdf8acadcfa540c2d078012452639b8c04"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -35,8 +35,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "e2b22a3b42bdad95d52bf59f477bdcd57f38191d"
-  version = "v1.15.6"
+  revision = "36aaf21bb9b41f47fdc9b477577d0b604925d489"
+  version = "v1.15.8"
 
 [[projects]]
   digest = "1:a2c1d0e43bd3baaa071d1b9ed72c27d78169b2b269f71c105ac4ba34b1be4a39"
@@ -56,14 +56,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:34e709f36fd4f868fb00dbaf8a6cab4c1ae685832d392874ba9d7c5dec2429d1"
+  digest = "1:ff028acfbaa2af1b6e958d0cdb467e2fe028f4b17c720107dd45cfdbbba44a2c"
   name = "github.com/gogo/protobuf"
-  packages = [
-    "proto",
-    "sortkeys",
-  ]
+  packages = ["proto"]
   pruneopts = "UT"
-  revision = "baf2ea5cdb7ce2d399176f925052690c3dad1f56"
+  revision = "8e3eb248683876964ce35ec1f6e0338dd9c93550"
 
 [[projects]]
   branch = "master"
@@ -183,14 +180,6 @@
   pruneopts = "UT"
   revision = "ff33455a0e382e8a81d14dd7c922020b6b5e7982"
 
-[[projects]]
-  digest = "1:43b8a34f6390d8fbdcfd300ed52103064e9eaaecc7e50b7e3518fe246ebe8403"
-  name = "gopkg.in/tylerb/graceful.v1"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "4654dfbb6ad53cb5e27f37d99b02e16c1872fbbb"
-  version = "v1.2.15"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -200,7 +189,6 @@
     "github.com/aws/aws-sdk-go/aws/session",
     "github.com/aws/aws-sdk-go/service/sqs",
     "github.com/gogo/protobuf/proto",
-    "github.com/gogo/protobuf/sortkeys",
     "github.com/jessevdk/go-flags",
     "github.com/op/go-logging",
     "github.com/smartystreets/goconvey/convey",
@@ -208,7 +196,6 @@
     "github.com/vburenin/nsync",
     "go.uber.org/zap",
     "go.uber.org/zap/zapcore",
-    "gopkg.in/tylerb/graceful.v1",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

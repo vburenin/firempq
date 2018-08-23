@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"context"
 
 	"github.com/vburenin/firempq/conf"
 	"github.com/vburenin/firempq/fctx"
@@ -17,7 +18,6 @@ import (
 	"github.com/vburenin/firempq/server/sqsproto"
 	"github.com/vburenin/firempq/signals"
 	"go.uber.org/zap"
-	"gopkg.in/tylerb/graceful.v1"
 )
 
 type QueueOpFunc func(req []string) error
@@ -40,18 +40,31 @@ func NewServer(ctx *fctx.Context) *ConnectionServer {
 	}
 }
 
+func waitToStopServer(s *http.Server, timeout time.Duration) {
+	<- signals.QuitChan
+	log.Error("closing")
+	ctx, _ := context.WithTimeout(context.Background(), timeout)
+	s.Shutdown(ctx)
+}
+
 func (cs *ConnectionServer) startAWSProtoListeners() {
 	if conf.CFG.SQSServerInterface != "" {
 		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			log.Info("SQS service proto", zap.String("interface", conf.CFG.SQSServerInterface))
 			mux := http.NewServeMux()
 			mux.Handle("/", &sqsproto.SQSRequestHandler{
 				ServiceManager: cs.qmgr,
 			})
-			graceful.Run(conf.CFG.SQSServerInterface, time.Second*10, mux)
-
+			s := &http.Server{Addr: conf.CFG.SQSServerInterface, Handler: mux}
+			log.Info("SQS service proto", zap.String("interface", conf.CFG.SQSServerInterface))
+			go func() {
+				err := s.ListenAndServe()
+				if err != nil && err != http.ErrServerClosed{
+					log.Error("could not start SQS service", zap.Error(err))
+				}
+			}()
+			waitToStopServer(s, time.Second*10)
 		}()
 	} else {
 		log.Debug("no SQS service enabled")
@@ -61,13 +74,21 @@ func (cs *ConnectionServer) startAWSProtoListeners() {
 		cs.waitGroup.Add(1)
 		go func() {
 			defer cs.waitGroup.Done()
-			log.Info("SNS service proto", zap.String("interface", conf.CFG.SNSServerInterface))
+
 			mux := http.NewServeMux()
 
 			mux.Handle("/", &snsproto.SNSRequestHandler{
 				ServiceManager: cs.qmgr,
 			})
-			graceful.Run(conf.CFG.SNSServerInterface, time.Second*10, mux)
+			s := &http.Server{Addr: conf.CFG.SNSServerInterface, Handler: mux}
+			log.Info("SNS service proto", zap.String("interface", conf.CFG.SNSServerInterface))
+			go func() {
+				err := s.ListenAndServe()
+				if err != nil && err != http.ErrServerClosed {
+					log.Error("could not start SNS service", zap.Error(err))
+				}
+			}()
+			waitToStopServer(s, time.Second*10)
 		}()
 	} else {
 		log.Debug("no SNS service enabled")

@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"sync"
 
 	"github.com/vburenin/firempq/export/encoding"
@@ -92,7 +90,7 @@ func (of *OpenedFile) Flush() error {
 	return nil
 }
 
-func (of *OpenedFile) WriteTo(data []byte) (pos int64, err error) {
+func (of *OpenedFile) Write(data []byte) (pos int64, err error) {
 	pos = of.curPos
 
 	// write down payload size as 8 bytes.
@@ -255,12 +253,17 @@ func (fstg *FlatStorage) Close() error {
 	return nil
 }
 
+
 func (fstg *FlatStorage) AddMetadata(metadata []byte) error {
 	l := len(metadata)
+	if l > 65535 {
+		return ferr.Errorf("metadata size exceed 65535 byte limit")
+	}
 	fstg.muMeta.Lock()
+	fstg.metaDataBuf.WriteByte(byte(l >> 8))
 	fstg.metaDataBuf.WriteByte(byte(l))
 	_, err := fstg.metaDataBuf.Write(metadata)
-	fstg.metaPos += int64(1 + l)
+	fstg.metaPos += int64(2 + l)
 
 	if fstg.metaPos > fstg.metaFileLimit {
 		err = fstg.metaRollover()
@@ -350,7 +353,7 @@ func (fstg *FlatStorage) AddPayload(payload []byte) (int64, int64, error) {
 	fstg.mu.Lock()
 	fstg.curPayloadBlob.Lock()
 
-	pos, err := fstg.curPayloadBlob.WriteTo(payload)
+	pos, err := fstg.curPayloadBlob.Write(payload)
 	fstg.curPayloadBlob.Unlock()
 
 	if err != nil {
@@ -392,64 +395,4 @@ func (fstg *FlatStorage) payloadRollover() error {
 	fstg.curPayloadFileID = newFileID
 
 	return nil
-}
-
-func MakePayloadFileName(num int64) string {
-	return fmt.Sprintf("%s-%d.%s", PayloadFilePrefix, num, DBFileExt)
-}
-
-func MakeMetaFileName(num int64) string {
-	return fmt.Sprintf("%s-%d.%s", MetaFilePrefix, num, DBFileExt)
-}
-
-func findLatestIds(files []os.FileInfo) (metaID, payloadID int64) {
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
-		if len(data) > 0 && len(data[0]) == 3 {
-			db := data[0][1]
-			seq, err := strconv.ParseInt(data[0][2], 10, 64)
-			if err != nil {
-				continue
-			}
-			if db == PayloadFilePrefix {
-				if seq > payloadID {
-					payloadID = seq
-				}
-			} else if db == MetaFilePrefix {
-				if seq > metaID {
-					metaID = seq
-				}
-			}
-		}
-
-	}
-	return metaID, payloadID
-}
-
-func sortMetaFileIds(files []os.FileInfo) []int64 {
-	var metafileIDs []int64
-	for _, f := range files {
-		if f.IsDir() || f.Size() == 0 {
-			continue
-		}
-
-		data := NameMatchRE.FindAllStringSubmatch(f.Name(), -1)
-		if len(data) > 0 && len(data[0]) == 3 {
-			db := data[0][1]
-			seq, err := strconv.ParseInt(data[0][2], 10, 64)
-			if err != nil {
-				continue
-			}
-			if db == MetaFilePrefix {
-				metafileIDs = append(metafileIDs, seq)
-			}
-		}
-	}
-	sort.Slice(metafileIDs, func(i, j int) bool {
-		return metafileIDs[i] < metafileIDs[j]
-	})
-	return metafileIDs
 }

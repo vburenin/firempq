@@ -5,6 +5,8 @@ type PayloadKey struct {
 	Offset int64
 }
 
+// PayloadCache is a data structure that keeps last X binary arrays in memory.
+// New elements that are being added to the cache will eventually push out the oldest.
 type PayloadCache struct {
 	cache     map[PayloadKey][]byte
 	keys      []PayloadKey
@@ -20,6 +22,8 @@ func NewPayloadCache(sizeLimit int) *PayloadCache {
 	}
 }
 
+// AddPayload adds payload into the cache. Returns true if added element made is reached limit of the payload cache.
+// Basically, it returns TRUE every time it reaches (counter % sizeLimit) == 0 element.
 func (pc *PayloadCache) AddPayload(fileID, pos int64, data []byte) bool {
 	pk := PayloadKey{FileID: fileID, Offset: pos}
 	pc.cache[pk] = data

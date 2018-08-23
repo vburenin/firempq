@@ -3,9 +3,7 @@ package linear
 import (
 	"bufio"
 	"io"
-	"io/ioutil"
 	"os"
-
 	"path/filepath"
 
 	"github.com/vburenin/firempq/fctx"
@@ -25,11 +23,11 @@ type MetadataIterator struct {
 }
 
 func NewIterator(ctx *fctx.Context, dbPath string) (*MetadataIterator, error) {
-	files, err := ioutil.ReadDir(dbPath)
+	files, err := RetrieveAvailableMetaFileIDs(dbPath)
 	if err != nil {
-		return nil, ferr.Wrapf(err, "could not get database content")
+		return nil, err
 	}
-	return NewMetadataIterator(ctx, dbPath, sortMetaFileIds(files))
+	return NewMetadataIterator(ctx, dbPath, files)
 }
 
 func NewMetadataIterator(ctx *fctx.Context, dbPath string, metaFileIDs []int64) (*MetadataIterator, error) {
@@ -41,7 +39,7 @@ func NewMetadataIterator(ctx *fctx.Context, dbPath string, metaFileIDs []int64) 
 		data:        nil,
 		valid:       true,
 		ctx:         ctx,
-		buf:         make([]byte, 512),
+		buf:         make([]byte, 65536),
 	}
 	err := it.nextReader()
 	if err == io.EOF {
@@ -50,8 +48,6 @@ func NewMetadataIterator(ctx *fctx.Context, dbPath string, metaFileIDs []int64) 
 	if err != nil {
 		return nil, err
 	}
-
-	it.Next()
 
 	return it, nil
 }
@@ -66,7 +62,8 @@ func (it *MetadataIterator) next() error {
 	}
 
 loop:
-	sb, err := it.reader.ReadByte()
+	lenByteHigh, _ := it.reader.ReadByte()
+	lenByteLow, err := it.reader.ReadByte()
 	if err == io.EOF {
 		if err := it.nextReader(); err != nil {
 			return err
@@ -76,7 +73,7 @@ loop:
 	if err != nil {
 		return ferr.Wrapf(err, "could not read element header")
 	}
-	size := int(sb)
+	size := int(lenByteHigh<<8) + int(lenByteLow)
 
 	it.data = it.buf[:size]
 
